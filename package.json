@@ -1,0 +1,23 @@
+{
+  "name": "operium",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Persistent secondary memory for AI coding assistants — for you and your team.",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter @operium/db generate",
+    "db:migrate": "pnpm --filter @operium/db migrate"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}
