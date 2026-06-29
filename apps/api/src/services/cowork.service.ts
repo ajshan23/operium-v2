@@ -1,0 +1,277 @@
+import { CoworkSession, CoworkChunk, User } from "@operium/db";
+import type { CoworkSource, CoworkIntent, CoworkOutcome } from "@operium/db";
+import { ApiError } from "../utils/ApiError.js";
+import { aiService } from "./ai.service.js";
+import { embeddingService, cosineSimilarity } from "./embedding.service.js";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface ListParams {
+  scope?:  "team" | "personal";
+  source?: string;
+  tag?:    string;
+  limit?:  number;
+  page?:   number;
+}
+
+export interface CreateData {
+  source:       CoworkSource;
+  title:        string;
+  summary:      string;
+  tags?:        string[];
+  isShared?:    boolean;
+  intent?:      CoworkIntent;
+  outcome?:     CoworkOutcome;
+  filesTouched?:string[];
+  languages?:   string[];
+  branch?:      string;
+  commitSha?:   string;
+  repoUrl?:     string;
+  prUrl?:       string;
+  chunks?:      string[];   // plain text segments
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildScopeFilter(userId: string, scope?: string) {
+  if (scope === "personal") return { userId, isShared: false };
+  if (scope === "team")     return { isShared: true };
+  // default: everything the user can see (own + shared)
+  return { $or: [{ userId }, { isShared: true }] };
+}
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
+export class CoworkService {
+
+  async list(userId: string, params: ListParams) {
+    const limit  = Math.min(params.limit  ?? 20, 100);
+    const page   = Math.max(params.page   ?? 1,  1);
+    const skip   = (page - 1) * limit;
+
+    const filter: any = buildScopeFilter(userId, params.scope);
+    if (params.source) filter.source = params.source;
+    if (params.tag)    filter.tags   = { $in: [params.tag] };
+
+    const [sessions, total] = await Promise.all([
+      CoworkSession.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("userId", "name avatar")
+        .lean(),
+      CoworkSession.countDocuments(filter),
+    ]);
+
+    const normalized = sessions.map(s => this._normalize(s, userId));
+    return { sessions: normalized, pagination: { total, page, pages: Math.ceil(total / limit) } };
+  }
+
+  async search(userId: string, q: string, scope?: string, limit = 10) {
+    if (!q?.trim()) throw new ApiError(400, "q is required");
+
+    const scopeFilter = buildScopeFilter(userId, scope);
+    const filter: any = { ...scopeFilter, $text: { $search: q } };
+
+    const sessions = await CoworkSession.find(filter, { score: { $meta: "textScore" } })
+      .sort({ score: { $meta: "textScore" } })
+      .limit(Math.min(limit, 20))
+      .populate("userId", "name avatar")
+      .lean();
+
+    return sessions.map(s => this._normalize(s, userId));
+  }
+
+  async getById(id: string, userId: string) {
+    const session = await CoworkSession.findOne({
+      _id: id,
+      $or: [{ userId }, { isShared: true }],
+    })
+      .populate("userId", "name avatar")
+      .lean();
+
+    if (!session) throw new ApiError(404, "Session not found");
+
+    const chunks = await CoworkChunk.find({ sessionId: id })
+      .sort({ order: 1 })
+      .lean();
+
+    return { session: this._normalize(session, userId), chunks };
+  }
+
+  async getRelated(id: string, userId: string, limit = 5) {
+    const source = await CoworkSession.findOne({
+      _id: id,
+      $or: [{ userId }, { isShared: true }],
+    }).lean();
+
+    if (!source) throw new ApiError(404, "Session not found");
+
+    const conditions: any[] = [];
+    if (source.tags?.length)        conditions.push({ tags:         { $in: source.tags } });
+    if (source.filesTouched?.length) conditions.push({ filesTouched: { $in: source.filesTouched } });
+
+    if (conditions.length === 0) return { related: [] };
+
+    const candidates = await CoworkSession.find({
+      _id: { $ne: id },
+      $and: [
+        { $or: [{ userId }, { isShared: true }] },
+        { $or: conditions },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit * 3)
+      .populate("userId", "name avatar")
+      .lean();
+
+    // Annotate with reason
+    const related = candidates.slice(0, limit).map(s => {
+      const reasons: string[] = [];
+      const sharedTags = s.tags?.filter((t: string) => source.tags?.includes(t)) ?? [];
+      const sharedFiles = s.filesTouched?.filter((f: string) => source.filesTouched?.includes(f)) ?? [];
+      if (sharedTags.length)  reasons.push(`${sharedTags.length} shared tag${sharedTags.length > 1 ? "s" : ""}`);
+      if (sharedFiles.length) reasons.push(`${sharedFiles.length} shared file${sharedFiles.length > 1 ? "s" : ""}`);
+      return { ...this._normalize(s, userId), reasons };
+    });
+
+    return { related };
+  }
+
+  async create(userId: string, data: CreateData) {
+    if (!data.source) throw new ApiError(400, "source is required");
+    if (!data.title?.trim()) throw new ApiError(400, "title is required");
+    if (!data.summary?.trim()) throw new ApiError(400, "summary is required");
+
+    const session = await CoworkSession.create({
+      userId,
+      source:       data.source,
+      title:        data.title,
+      summary:      data.summary,
+      tags:         data.tags         ?? [],
+      isShared:     data.isShared     ?? true,
+      intent:       data.intent,
+      outcome:      data.outcome,
+      filesTouched: data.filesTouched ?? [],
+      languages:    data.languages    ?? [],
+      branch:       data.branch,
+      commitSha:    data.commitSha,
+      repoUrl:      data.repoUrl,
+      prUrl:        data.prUrl,
+    });
+
+    // Create chunks if provided
+    let chunks: any[] = [];
+    if (data.chunks?.length) {
+      chunks = await CoworkChunk.insertMany(
+        data.chunks.map((text, i) => ({
+          sessionId:     session._id,
+          userId,
+          isShared:      data.isShared ?? true,
+          order:         i,
+          text,
+          sessionTitle:  session.title,
+          sessionSource: session.source,
+          sessionIntent: session.intent,
+          sessionOutcome:session.outcome,
+        }))
+      );
+    }
+
+    return { session: session.toObject(), chunks };
+  }
+
+  async feedback(id: string, userId: string, helpful?: boolean) {
+    const session = await CoworkSession.findOne({
+      _id: id,
+      $or: [{ userId }, { isShared: true }],
+    });
+    if (!session) throw new ApiError(404, "Session not found");
+
+    session.useCount    += 1;
+    session.lastUsedAt   = new Date();
+    if (helpful === true)  session.helpfulCount    += 1;
+    if (helpful === false) session.notHelpfulCount += 1;
+    await session.save();
+
+    return {
+      useCount:        session.useCount,
+      helpfulCount:    session.helpfulCount,
+      notHelpfulCount: session.notHelpfulCount,
+    };
+  }
+
+  async chat(userId: string, messages: { role: "user" | "model"; content: string }[], sessionId?: string) {
+    // Fetch user's Gemini key
+    const user = await User.findById(userId).select("geminiApiKey").lean() as any;
+    if (!user?.geminiApiKey) {
+      throw new ApiError(400, "No Gemini API key configured. Add one in Settings → Integrations.");
+    }
+
+    const query = messages[messages.length - 1]?.content ?? "";
+
+    // Build context from relevant cowork sessions
+    let context = "";
+    try {
+      const queryEmb = await embeddingService.embed(query, user.geminiApiKey).catch(() => null);
+      const chunkFilter: any = { $or: [{ userId }, { isShared: true }] };
+      if (sessionId) chunkFilter.sessionId = sessionId;
+
+      const chunks = await CoworkChunk.find(chunkFilter)
+        .sort({ createdAt: -1 }).limit(150)
+        .select("text embedding sessionTitle sessionSource sessionIntent").lean();
+
+      let topChunks: any[];
+      if (queryEmb) {
+        topChunks = chunks
+          .filter(c => Array.isArray(c.embedding) && c.embedding.length > 0)
+          .map(c => ({ ...c, _score: cosineSimilarity(queryEmb, c.embedding!) }))
+          .filter(c => c._score > 0.55)
+          .sort((a, b) => b._score - a._score)
+          .slice(0, 8);
+      } else {
+        topChunks = chunks.slice(0, 8);
+      }
+
+      if (topChunks.length > 0) {
+        context = topChunks.map((c, i) =>
+          `[Memory ${i + 1} — ${c.sessionTitle}]\n${c.text.slice(0, 800)}`
+        ).join("\n\n---\n\n");
+      }
+    } catch {
+      // Continue without context if embedding fails
+    }
+
+    const systemPrompt =
+      "You are Operium AI, an expert coding assistant with access to this team's persistent memory. " +
+      "Answer questions based on the memory context below. Be specific and cite sessions when relevant. " +
+      "If the memory context doesn't contain enough information, say so and answer from general knowledge.\n\n" +
+      (context ? `## Memory Context\n\n${context}` : "## Memory Context\n\nNo relevant sessions found.");
+
+    const reply = await aiService.chat(messages, systemPrompt, user.geminiApiKey);
+    return { reply };
+  }
+
+  async delete(id: string, userId: string) {
+    const session = await CoworkSession.findOneAndDelete({ _id: id, userId });
+    if (!session) throw new ApiError(404, "Session not found or not yours to delete");
+    await CoworkChunk.deleteMany({ sessionId: id });
+    return { deleted: true };
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────────────────
+
+  private _normalize(session: any, requestingUserId: string) {
+    const { userId: userDoc, _id, ...rest } = session;
+    return {
+      ...rest,
+      id:     _id.toString(),
+      _id:    _id.toString(),
+      isOwn:  (userDoc?._id ?? userDoc)?.toString() === requestingUserId,
+      author: userDoc ? { name: userDoc.name ?? "Unknown", avatar: userDoc.avatar } : null,
+      scope:  rest.isShared ? "team" : "personal",
+    };
+  }
+}
+
+export const coworkService = new CoworkService();

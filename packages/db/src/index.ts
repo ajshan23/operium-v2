@@ -1,22 +1,38 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import * as schema from "./schema.js";
+import mongoose from "mongoose";
 
-export * from "./schema.js";
+let isConnected = false;
 
-let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+export const connectDB = async (): Promise<void> => {
+  if (isConnected) {
+    return;
+  }
 
-/**
- * Lazily-constructed Drizzle client. Reads DATABASE_URL at first use so importing
- * the package (e.g. for types or migrations) never requires a live connection.
- */
-export function getDb(): ReturnType<typeof drizzle<typeof schema>> {
-  if (_db) return _db;
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
-  const client = postgres(url, { max: 10 });
-  _db = drizzle(client, { schema });
-  return _db;
-}
+  try {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error("MONGODB_URI environment variable is not defined");
+    }
 
-export { schema };
+    await mongoose.connect(uri);
+    isConnected = true;
+    console.log("🟢 Connected to MongoDB");
+  } catch (error) {
+    console.error("🔴 MongoDB connection error:", error);
+    throw error;
+  }
+};
+
+export * from "./models/User.js";
+export * from "./models/Org.js";
+export * from "./models/Team.js";
+export * from "./models/Membership.js";
+export * from "./models/OTP.js";
+export * from "./models/WorkHistory.js";
+export * from "./models/MyTask.js";
+export * from "./models/Space.js";
+export * from "./models/Note.js";
+export * from "./models/NoteBlock.js";
+export * from "./models/CoworkSession.js";
+export * from "./models/CoworkChunk.js";
+export * from "./models/ContextRule.js";
+export * from "./models/Task.js";
