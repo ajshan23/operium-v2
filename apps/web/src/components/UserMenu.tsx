@@ -11,10 +11,10 @@ interface Props {
 }
 
 export function UserMenu({ compact = false }: Props) {
-  const [open, setOpen]       = useState(false);
-  const [name, setName]       = useState<string>("devUser");
-  const [avatar, setAvatar]   = useState<string | null>(null);
-  const ref                   = useRef<HTMLDivElement>(null);
+  const [open, setOpen]     = useState(false);
+  const [name, setName]     = useState<string>("devUser");
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const ref                 = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const user = getUser();
@@ -26,9 +26,7 @@ export function UserMenu({ compact = false }: Props) {
   // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -40,11 +38,12 @@ export function UserMenu({ compact = false }: Props) {
   }
 
   const avatarEl = (
-    <div className={`rounded-full border overflow-hidden shrink-0 transition-colors ${
-      compact
-        ? "w-[34px] h-[34px] border-[#2a2a35] hover:border-[#8b5cf6]"
-        : "w-[30px] h-[30px] border-[#2a2a35] group-hover:border-[#8b5cf6]"
-    }`}>
+    <div
+      className={`rounded-full overflow-hidden shrink-0 transition-all ${
+        compact ? "w-[34px] h-[34px]" : "w-[30px] h-[30px]"
+      }`}
+      style={{ border: "1px solid var(--border-default)" }}
+    >
       {avatar
         ? <img src={avatar} alt={name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         : <div className="w-full h-full bg-gradient-to-br from-[#7c3aed] to-[#6366f1] flex items-center justify-center">
@@ -57,44 +56,54 @@ export function UserMenu({ compact = false }: Props) {
   return (
     <div ref={ref} className="relative">
       {compact ? (
-        <button
-          onClick={() => setOpen(!open)}
-          className="cursor-pointer"
-          title={name}
-        >
+        <button onClick={() => setOpen(!open)} className="cursor-pointer hover:opacity-85 transition-opacity" title={name}>
           {avatarEl}
         </button>
       ) : (
         <button
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2.5 cursor-pointer pl-3 border-l border-[#1a1a22] group"
+          className="flex items-center gap-2.5 cursor-pointer pl-3 group"
+          style={{ borderLeft: "1px solid var(--border-subtle)" }}
         >
           {avatarEl}
-          <span className="text-[13px] font-semibold text-[#a1a1aa] group-hover:text-[#fafafa] transition-colors max-w-[100px] truncate">
+          <span className="text-[13px] font-semibold max-w-[100px] truncate transition-colors"
+            style={{ color: "var(--text-secondary)" }}>
             {name}
           </span>
           <ChevronDown
             size={14}
-            className={`text-[#63637a] group-hover:text-[#fafafa] transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+            style={{ color: "var(--text-muted)" }}
           />
         </button>
       )}
 
       {/* Dropdown */}
       {open && (
-        <div className={`absolute z-50 mt-2 bg-[#0c0c0f] border border-[#2a2a35] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] overflow-hidden animate-[fadeIn_0.15s_ease-out] ${
-          compact ? "right-0 bottom-full mb-2 w-[180px]" : "right-0 w-[200px]"
-        }`}>
+        <div
+          className={`usermenu-dropdown absolute z-50 mt-2 rounded-xl overflow-hidden ${
+            compact ? "right-0 bottom-full mb-2 w-[180px]" : "right-0 w-[200px]"
+          }`}
+          style={{
+            background: "var(--s1)",
+            border: "1px solid var(--border-default)",
+            boxShadow: "0 8px 30px rgba(0,0,0,0.25)",
+            animation: "fadeUp 0.15s cubic-bezier(0.16,1,0.3,1) forwards",
+          }}
+        >
           {/* User info header */}
-          <div className="px-4 py-3 border-b border-[#1a1a22]">
-            <p className="text-[13px] font-semibold text-[#fafafa] truncate">{name}</p>
+          <div className="usermenu-header px-4 py-3" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            <p className="usermenu-name text-[13px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+              {name}
+            </p>
           </div>
 
           {/* Menu items */}
           <div className="p-1.5">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#ef4444] hover:bg-[#1f1010]/60 hover:text-[#f87171] transition-colors"
+              className="usermenu-logout w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
+              style={{ color: "var(--error)" }}
             >
               <LogOut size={14} />
               <span>Log out</span>

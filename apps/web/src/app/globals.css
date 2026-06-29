@@ -37,6 +37,78 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE TOKENS
+   ══════════════════════════════════════════════════════════════════════════════ */
+html[data-theme="light"] {
+  --s0: #f5f5ff;
+  --s1: #ffffff;
+  --s2: #eeeeff;
+  --s3: #e4e4f8;
+
+  --border-subtle:  #e2e2f2;
+  --border-default: #d0d0e8;
+  --border-strong:  #b8b8d8;
+
+  --text-primary:   #0d0d1c;
+  --text-secondary: #4a4a80;
+  --text-muted:     #8080a8;
+
+  --accent:         #7c3aed;
+  --accent-hover:   #6d28d9;
+
+  --error:          #dc2626;
+  --success:        #16a34a;
+  --warning:        #d97706;
+
+  /* legacy */
+  --bg-primary:  #f5f5ff;
+  --bg-secondary:#eeeeff;
+  --bg-tertiary: #e4e4f8;
+  --border:      #e2e2f2;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SIDEBAR NAV CLASSES (theme-aware)
+   ══════════════════════════════════════════════════════════════════════════════ */
+.sidebar-nav-btn {
+  position: relative;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  text-decoration: none;
+}
+.sidebar-nav-btn--active {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+}
+.sidebar-nav-btn--active .sidebar-nav-icon { color: var(--accent); }
+.sidebar-nav-btn--inactive { cursor: pointer; }
+.sidebar-nav-btn--inactive .sidebar-nav-icon {
+  color: var(--text-muted);
+  transition: color 150ms ease, transform 150ms ease;
+}
+.sidebar-nav-btn--inactive:hover {
+  background: var(--s2);
+  border-color: var(--border-subtle);
+}
+.sidebar-nav-btn--inactive:hover .sidebar-nav-icon {
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+html[data-theme="light"] .sidebar-nav-btn--active {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
    RESET & BASE
    ══════════════════════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1260,4 +1332,311 @@ html, body {
 .db-sidebar-overlay--visible {
   display: block;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — COMPONENT OVERRIDES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── BASE ────────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] body {
+  background: var(--s0);
+  color: var(--text-primary);
+}
+
+/* ── LOGIN PAGE ──────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .login-root,
+html[data-theme="light"] .login-right {
+  background: #f5f5ff;
+  background-image: radial-gradient(ellipse 60% 50% at 60% 50%, rgba(109, 40, 217, 0.07) 0%, transparent 100%);
+}
+
+html[data-theme="light"] .login-glow {
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.08) 0%, transparent 65%);
+}
+
+html[data-theme="light"] .lf-input {
+  background: #ffffff;
+  border-color: #d0d0e8;
+  color: #0d0d1c;
+}
+html[data-theme="light"] .lf-input:hover {
+  background: #fafaff;
+  border-color: #b8b8d8;
+}
+html[data-theme="light"] .lf-input:focus {
+  background: #ffffff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12), 0 2px 8px rgba(0,0,0,0.03) inset;
+}
+html[data-theme="light"] .lf-input::placeholder { color: #a0a0c0; }
+html[data-theme="light"] .lf-input:focus::placeholder { color: #b8b8d4; }
+
+html[data-theme="light"] .lf-oauth-btn {
+  background: #ffffff;
+  border-color: #d0d0e8;
+  color: #0d0d1c;
+}
+html[data-theme="light"] .lf-oauth-btn:hover:not(:disabled) {
+  background: #f4f4ff;
+  border-color: #b8b8d8;
+  box-shadow: 0 4px 12px rgba(100, 80, 200, 0.1);
+  transform: translateY(-2px);
+}
+
+html[data-theme="light"] .lf-divider-line:first-child { background: linear-gradient(to left, #d0d0e8, transparent); }
+html[data-theme="light"] .lf-divider-line:last-child  { background: linear-gradient(to right, #d0d0e8, transparent); }
+html[data-theme="light"] .lf-divider-text { color: #9090b8; }
+
+html[data-theme="light"] .lf-label { color: var(--text-secondary); }
+html[data-theme="light"] .lf-group:focus-within .lf-label { color: #3030a0; }
+
+html[data-theme="light"] .lf-checkbox-label { color: var(--text-secondary); }
+html[data-theme="light"] .lf-checkbox-label:hover { color: var(--text-primary); }
+html[data-theme="light"] .lf-eye-btn { color: #9090b8; }
+html[data-theme="light"] .lf-eye-btn:hover { color: var(--text-primary); }
+
+/* ── DASHBOARD SHELL ─────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-shell { background: var(--s0); }
+
+html[data-theme="light"] .db-sidebar {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right-color: var(--border-subtle);
+}
+
+html[data-theme="light"] .db-main {
+  background: var(--s0);
+  background-image: radial-gradient(ellipse 55% 45% at 55% 30%, rgba(109, 40, 217, 0.04) 0%, transparent 100%);
+}
+
+html[data-theme="light"] .db-ambient-glow {
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.06) 0%, transparent 65%);
+}
+
+/* ── NAV LINKS ───────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-nav-link:hover {
+  background: var(--s2);
+  color: var(--text-primary);
+}
+html[data-theme="light"] .db-nav-link--active {
+  background: rgba(124, 58, 237, 0.08);
+  color: #5b21b6;
+  border-left-color: var(--accent);
+}
+html[data-theme="light"] .db-nav-link--active:hover {
+  background: rgba(124, 58, 237, 0.1);
+  color: #5b21b6;
+}
+
+/* ── SEARCH ──────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-search-input {
+  background: #ffffff;
+  border-color: #d0d0e8;
+  color: #0d0d1c;
+}
+html[data-theme="light"] .db-search-input::placeholder { color: #a0a0c0; }
+html[data-theme="light"] .db-search-input:hover {
+  background: #fafaff;
+  border-color: #b8b8d8;
+}
+html[data-theme="light"] .db-search-input:focus {
+  background: #ffffff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+/* ── CARDS ───────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(100, 80, 200, 0.04);
+}
+html[data-theme="light"] .db-card:hover {
+  background: #ffffff;
+  box-shadow: 0 8px 32px rgba(100, 80, 200, 0.1);
+  border-color: rgba(124, 58, 237, 0.15);
+  transform: translateY(-2px);
+}
+
+html[data-theme="light"] .db-stat-card {
+  background: #ffffff;
+  border-color: var(--border-subtle);
+  box-shadow: 0 1px 4px rgba(100, 80, 200, 0.04);
+}
+html[data-theme="light"] .db-stat-card:hover {
+  border-color: var(--border-default);
+  box-shadow: 0 4px 16px rgba(100, 80, 200, 0.08);
+}
+html[data-theme="light"] .db-stat-card::before {
+  background: linear-gradient(to right, rgba(124, 58, 237, 0.4), transparent);
+  opacity: 0.7;
+}
+
+/* ── LIST ITEMS ──────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-list-item {
+  background: #ffffff;
+  border-color: var(--border-subtle);
+}
+html[data-theme="light"] .db-list-item:hover {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: #faf9ff;
+  box-shadow: 0 2px 8px rgba(100, 80, 200, 0.06);
+}
+
+/* ── HEATMAP ─────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-heat-0 { background: #ece9fa; }
+html[data-theme="light"] .db-heat-1 { background: #c4b5fd; }
+html[data-theme="light"] .db-heat-2 { background: #a78bfa; }
+html[data-theme="light"] .db-heat-3 { background: #8b5cf6; }
+html[data-theme="light"] .db-heat-4 { background: #6d28d9; }
+
+/* ── ACTION BUTTONS ──────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-action-btn {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .db-action-btn:hover {
+  background: rgba(124, 58, 237, 0.05);
+  border-color: rgba(124, 58, 237, 0.25);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.06);
+}
+
+/* ── CHART ───────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-chart-grid-line { stroke: #d8d8ee; }
+
+/* ── PROFILE / AVATAR ────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-avatar {
+  background: linear-gradient(135deg, #e8e8f8, #d4d4ee);
+  color: var(--text-secondary);
+}
+
+/* ── SIDEBAR TOGGLE (mobile) ─────────────────────────────────────────────────── */
+html[data-theme="light"] .db-sidebar-toggle {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .db-sidebar-toggle:hover {
+  background: var(--s2);
+  color: var(--text-primary);
+}
+
+/* ── SIDEBAR OVERLAY (mobile) ────────────────────────────────────────────────── */
+html[data-theme="light"] .db-sidebar-overlay {
+  background: rgba(100, 80, 180, 0.2);
+}
+
+/* ── CARD TAG ────────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-card-tag {
+  background: rgba(124, 58, 237, 0.06);
+  border-color: rgba(124, 58, 237, 0.12);
+  color: var(--text-muted);
+}
+
+/* ── STAT BADGE ──────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .db-stat-badge--up {
+  background: rgba(22, 163, 74, 0.08);
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.15);
+}
+html[data-theme="light"] .db-stat-badge--neutral {
+  background: rgba(80, 80, 140, 0.06);
+  color: var(--text-secondary);
+  border-color: rgba(80, 80, 140, 0.1);
+}
+
+/* ── USER MENU DROPDOWN ──────────────────────────────────────────────────────── */
+html[data-theme="light"] .usermenu-dropdown {
+  background: #ffffff;
+  border-color: var(--border-default);
+  box-shadow: 0 8px 30px rgba(100, 80, 200, 0.12);
+}
+html[data-theme="light"] .usermenu-header {
+  border-bottom-color: var(--border-subtle);
+}
+html[data-theme="light"] .usermenu-name { color: var(--text-primary); }
+html[data-theme="light"] .usermenu-logout:hover {
+  background: rgba(220, 38, 38, 0.06);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — TAILWIND ARBITRARY VALUE OVERRIDES
+   Fixes hardcoded dark hex classes across all page JSX without editing each file.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Backgrounds ─────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#050505\]   { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-\[\#09090b\]   { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]   { background-color: var(--s1) !important; }
+html[data-theme="light"] .bg-\[\#0d0b16\]   { background-color: var(--s2) !important; }
+html[data-theme="light"] .bg-\[\#111113\]   { background-color: var(--s1) !important; }
+html[data-theme="light"] .bg-\[\#141418\]   { background-color: var(--s2) !important; }
+html[data-theme="light"] .bg-\[\#18181b\]   { background-color: var(--s2) !important; }
+html[data-theme="light"] .bg-\[\#18181c\]   { background-color: var(--s2) !important; }
+html[data-theme="light"] .bg-\[\#1a1a22\]   { background-color: var(--s3) !important; }
+html[data-theme="light"] .bg-\[\#1e1e24\]   { background-color: var(--s3) !important; }
+
+/* opacity variants */
+html[data-theme="light"] .bg-\[\#050505\]\/80 { background-color: color-mix(in srgb, var(--s0) 80%, transparent) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/20 { background-color: color-mix(in srgb, var(--s1) 20%, transparent) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/40 { background-color: color-mix(in srgb, var(--s1) 40%, transparent) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/60 { background-color: color-mix(in srgb, var(--s1) 60%, transparent) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/80 { background-color: color-mix(in srgb, var(--s1) 80%, transparent) !important; }
+html[data-theme="light"] .bg-\[\#141418\]\/60 { background-color: color-mix(in srgb, var(--s2) 60%, transparent) !important; }
+
+/* active/accent dark variants — map to subtle violet */
+html[data-theme="light"] .bg-\[\#120e20\]     { background-color: rgba(124, 58, 237, 0.08) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/10 { background-color: rgba(124, 58, 237, 0.05) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/30 { background-color: rgba(124, 58, 237, 0.07) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/65 { background-color: rgba(124, 58, 237, 0.1)  !important; }
+
+/* ── Hover backgrounds ───────────────────────────────────────────────────────── */
+html[data-theme="light"] .hover\:bg-\[\#141418\]:hover   { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#18181c\]:hover   { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#1e1e26\]:hover   { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#120e20\]\/30\:hover,
+html[data-theme="light"] .hover\:bg-\[\#120e20\]\/30:hover { background-color: rgba(124, 58, 237, 0.07) !important; }
+
+/* ── Text colors ─────────────────────────────────────────────────────────────── */
+html[data-theme="light"] .text-\[\#fafafa\]   { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-\[\#f4f4f5\]   { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-\[\#e4e4e7\]   { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-\[\#a1a1aa\]   { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-\[\#63637a\]   { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-\[\#55556a\]   { color: var(--text-muted)     !important; }
+
+/* hover text */
+html[data-theme="light"] .hover\:text-\[\#fafafa\]:hover { color: var(--text-primary) !important; }
+html[data-theme="light"] .hover\:text-\[\#f4f4f5\]:hover { color: var(--text-primary) !important; }
+
+/* ── Placeholder colors ──────────────────────────────────────────────────────── */
+html[data-theme="light"] .placeholder\:text-\[\#55556a\]::placeholder { color: #a0a0c0 !important; }
+html[data-theme="light"] .placeholder\:text-\[\#63637a\]::placeholder { color: #a0a0c0 !important; }
+
+/* ── Border colors ───────────────────────────────────────────────────────────── */
+html[data-theme="light"] .border-\[\#1a1a22\]  { border-color: var(--border-subtle)  !important; }
+html[data-theme="light"] .border-\[\#1e1e24\]  { border-color: var(--border-subtle)  !important; }
+html[data-theme="light"] .border-\[\#23232c\]  { border-color: var(--border-default) !important; }
+html[data-theme="light"] .border-\[\#2a2a35\]  { border-color: var(--border-default) !important; }
+html[data-theme="light"] .border-\[\#2e2e36\]  { border-color: var(--border-default) !important; }
+html[data-theme="light"] .border-\[\#383845\]  { border-color: var(--border-strong)  !important; }
+html[data-theme="light"] .border-\[\#38384a\]  { border-color: var(--border-strong)  !important; }
+
+/* ── Notification dot border (matches sidebar bg) ────────────────────────────── */
+html[data-theme="light"] .border-\[\#050505\]  { border-color: var(--s0) !important; }
+
+/* ── Toggle inactive state ───────────────────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#1e1e24\]      { background-color: var(--border-default) !important; }
+
+/* ── Monospace code blocks ───────────────────────────────────────────────────── */
+html[data-theme="light"] .text-\[\#c4b5fd\]    { color: #6d28d9 !important; }
+html[data-theme="light"] pre,
+html[data-theme="light"] code {
+  background-color: var(--s2) !important;
+  border-color: var(--border-subtle) !important;
+  color: #4a2c8a !important;
+}
+
 

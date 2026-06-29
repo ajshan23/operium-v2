@@ -7,27 +7,37 @@ import {
   LayoutGrid, History, FolderGit2, GitBranch, Terminal, FileText, Bell, Settings, Bot, CheckSquare
 } from "lucide-react";
 import { UserMenu } from "@/components/UserMenu";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/", icon: LayoutGrid, label: "Dashboard" },
-    { href: "/history", icon: History, label: "History" },
-    { href: "/cowork", icon: Bot, label: "Cowork" },
-    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-    { href: "/spaces", icon: FileText, label: "Spaces" },
-    { href: "/projects", icon: FolderGit2, label: "Projects" },
-    { href: "/git", icon: GitBranch, label: "Git" },
-    { href: "/notification", icon: Bell, label: "Notifications" },
+    { href: "/",            icon: LayoutGrid,  label: "Dashboard" },
+    { href: "/history",     icon: History,     label: "History" },
+    { href: "/cowork",      icon: Bot,         label: "Cowork" },
+    { href: "/tasks",       icon: CheckSquare, label: "Tasks" },
+    { href: "/spaces",      icon: FileText,    label: "Spaces" },
+    { href: "/projects",    icon: FolderGit2,  label: "Projects" },
+    { href: "/git",         icon: GitBranch,   label: "Git" },
+    { href: "/notification",icon: Bell,        label: "Notifications" },
   ];
 
   return (
-    <div className="flex h-screen w-screen bg-[#050505] text-[#fafafa] font-sans overflow-hidden selection:bg-[#8b5cf6]/30">
+    <div className="flex h-screen w-screen font-sans overflow-hidden" style={{ background: "var(--s0)", color: "var(--text-primary)" }}>
 
       {/* ── SIDEBAR ── */}
-      <aside className="w-[80px] border-r border-[#1a1a22] bg-[#050505] flex flex-col items-center py-6 justify-between z-30 relative shrink-0">
-        <div className="absolute inset-y-0 right-0 w-[1px] bg-gradient-to-b from-transparent via-[#2a2a35]/30 to-transparent opacity-50" />
+      <aside
+        className="w-[80px] flex flex-col items-center py-6 justify-between z-30 relative shrink-0"
+        style={{
+          background: "var(--s0)",
+          borderRight: "1px solid var(--border-subtle)",
+          transition: "background 300ms ease, border-color 300ms ease",
+        }}
+      >
+        {/* Subtle gradient line on right edge */}
+        <div className="absolute inset-y-0 right-0 w-[1px] pointer-events-none"
+          style={{ background: "linear-gradient(to bottom, transparent, var(--border-default), transparent)", opacity: 0.5 }} />
 
         {/* Logo */}
         <Link href="/" className="relative group cursor-pointer">
@@ -42,38 +52,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Nav */}
         <nav className="flex flex-col gap-5 items-center flex-1 w-full mt-10">
           {navItems.map((item) => {
-            const Icon = item.icon;
+            const Icon  = item.icon;
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 title={item.label}
-                className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition-all group ${
-                  isActive
-                    ? "text-[#fafafa] bg-[#120e20]/65 border border-[#8b5cf6]/50 shadow-[0_4px_16px_rgba(139,92,246,0.25)]"
-                    : "text-[#63637a] hover:text-[#fafafa] hover:bg-[#141418]/60 border border-transparent"
-                }`}
+                className={`sidebar-nav-btn ${isActive ? "sidebar-nav-btn--active" : "sidebar-nav-btn--inactive"} group`}
               >
-                <Icon size={20} strokeWidth={isActive ? 2 : 1.8} className={isActive ? "text-[#8b5cf6]" : "group-hover:scale-105 transition-transform"} />
+                <Icon size={20} strokeWidth={isActive ? 2 : 1.8} className="sidebar-nav-icon" />
                 {item.href === "/notification" && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full border-[1.5px] border-[#050505] animate-pulse" />
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full animate-pulse"
+                    style={{ border: "1.5px solid var(--s0)" }} />
                 )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Bottom */}
-        <div className="flex flex-col gap-4 items-center">
-          <Link href="/settings" title="Settings"
-            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all group ${
-              pathname === "/settings"
-                ? "text-[#fafafa] bg-[#120e20]/65 border border-[#8b5cf6]/50 shadow-[0_4px_16px_rgba(139,92,246,0.25)]"
-                : "text-[#63637a] hover:text-[#fafafa] hover:bg-[#141418]/60 border border-transparent"
-            }`}
+        {/* Bottom: theme toggle + settings + avatar */}
+        <div className="flex flex-col gap-3 items-center">
+          <ThemeToggle />
+          <Link
+            href="/settings"
+            title="Settings"
+            className={`sidebar-nav-btn ${pathname === "/settings" ? "sidebar-nav-btn--active" : "sidebar-nav-btn--inactive"} group`}
           >
-            <Settings size={20} strokeWidth={1.8} className={pathname === "/settings" ? "text-[#8b5cf6]" : "group-hover:scale-105 transition-transform"} />
+            <Settings size={20} strokeWidth={1.8} className="sidebar-nav-icon" />
           </Link>
           <div className="mb-2">
             <UserMenu compact />
@@ -82,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* ── MAIN CANVAS ── */}
-      <main className="flex-1 flex flex-col relative bg-[#050505] overflow-hidden">
+      <main className="flex-1 flex flex-col relative overflow-hidden" style={{ background: "var(--s0)" }}>
         {children}
       </main>
     </div>
