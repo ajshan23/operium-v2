@@ -442,7 +442,10 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
   const sid = session._id || session.id;
 
   return (
-    <div className="p-5 rounded-2xl bg-[#0c0c0f]/40 border border-[#1e1e24] hover:border-[#8b5cf6]/40 transition-all overflow-hidden relative group shadow-sm flex flex-col gap-3">
+    // shrink-0 is load-bearing: cards are flex items of the scroll column, and
+    // overflow-hidden gives them an automatic min-size of 0 — without it every
+    // card compresses to ~40px instead of the list scrolling.
+    <div className="p-5 rounded-2xl bg-[#0c0c0f]/40 border border-[#1e1e24] hover:border-[#8b5cf6]/40 transition-all overflow-hidden relative group shadow-sm flex flex-col gap-3 shrink-0">
 
       {/* Top Details */}
       <div className="flex justify-between items-start gap-4">
@@ -455,7 +458,7 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
           <div className="min-w-0">
             <Link
               href={`/cowork/${sid}`}
-              className="text-[#fafafa] font-bold text-[14px] hover:text-[#8b5cf6] transition-colors leading-snug cursor-pointer line-clamp-1"
+              className="text-[#fafafa] font-bold text-[14px] hover:text-[#8b5cf6] transition-colors leading-snug cursor-pointer block truncate"
             >
               {session.title}
             </Link>
@@ -537,8 +540,13 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
         </div>
       )}
 
-      {/* Summary */}
-      <div className={`ml-12 text-[12px] leading-relaxed text-[#a1a1aa] ${expanded ? "" : "line-clamp-3"}`}>
+      {/* Summary — NOTE: line-clamp collapses to 0-height around block-level
+          markdown in Chromium's standardized line-clamp, so use a max-height
+          collapse with a mask fade instead. */}
+      <div
+        className={`ml-12 text-[12px] leading-relaxed text-[#a1a1aa] ${expanded ? "" : "max-h-[76px] overflow-hidden"}`}
+        style={expanded ? undefined : { WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 100%)", maskImage: "linear-gradient(to bottom, black 55%, transparent 100%)" }}
+      >
         <MarkdownViewer content={session.summary} />
       </div>
 
