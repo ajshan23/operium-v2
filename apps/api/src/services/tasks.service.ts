@@ -1,6 +1,7 @@
 import { Task } from "@operium/db";
 import type { TaskStatus, TaskPriority } from "@operium/db";
 import { ApiError } from "../utils/ApiError.js";
+import { membershipRepository } from "../repositories/membership.repository.js";
 
 export interface CreateTaskData {
   title:       string;
@@ -9,6 +10,7 @@ export interface CreateTaskData {
   priority?:   TaskPriority;
   dueDate?:    string;
   tags?:       string[];
+  assigneeId?: string;
 }
 
 export interface UpdateTaskData {
@@ -18,20 +20,41 @@ export interface UpdateTaskData {
   priority?:    TaskPriority;
   dueDate?:     string | null;
   tags?:        string[];
+  assigneeId?:  string | null;
 }
 
+const ASSIGNEE_FIELDS = "name email avatar";
+
+// All org tasks, plus the user's own tasks created before org scoping existed
+const orgScope = (userId: string, orgId: string) => ({
+  $or: [{ orgId }, { orgId: { $exists: false }, userId }],
+});
+
 export class TasksService {
-  async list(userId: string, status?: string) {
-    const filter: any = { userId };
-    if (status) filter.status = status;
-    return Task.find(filter).sort({ status: 1, priority: -1, createdAt: -1 }).lean();
+  private async assertAssigneeInOrg(orgId: string, assigneeId: string, userId: string) {
+    if (assigneeId === userId) return;
+    const membership = await membershipRepository.findByOrgAndUser(orgId, assigneeId);
+    if (!membership) throw new ApiError(400, "Assignee is not a member of this organization");
   }
 
-  async create(userId: string, data: CreateTaskData) {
+  async list(userId: string, orgId: string, status?: string) {
+    const filter: any = orgScope(userId, orgId);
+    if (status) filter.status = status;
+    return Task.find(filter)
+      .sort({ status: 1, priority: -1, createdAt: -1 })
+      .populate("assigneeId", ASSIGNEE_FIELDS)
+      .lean();
+  }
+
+  async create(userId: string, orgId: string, data: CreateTaskData) {
     if (!data.title?.trim()) throw new ApiError(400, "Title is required");
+
+    if (data.assigneeId) await this.assertAssigneeInOrg(orgId, data.assigneeId, userId);
 
     const task = await Task.create({
       userId,
+      orgId,
+      assigneeId:  data.assigneeId ?? userId,
       title:       data.title.trim(),
       description: data.description ?? "",
       status:      data.status      ?? "todo",
@@ -39,10 +62,10 @@ export class TasksService {
       dueDate:     data.dueDate ? new Date(data.dueDate) : undefined,
       tags:        data.tags ?? [],
     });
-    return task;
+    return task.populate("assigneeId", ASSIGNEE_FIELDS);
   }
 
-  async update(id: string, userId: string, data: UpdateTaskData) {
+  async update(id: string, userId: string, orgId: string, data: UpdateTaskData) {
     const upd: any = {};
     if (data.title       !== undefined) upd.title       = data.title.trim();
     if (data.description !== undefined) upd.description = data.description;
@@ -50,8 +73,15 @@ export class TasksService {
     if (data.priority    !== undefined) upd.priority    = data.priority;
     if (data.tags        !== undefined) upd.tags        = data.tags;
 
+    if (data.assigneeId === null) {
+      upd.$unset = { assigneeId: "" };
+    } else if (data.assigneeId) {
+      await this.assertAssigneeInOrg(orgId, data.assigneeId, userId);
+      upd.assigneeId = data.assigneeId;
+    }
+
     if (data.dueDate === null) {
-      upd.$unset = { dueDate: "" };
+      upd.$unset = { ...upd.$unset, dueDate: "" };
     } else if (data.dueDate) {
       upd.dueDate = new Date(data.dueDate);
     }
@@ -62,19 +92,23 @@ export class TasksService {
       upd.$unset = { ...upd.$unset, completedAt: "" };
     }
 
-    const task = await Task.findOneAndUpdate({ _id: id, userId }, upd, { new: true, runValidators: true });
+    const task = await Task.findOneAndUpdate(
+      { _id: id, ...orgScope(userId, orgId) },
+      upd,
+      { new: true, runValidators: true }
+    ).populate("assigneeId", ASSIGNEE_FIELDS);
     if (!task) throw new ApiError(404, "Task not found");
     return task;
   }
 
-  async delete(id: string, userId: string) {
-    const task = await Task.findOneAndDelete({ _id: id, userId });
+  async delete(id: string, userId: string, orgId: string) {
+    const task = await Task.findOneAndDelete({ _id: id, ...orgScope(userId, orgId) });
     if (!task) throw new ApiError(404, "Task not found");
     return { deleted: true };
   }
 
-  async stats(userId: string) {
-    const tasks = await Task.find({ userId }).select("status").lean();
+  async stats(userId: string, orgId: string) {
+    const tasks = await Task.find(orgScope(userId, orgId)).select("status").lean();
     const result: Record<string, number> = { todo: 0, in_progress: 0, done: 0, cancelled: 0 };
     for (const t of tasks) {
       const s = t.status as string;

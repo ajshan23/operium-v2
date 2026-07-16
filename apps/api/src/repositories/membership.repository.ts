@@ -12,6 +12,10 @@ export class MembershipRepository {
   async findByOrgAndUser(orgId: string, userId: string): Promise<IMembership | null> {
     return await Membership.findOne({ orgId, userId });
   }
+
+  async findByOrgId(orgId: string): Promise<IMembership[]> {
+    return await Membership.find({ orgId }).populate("userId", "name email avatar");
+  }
 }
 
 export const membershipRepository = new MembershipRepository();

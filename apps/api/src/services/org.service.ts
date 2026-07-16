@@ -47,6 +47,10 @@ export class OrgService {
   async getUserOrgs(userId: string): Promise<IMembership[]> {
     return await membershipRepository.findByUserId(userId);
   }
+
+  async getOrgMembers(orgId: string): Promise<IMembership[]> {
+    return await membershipRepository.findByOrgId(orgId);
+  }
 }
 
 export const orgService = new OrgService();

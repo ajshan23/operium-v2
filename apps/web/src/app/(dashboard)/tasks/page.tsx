@@ -2,19 +2,22 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { tasksApi, Task, CreateTaskData } from "@/api/tasks.api";
+import { orgApi, OrgMember } from "@/api/org.api";
+import { getActiveOrgId, setActiveOrgId, removeActiveOrgId } from "@/lib/org";
+import { getUser } from "@/lib/auth";
 import {
   Plus, CheckSquare, Circle, Clock, AlertTriangle, X, Edit2, Trash2,
-  Calendar, Tag, ChevronDown, Loader2, Flag
+  Calendar, Tag, ChevronDown, Loader2, Flag, User, Building2
 } from "lucide-react";
 
 type Status = Task["status"];
 type Priority = Task["priority"];
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-  todo:        { label: "To Do",       color: "#63637a", bg: "#1a1a22", icon: <Circle size={14} /> },
-  in_progress: { label: "In Progress", color: "#8b5cf6", bg: "#1a1228", icon: <Clock size={14} /> },
-  done:        { label: "Done",        color: "#22c55e", bg: "#0a1f0e", icon: <CheckSquare size={14} /> },
-  cancelled:   { label: "Cancelled",   color: "#ef4444", bg: "#1f0a0a", icon: <X size={14} /> },
+  todo:        { label: "To Do",       color: "#63637a", bg: "bg-[#1a1a22]", icon: <Circle size={14} /> },
+  in_progress: { label: "In Progress", color: "#8b5cf6", bg: "bg-[#1a1228]", icon: <Clock size={14} /> },
+  done:        { label: "Done",        color: "#22c55e", bg: "bg-[#0a1f0e]", icon: <CheckSquare size={14} /> },
+  cancelled:   { label: "Cancelled",   color: "#ef4444", bg: "bg-[#1f0a0a]", icon: <X size={14} /> },
 };
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string }> = {
@@ -37,7 +40,7 @@ function TaskCard({ task, onUpdate, onDelete }: {
   const priority = PRIORITY_CONFIG[task.priority];
 
   const cycleStatus = () => {
-    const order: Status[] = ["todo", "in_progress", "done"];
+    const order: Status[] = ["todo", "in_progress", "done", "cancelled"];
     const idx = order.indexOf(task.status as Status);
     const next = order[(idx + 1) % order.length] ?? "todo";
     onUpdate(task._id, { status: next });
@@ -52,13 +55,15 @@ function TaskCard({ task, onUpdate, onDelete }: {
 
   const dueDate = task.dueDate ? new Date(task.dueDate) : null;
   const isOverdue = dueDate && dueDate < new Date() && task.status !== "done";
+  const assignee = task.assigneeId && typeof task.assigneeId === "object" ? task.assigneeId : null;
+  const assigneeName = assignee ? (assignee.name || assignee.email || "Unknown") : null;
 
   return (
     <div
-      className="group relative rounded-xl border transition-all duration-200"
+      className={`group relative rounded-xl border transition-all duration-200 ${status.bg} ${
+        task.status === "in_progress" ? "border-[#8b5cf6]/30" : "border-[#1a1a22]"
+      }`}
       style={{
-        background: `${status.bg}`,
-        borderColor: task.status === "in_progress" ? "#8b5cf6/30" : "#1a1a22",
         boxShadow: task.status === "in_progress" ? "0 0 0 1px rgba(139,92,246,0.15), 0 4px 20px rgba(139,92,246,0.05)" : undefined,
       }}
     >
@@ -111,15 +116,30 @@ function TaskCard({ task, onUpdate, onDelete }: {
               {/* Due date */}
               {dueDate && (
                 <span
-                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md"
-                  style={{
-                    color: isOverdue ? "#ef4444" : "#63637a",
-                    background: isOverdue ? "#1f0a0a" : "#111115",
-                  }}
+                  className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md ${
+                    isOverdue ? "text-[#ef4444] bg-[#1f0a0a]" : "text-[#63637a] bg-[#111115]"
+                  }`}
                 >
                   <Calendar size={9} />
                   {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   {isOverdue && " (overdue)"}
+                </span>
+              )}
+
+              {/* Assignee */}
+              {assignee && assigneeName && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border border-[#1a1a22] bg-[#111115] text-[#a1a1b5]"
+                  title={`Assigned to ${assigneeName}`}
+                >
+                  {assignee.avatar ? (
+                    <img src={assignee.avatar} alt="" className="w-3 h-3 rounded-full object-cover" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full bg-[#8b5cf6]/20 text-[#8b5cf6] text-[7px] font-semibold flex items-center justify-center uppercase">
+                      {assigneeName.charAt(0)}
+                    </span>
+                  )}
+                  {assigneeName}
                 </span>
               )}
 
@@ -153,12 +173,18 @@ function TaskCard({ task, onUpdate, onDelete }: {
   );
 }
 
-function NewTaskForm({ onSave, onCancel }: { onSave: (data: CreateTaskData) => void; onCancel: () => void }) {
+function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
+  members: OrgMember[];
+  currentUserId: string | null;
+  onSave: (data: CreateTaskData) => void;
+  onCancel: () => void;
+}) {
   const [title, setTitle]       = useState("");
   const [desc, setDesc]         = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate]   = useState("");
   const [tags, setTags]         = useState("");
+  const [assignee, setAssignee] = useState(currentUserId ?? "");
 
   const save = () => {
     if (!title.trim()) return;
@@ -168,6 +194,7 @@ function NewTaskForm({ onSave, onCancel }: { onSave: (data: CreateTaskData) => v
       priority,
       dueDate: dueDate || undefined,
       tags: tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
+      assigneeId: assignee || undefined,
     });
   };
 
@@ -198,6 +225,21 @@ function NewTaskForm({ onSave, onCancel }: { onSave: (data: CreateTaskData) => v
           >
             {(Object.keys(PRIORITY_CONFIG) as Priority[]).map(p => (
               <option key={p} value={p}>{PRIORITY_CONFIG[p].label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <User size={12} className="text-[#63637a]" />
+          <select
+            value={assignee}
+            onChange={e => setAssignee(e.target.value)}
+            className="bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none cursor-pointer max-w-40"
+          >
+            <option value="">Unassigned</option>
+            {members.map(m => (
+              <option key={m.userId._id} value={m.userId._id}>
+                {(m.userId.name || m.userId.email || "Unknown") + (m.userId._id === currentUserId ? " (me)" : "")}
+              </option>
             ))}
           </select>
         </div>
@@ -246,22 +288,53 @@ export default function TasksPage() {
   const [showNew, setShowNew]     = useState(false);
   const [filter, setFilter]       = useState<Status | "all">("all");
   const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [members, setMembers]     = useState<OrgMember[]>([]);
+  const [noOrg, setNoOrg]         = useState(false);
 
-  const load = useCallback(async () => {
+  const currentUserId = getUser()?.userId ?? null;
+
+  const resolveOrg = useCallback(async (): Promise<string | null> => {
+    const stored = getActiveOrgId();
+    if (stored) return stored;
+    const res = await orgApi.getOrgs();
+    const memberships = ((res as any).data ?? []) as Array<{ orgId: { _id: string } | string }>;
+    const first = memberships[0]?.orgId;
+    const orgId = typeof first === "object" && first !== null ? first._id : first;
+    if (!orgId) return null;
+    setActiveOrgId(orgId);
+    return orgId;
+  }, []);
+
+  const load = useCallback(async (retried = false) => {
     setLoading(true);
     try {
-      const [listRes, statsRes] = await Promise.all([
+      const orgId = await resolveOrg();
+      if (!orgId) {
+        setNoOrg(true);
+        return;
+      }
+      setNoOrg(false);
+      const [listRes, statsRes, membersRes] = await Promise.all([
         tasksApi.list(),
         tasksApi.stats(),
+        orgApi.getMembers(),
       ]);
       setTasks((listRes as any).data as Task[]);
       setStats((statsRes as any).data as Record<string, number>);
+      setMembers(((membersRes as any).data ?? []) as OrgMember[]);
     } catch (e) {
       console.error(e);
+      // A stale stored org (e.g. membership revoked) makes every call fail;
+      // clear it and retry once so the first valid membership is re-resolved.
+      if (!retried && getActiveOrgId()) {
+        removeActiveOrgId();
+        await load(true);
+        return;
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resolveOrg]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -359,10 +432,20 @@ export default function TasksPage() {
           <div className="flex items-center justify-center h-40">
             <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
           </div>
+        ) : noOrg ? (
+          <div className="text-center py-16">
+            <Building2 size={32} className="mx-auto text-[#2a2a35] mb-3" />
+            <p className="text-[#fafafa] text-sm font-medium">You&apos;re not in an organization yet</p>
+            <p className="text-[#63637a] text-sm mt-1">
+              Create or join an organization to start managing team tasks.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3 max-w-2xl">
             {showNew && (
               <NewTaskForm
+                members={members}
+                currentUserId={currentUserId}
                 onSave={handleCreate}
                 onCancel={() => setShowNew(false)}
               />

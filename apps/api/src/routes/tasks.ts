@@ -1,10 +1,12 @@
 import { Router, IRouter } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireTenantAccess } from "../middlewares/tenant.middleware.js";
 import { listTasks, createTask, updateTask, deleteTask, getStats } from "../controllers/tasks.controller.js";
 
 const router: IRouter = Router();
 
 router.use(requireAuth);
+router.use(requireTenantAccess);
 
 router.get("/stats", getStats);
 router.get("/",      listTasks);

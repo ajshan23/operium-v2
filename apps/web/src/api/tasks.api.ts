@@ -1,5 +1,12 @@
 import { apiClient } from "./client";
 
+export interface AssigneeRef {
+  _id: string;
+  name?: string;
+  email?: string;
+  avatar?: string;
+}
+
 export interface Task {
   _id: string;
   title: string;
@@ -8,6 +15,8 @@ export interface Task {
   priority: "low" | "medium" | "high" | "urgent";
   dueDate?: string;
   tags: string[];
+  orgId?: string;
+  assigneeId?: string | AssigneeRef | null;
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -20,6 +29,7 @@ export interface CreateTaskData {
   priority?: Task["priority"];
   dueDate?: string;
   tags?: string[];
+  assigneeId?: string;
 }
 
 export const tasksApi = {

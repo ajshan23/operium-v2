@@ -11,10 +11,12 @@ export async function apiClient<T = any>(
   const url = `${API_BASE_URL}${endpoint}`;
 
   const token = typeof window !== "undefined" ? localStorage.getItem("operium_token") : null;
+  const orgId = typeof window !== "undefined" ? localStorage.getItem("operium_org_id") : null;
 
   const headers = new Headers({
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(orgId ? { "x-org-id": orgId } : {}),
     ...customHeaders,
   });
 
@@ -38,12 +40,20 @@ export async function apiClient<T = any>(
     return {} as T;
   }
 
-  const responseData = await response.json();
+  // Non-JSON bodies (proxy errors, HTML error pages) must not crash the parser
+  let responseData: any;
+  try {
+    responseData = await response.json();
+  } catch {
+    responseData = null;
+  }
 
   if (!response.ok) {
     // Assuming backend returns ApiError payload: { error: true, message: "..." }
-    throw new Error(responseData.message || responseData.error || "An API error occurred");
+    throw new Error(
+      responseData?.message || responseData?.error || `Request failed with status ${response.status}`
+    );
   }
 
-  return responseData;
+  return responseData ?? ({} as T);
 }

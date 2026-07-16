@@ -61,6 +61,21 @@ export class OrgController {
       res.status(500).json(new ApiError(500, error.message));
     }
   }
+
+  async getMembers(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId;
+      if (!orgId) {
+        res.status(400).json(new ApiError(400, "Missing organization context"));
+        return;
+      }
+
+      const members = await orgService.getOrgMembers(orgId);
+      res.status(200).json(new ApiResponse(200, members, "Members fetched successfully"));
+    } catch (error: any) {
+      res.status(500).json(new ApiError(500, error.message));
+    }
+  }
 }
 
 export const orgController = new OrgController();
