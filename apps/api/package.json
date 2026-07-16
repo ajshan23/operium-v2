@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
-    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@operium/core": "workspace:*",
     "@operium/db": "workspace:*",
@@ -22,9 +21,10 @@
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.5.2",
     "firebase-admin": "^14.1.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.9.5"
+    "mongoose": "^9.7.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

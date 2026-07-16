@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 const MODEL_CASCADE = [
   "gemini-2.5-flash-preview-05-20",
@@ -39,22 +39,24 @@ export class AIService {
 
   async generate(prompt: string, apiKey?: string, thinkingBudget = 0): Promise<string> {
     const key = this.getKey(apiKey);
-    const genAI = new GoogleGenerativeAI(key);
+    const ai  = new GoogleGenAI({ apiKey: key });
     let lastError: any;
 
     for (const modelName of MODEL_CASCADE) {
       try {
-        const generationConfig: any = { thinkingConfig: { thinkingBudget } };
-        const model  = genAI.getGenerativeModel({ model: modelName, generationConfig });
-        const result = await model.generateContent(prompt);
+        const result = await ai.models.generateContent({
+          model:    modelName,
+          contents: prompt,
+          config:   { thinkingConfig: { thinkingBudget } },
+        });
 
-        const parts: any[] = result.response.candidates?.[0]?.content?.parts ?? [];
+        const parts: any[] = result.candidates?.[0]?.content?.parts ?? [];
         const textOnly = parts
           .filter((p: any) => p.text !== undefined && !p.thought)
           .map((p: any) => p.text as string)
           .join("");
 
-        const raw = textOnly || result.response.text();
+        const raw = textOnly || result.text || "";
         return stripThinkingBlocks(raw);
       } catch (err: any) {
         lastError = err;
@@ -69,16 +71,11 @@ export class AIService {
 
   async chat(messages: ChatMessage[], systemPrompt: string, apiKey?: string): Promise<string> {
     const key = this.getKey(apiKey);
-    const genAI = new GoogleGenerativeAI(key);
+    const ai  = new GoogleGenAI({ apiKey: key });
     let lastError: any;
 
     for (const modelName of MODEL_CASCADE) {
       try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: systemPrompt,
-        });
-
         const history = messages.slice(0, -1).map(m => ({
           role:  m.role,
           parts: [{ text: m.content }],
@@ -87,16 +84,20 @@ export class AIService {
         const lastMsg = messages[messages.length - 1];
         if (!lastMsg) throw new Error("No messages provided");
 
-        const chat   = model.startChat({ history });
-        const result = await chat.sendMessage(lastMsg.content);
+        const chat = ai.chats.create({
+          model:   modelName,
+          config:  { systemInstruction: systemPrompt },
+          history,
+        });
+        const result = await chat.sendMessage({ message: lastMsg.content });
 
-        const parts: any[] = result.response.candidates?.[0]?.content?.parts ?? [];
+        const parts: any[] = result.candidates?.[0]?.content?.parts ?? [];
         const textOnly = parts
           .filter((p: any) => p.text !== undefined && !p.thought)
           .map((p: any) => p.text as string)
           .join("");
 
-        return stripThinkingBlocks(textOnly || result.response.text());
+        return stripThinkingBlocks(textOnly || result.text || "");
       } catch (err: any) {
         lastError = err;
         if (isRateLimit(err) || err?.message?.includes("unavailable") || err?.message?.includes("deprecated")) {

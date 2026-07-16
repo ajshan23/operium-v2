@@ -4,19 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    ".": "./src/index.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "generate": "drizzle-kit generate",
-    "migrate": "tsx src/migrate.ts",
-    "studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "migrate:v1": "tsx scripts/migrate-v1-to-v2.ts"
   },
   "devDependencies": {
-    "@types/mongoose": "^5.11.96",
     "@types/node": "^22.19.21",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
