@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Folder, User, Users, Plus, Search, FileText, Trash2, Edit2,
   Eye, X, BookOpen, Clock, Tag, Check, Star, Loader2, AlertTriangle,
+  Share2, Copy, Globe,
 } from "lucide-react";
 import TipTapEditor from "./TipTapEditor";
 import { spacesApi, notesApi } from "@/api/notes.api";
@@ -72,6 +73,11 @@ export default function SpacesPage() {
   const [searchQuery,   setSearchQuery]   = useState("");
   const [isEditMode,    setIsEditMode]    = useState(true);
   const [tagInput,      setTagInput]      = useState("");
+
+  // ── Sharing ──
+  const [shareOpen,  setShareOpen]  = useState(false);
+  const [shareBusy,  setShareBusy]  = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // ── New Space modal ──
   const [showNewSpaceModal, setShowNewSpaceModal] = useState(false);
@@ -149,6 +155,12 @@ export default function SpacesPage() {
       setDraftContent(note.content ?? note.preview ?? "");
     }
   }, [activeNoteId, notes]);
+
+  // Close the share panel when switching notes
+  useEffect(() => {
+    setShareOpen(false);
+    setLinkCopied(false);
+  }, [activeNoteId]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Derived
@@ -293,6 +305,39 @@ export default function SpacesPage() {
   };
 
   // ────────────────────────────────────────────────────────────────────────────
+  // Sharing
+
+  const shareUrl = activeNote?.shareId
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/shared/${activeNote.shareId}`
+    : "";
+
+  const copyShareLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch { /* clipboard unavailable — the link is still visible to select */ }
+  };
+
+  const handleSetSharing = async (isShared: boolean) => {
+    if (!activeNote || shareBusy) return;
+    setShareBusy(true);
+    try {
+      const res = await notesApi.setSharing(activeNote._id, isShared);
+      const { isShared: nowShared, shareId } = (res as any).data;
+      setNotes(prev => prev.map(n =>
+        n._id === activeNote._id ? { ...n, isShared: nowShared, shareId: shareId ?? n.shareId } : n
+      ));
+      if (nowShared && shareId) {
+        await copyShareLink(`${window.location.origin}/shared/${shareId}`);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to update sharing");
+    }
+    setShareBusy(false);
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Tags
 
   const handleAddTag = async (e: React.FormEvent) => {
@@ -420,6 +465,7 @@ export default function SpacesPage() {
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[13px] font-bold text-[#fafafa] line-clamp-1 truncate">{note.title || "Untitled"}</span>
                     <div className="flex items-center gap-1 shrink-0 -mt-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                      {note.isShared && <Globe size={10} className="text-[#22c55e]" />}
                       {note.isStarred && <Star size={10} className="text-amber-400 fill-amber-400" />}
                       <button onClick={(e) => handleDeleteNote(note._id, e)}
                         className="p-1 text-[#55556a] hover:text-red-400 hover:bg-red-500/10 rounded transition-all">
@@ -452,7 +498,7 @@ export default function SpacesPage() {
         {activeNote ? (
           <>
             {/* Toolbar */}
-            <div className="h-[52px] border-b border-[#1a1a22] px-6 flex items-center justify-between bg-[#050505] shrink-0 z-10 relative">
+            <div className="h-[52px] border-b border-[#1a1a22] px-6 flex items-center justify-between bg-[#050505] shrink-0 z-20 relative">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono text-[#55556a] uppercase">Active:</span>
                 <span className="text-[11px] font-mono text-[#8b5cf6] truncate max-w-[200px]">{activeNote.title || "Untitled"}</span>
@@ -467,6 +513,16 @@ export default function SpacesPage() {
                   }`}>
                   <Star size={11} className={activeNote.isStarred ? "fill-amber-400" : ""} />
                 </button>
+                <button onClick={() => setShareOpen(o => !o)}
+                  title={activeNote.isShared ? "Shared — manage link" : "Share this note"}
+                  className={`h-[28px] px-2.5 rounded-lg text-[11px] border flex items-center gap-1.5 transition-all ${
+                    activeNote.isShared
+                      ? "border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e]"
+                      : "border-transparent text-[#63637a] hover:text-[#8b5cf6] hover:border-[#8b5cf6]/30"
+                  }`}>
+                  <Share2 size={11} />
+                  {activeNote.isShared && <span className="font-semibold">Shared</span>}
+                </button>
                 <button onClick={() => setIsEditMode(true)}
                   className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
                     isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
@@ -480,6 +536,59 @@ export default function SpacesPage() {
                   <Eye size={11} /><span>Preview</span>
                 </button>
               </div>
+
+              {/* Share panel */}
+              {shareOpen && (
+                <div className="absolute right-6 top-[50px] w-[340px] bg-[#0c0c0f] border border-[#2a2a35] rounded-2xl p-4 shadow-[0_16px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(139,92,246,0.08)] z-30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Globe size={13} className={activeNote.isShared ? "text-[#22c55e]" : "text-[#63637a]"} />
+                      <span className="text-[12px] font-bold text-[#fafafa]">Share note</span>
+                    </div>
+                    <button onClick={() => setShareOpen(false)}
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] transition-colors">
+                      <X size={12} />
+                    </button>
+                  </div>
+
+                  {activeNote.isShared && activeNote.shareId ? (
+                    <>
+                      <p className="text-[11px] text-[#63637a] mb-2.5">
+                        Anyone with this link can view a read-only copy of this note.
+                      </p>
+                      <div className="flex items-center gap-2 mb-3">
+                        <input readOnly value={shareUrl} onFocus={e => e.currentTarget.select()}
+                          className="flex-1 h-[32px] bg-[#141418] border border-[#1e1e24] rounded-lg px-2.5 text-[11px] text-[#a1a1aa] font-mono focus:outline-none focus:border-[#8b5cf6]/40 min-w-0" />
+                        <button onClick={() => copyShareLink(shareUrl)}
+                          className={`h-[32px] px-3 rounded-lg text-[11px] font-semibold border flex items-center gap-1.5 transition-all shrink-0 ${
+                            linkCopied
+                              ? "border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e]"
+                              : "border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/40"
+                          }`}>
+                          {linkCopied ? <Check size={11} /> : <Copy size={11} />}
+                          {linkCopied ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                      <button onClick={() => handleSetSharing(false)} disabled={shareBusy}
+                        className="w-full h-[32px] rounded-lg border border-red-500/25 text-red-400 hover:bg-red-500/10 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50">
+                        {shareBusy ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                        Stop sharing
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-[#63637a] mb-3">
+                        Create a public read-only link for this note. The link is copied to your clipboard automatically.
+                      </p>
+                      <button onClick={() => handleSetSharing(true)} disabled={shareBusy}
+                        className="w-full h-[34px] rounded-lg bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
+                        {shareBusy ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
+                        Create share link
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Content */}

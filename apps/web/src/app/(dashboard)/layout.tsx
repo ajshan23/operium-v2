@@ -1,16 +1,55 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutGrid, History, FolderGit2, GitBranch, Terminal, FileText, Bell, Settings, Bot, CheckSquare
+  LayoutGrid, History, FolderGit2, GitBranch, FileText, Settings, Bot, CheckSquare, Loader2
 } from "lucide-react";
 import { UserMenu } from "@/components/UserMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { apiClient } from "@/api/client";
+import { orgApi } from "@/api/org.api";
+import { getUser, setUser } from "@/lib/auth";
+import { getActiveOrgId, setActiveOrgId } from "@/lib/org";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [ready, setReady] = useState(false);
+
+  // Session/org bootstrap: cookie-only logins (GitHub OAuth) have no stored user,
+  // and org-scoped API calls need operium_org_id before any page fetches run.
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!getUser()) {
+          const res: any = await apiClient("/api/auth/me", { method: "GET" });
+          const u = res?.data;
+          if (u?._id) {
+            setUser({ userId: String(u._id), email: u.email ?? "", name: u.name ?? null, avatar: u.avatar ?? null });
+          }
+        }
+        if (!getActiveOrgId()) {
+          const res: any = await orgApi.getOrgs();
+          const first = (res?.data ?? [])[0]?.orgId;
+          const orgId = typeof first === "object" && first !== null ? first._id : first;
+          if (orgId) setActiveOrgId(String(orgId));
+        }
+      } catch {
+        // Pages surface their own errors; bootstrap is best-effort.
+      } finally {
+        setReady(true);
+      }
+    })();
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center" style={{ background: "var(--s0)" }}>
+        <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
+      </div>
+    );
+  }
 
   const navItems = [
     { href: "/",            icon: LayoutGrid,  label: "Dashboard" },
@@ -20,7 +59,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/spaces",      icon: FileText,    label: "Spaces" },
     { href: "/projects",    icon: FolderGit2,  label: "Projects" },
     { href: "/git",         icon: GitBranch,   label: "Git" },
-    { href: "/notification",icon: Bell,        label: "Notifications" },
   ];
 
   return (
@@ -62,10 +100,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className={`sidebar-nav-btn ${isActive ? "sidebar-nav-btn--active" : "sidebar-nav-btn--inactive"} group`}
               >
                 <Icon size={20} strokeWidth={isActive ? 2 : 1.8} className="sidebar-nav-icon" />
-                {item.href === "/notification" && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-indigo-500 rounded-full animate-pulse"
-                    style={{ border: "1.5px solid var(--s0)" }} />
-                )}
               </Link>
             );
           })}

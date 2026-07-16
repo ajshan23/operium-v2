@@ -1562,76 +1562,132 @@ html[data-theme="light"] .usermenu-logout:hover {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   LIGHT MODE — TAILWIND ARBITRARY VALUE OVERRIDES
+   LIGHT MODE — TAILWIND ARBITRARY VALUE OVERRIDES (COMPREHENSIVE)
    Fixes hardcoded dark hex classes across all page JSX without editing each file.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Backgrounds ─────────────────────────────────────────────────────────────── */
+/* ── Solid dark backgrounds ──────────────────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#000000\]   { background-color: rgba(0,0,0,0.35) !important; }
+html[data-theme="light"] .bg-\[\#030303\]   { background-color: var(--s0) !important; }
 html[data-theme="light"] .bg-\[\#050505\]   { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-\[\#0a0a0a\]   { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-\[\#0A0A0A\]   { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-\[\#070709\]   { background-color: var(--s0) !important; }
 html[data-theme="light"] .bg-\[\#09090b\]   { background-color: var(--s0) !important; }
 html[data-theme="light"] .bg-\[\#0c0c0f\]   { background-color: var(--s1) !important; }
 html[data-theme="light"] .bg-\[\#0d0b16\]   { background-color: var(--s2) !important; }
 html[data-theme="light"] .bg-\[\#111113\]   { background-color: var(--s1) !important; }
+html[data-theme="light"] .bg-\[\#111115\]   { background-color: var(--s2) !important; }
 html[data-theme="light"] .bg-\[\#141418\]   { background-color: var(--s2) !important; }
+html[data-theme="light"] .bg-\[\#16161e\]   { background-color: var(--s1) !important; }
 html[data-theme="light"] .bg-\[\#18181b\]   { background-color: var(--s2) !important; }
 html[data-theme="light"] .bg-\[\#18181c\]   { background-color: var(--s2) !important; }
 html[data-theme="light"] .bg-\[\#1a1a22\]   { background-color: var(--s3) !important; }
+html[data-theme="light"] .bg-\[\#1d1630\]   { background-color: rgba(124, 58, 237, 0.06) !important; }
 html[data-theme="light"] .bg-\[\#1e1e24\]   { background-color: var(--s3) !important; }
+html[data-theme="light"] .bg-\[\#1f1010\]   { background-color: rgba(220, 38, 38, 0.06) !important; }
+html[data-theme="light"] .bg-\[\#222228\]   { background-color: var(--s2) !important; }
 
-/* opacity variants */
-html[data-theme="light"] .bg-\[\#050505\]\/80 { background-color: color-mix(in srgb, var(--s0) 80%, transparent) !important; }
-html[data-theme="light"] .bg-\[\#0c0c0f\]\/20 { background-color: color-mix(in srgb, var(--s1) 20%, transparent) !important; }
-html[data-theme="light"] .bg-\[\#0c0c0f\]\/40 { background-color: color-mix(in srgb, var(--s1) 40%, transparent) !important; }
-html[data-theme="light"] .bg-\[\#0c0c0f\]\/60 { background-color: color-mix(in srgb, var(--s1) 60%, transparent) !important; }
-html[data-theme="light"] .bg-\[\#0c0c0f\]\/80 { background-color: color-mix(in srgb, var(--s1) 80%, transparent) !important; }
-html[data-theme="light"] .bg-\[\#141418\]\/60 { background-color: color-mix(in srgb, var(--s2) 60%, transparent) !important; }
+/* ── Modal overlay — keep dark but lighter ────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#000000\]\/60 { background-color: rgba(50, 30, 80, 0.35) !important; }
+html[data-theme="light"] .bg-\[\#000000\]\/70 { background-color: rgba(50, 30, 80, 0.4)  !important; }
+html[data-theme="light"] .bg-\[\#000000\]\/75 { background-color: rgba(50, 30, 80, 0.45) !important; }
 
-/* active/accent dark variants — map to subtle violet */
+/* ── Opacity variants (base → solid light equivalent) ───────────────────────── */
+html[data-theme="light"] .bg-\[\#030303\]\/80 { background-color: rgba(245,245,255,0.8) !important; }
+html[data-theme="light"] .bg-\[\#050505\]\/40 { background-color: rgba(245,245,255,0.4) !important; }
+html[data-theme="light"] .bg-\[\#050505\]\/80 { background-color: rgba(245,245,255,0.8) !important; }
+html[data-theme="light"] .bg-\[\#070709\]\/80 { background-color: rgba(245,245,255,0.8) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/15 { background-color: rgba(255,255,255,0.15) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/20 { background-color: rgba(255,255,255,0.9) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/30 { background-color: rgba(255,255,255,0.9) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/40 { background-color: rgba(255,255,255,0.9) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/50 { background-color: rgba(255,255,255,0.92) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/60 { background-color: rgba(255,255,255,0.94) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/75 { background-color: rgba(255,255,255,0.96) !important; }
+html[data-theme="light"] .bg-\[\#0c0c0f\]\/80 { background-color: rgba(255,255,255,0.97) !important; }
+html[data-theme="light"] .bg-\[\#141418\]\/30 { background-color: rgba(238,238,255,0.6) !important; }
+html[data-theme="light"] .bg-\[\#141418\]\/40 { background-color: rgba(238,238,255,0.7) !important; }
+html[data-theme="light"] .bg-\[\#141418\]\/60 { background-color: rgba(238,238,255,0.85) !important; }
+html[data-theme="light"] .bg-\[\#1a1a22\]\/50 { background-color: rgba(228,228,248,0.5) !important; }
+html[data-theme="light"] .bg-\[\#1e1e24\]\/60 { background-color: rgba(228,228,248,0.6) !important; }
+
+/* ── Violet (active/accent) dark variants ─────────────────────────────────────── */
 html[data-theme="light"] .bg-\[\#120e20\]     { background-color: rgba(124, 58, 237, 0.08) !important; }
-html[data-theme="light"] .bg-\[\#120e20\]\/10 { background-color: rgba(124, 58, 237, 0.05) !important; }
-html[data-theme="light"] .bg-\[\#120e20\]\/30 { background-color: rgba(124, 58, 237, 0.07) !important; }
-html[data-theme="light"] .bg-\[\#120e20\]\/65 { background-color: rgba(124, 58, 237, 0.1)  !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/10 { background-color: rgba(124, 58, 237, 0.04) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/15 { background-color: rgba(124, 58, 237, 0.06) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/20 { background-color: rgba(124, 58, 237, 0.07) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/30 { background-color: rgba(124, 58, 237, 0.08) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/40 { background-color: rgba(124, 58, 237, 0.09) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/60 { background-color: rgba(124, 58, 237, 0.10) !important; }
+html[data-theme="light"] .bg-\[\#120e20\]\/65 { background-color: rgba(124, 58, 237, 0.11) !important; }
+
+/* ── Amber-tinted dark (warning context) ──────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#1c160e\]\/30 { background-color: rgba(217, 119, 6, 0.06) !important; }
+
+/* ── Red-tinted dark (error context) ─────────────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#1f1010\]\/30 { background-color: rgba(220, 38, 38, 0.05) !important; }
+
+/* ── Azure-tinted dark (Azure DevOps context) ────────────────────────────────── */
+html[data-theme="light"] .bg-\[\#0c1324\]\/15 { background-color: rgba(0, 120, 212, 0.05) !important; }
+html[data-theme="light"] .bg-\[\#0c1324\]\/30 { background-color: rgba(0, 120, 212, 0.07) !important; }
 
 /* ── Hover backgrounds ───────────────────────────────────────────────────────── */
+html[data-theme="light"] .hover\:bg-\[\#111115\]:hover   { background-color: var(--s2) !important; }
 html[data-theme="light"] .hover\:bg-\[\#141418\]:hover   { background-color: var(--s3) !important; }
 html[data-theme="light"] .hover\:bg-\[\#18181c\]:hover   { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#1a1a22\]:hover   { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#222228\]:hover   { background-color: var(--s3) !important; }
 html[data-theme="light"] .hover\:bg-\[\#1e1e26\]:hover   { background-color: var(--s3) !important; }
-html[data-theme="light"] .hover\:bg-\[\#120e20\]\/30\:hover,
-html[data-theme="light"] .hover\:bg-\[\#120e20\]\/30:hover { background-color: rgba(124, 58, 237, 0.07) !important; }
+html[data-theme="light"] .hover\:bg-\[\#120e20\]\/30:hover { background-color: rgba(124, 58, 237, 0.08) !important; }
 
 /* ── Text colors ─────────────────────────────────────────────────────────────── */
+/* Near-white → primary */
 html[data-theme="light"] .text-\[\#fafafa\]   { color: var(--text-primary)   !important; }
 html[data-theme="light"] .text-\[\#f4f4f5\]   { color: var(--text-primary)   !important; }
 html[data-theme="light"] .text-\[\#e4e4e7\]   { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-\[\#e1e1e6\]   { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-\[\#d4d4d8\]   { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-\[\#c4c4d4\]   { color: var(--text-secondary) !important; }
+/* Secondary gray → secondary */
 html[data-theme="light"] .text-\[\#a1a1aa\]   { color: var(--text-secondary) !important; }
+/* Muted gray → muted */
 html[data-theme="light"] .text-\[\#63637a\]   { color: var(--text-muted)     !important; }
 html[data-theme="light"] .text-\[\#55556a\]   { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-\[\#3f3f52\]   { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-\[\#3a3a4a\]   { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-\[\#333342\]   { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-\[\#2a2a35\]   { color: var(--border-strong)  !important; }
+/* Violet-tinted white → violet */
+html[data-theme="light"] .text-\[\#e2e0ff\]   { color: #5b21b6              !important; }
 
-/* hover text */
+/* ── Hover text ──────────────────────────────────────────────────────────────── */
 html[data-theme="light"] .hover\:text-\[\#fafafa\]:hover { color: var(--text-primary) !important; }
 html[data-theme="light"] .hover\:text-\[\#f4f4f5\]:hover { color: var(--text-primary) !important; }
 
 /* ── Placeholder colors ──────────────────────────────────────────────────────── */
 html[data-theme="light"] .placeholder\:text-\[\#55556a\]::placeholder { color: #a0a0c0 !important; }
 html[data-theme="light"] .placeholder\:text-\[\#63637a\]::placeholder { color: #a0a0c0 !important; }
+html[data-theme="light"] .placeholder-\[\#3a3a4a\]::placeholder        { color: #b0b0c8 !important; }
 
 /* ── Border colors ───────────────────────────────────────────────────────────── */
+html[data-theme="light"] .border-\[\#030303\]  { border-color: var(--border-subtle)  !important; }
+html[data-theme="light"] .border-\[\#050505\]  { border-color: var(--s0)             !important; }
 html[data-theme="light"] .border-\[\#1a1a22\]  { border-color: var(--border-subtle)  !important; }
 html[data-theme="light"] .border-\[\#1e1e24\]  { border-color: var(--border-subtle)  !important; }
 html[data-theme="light"] .border-\[\#23232c\]  { border-color: var(--border-default) !important; }
 html[data-theme="light"] .border-\[\#2a2a35\]  { border-color: var(--border-default) !important; }
 html[data-theme="light"] .border-\[\#2e2e36\]  { border-color: var(--border-default) !important; }
+html[data-theme="light"] .border-\[\#333342\]  { border-color: var(--border-default) !important; }
 html[data-theme="light"] .border-\[\#383845\]  { border-color: var(--border-strong)  !important; }
 html[data-theme="light"] .border-\[\#38384a\]  { border-color: var(--border-strong)  !important; }
+html[data-theme="light"] .border-\[\#63637a\]  { border-color: var(--border-strong)  !important; }
 
-/* ── Notification dot border (matches sidebar bg) ────────────────────────────── */
-html[data-theme="light"] .border-\[\#050505\]  { border-color: var(--s0) !important; }
-
-/* ── Toggle inactive state ───────────────────────────────────────────────────── */
+/* ── Toggle inactive state (pill toggle off) ─────────────────────────────────── */
 html[data-theme="light"] .bg-\[\#1e1e24\]      { background-color: var(--border-default) !important; }
 
 /* ── Monospace code blocks ───────────────────────────────────────────────────── */
-html[data-theme="light"] .text-\[\#c4b5fd\]    { color: #6d28d9 !important; }
+html[data-theme="light"] .text-\[\#c4b5fd\]    { color: #6d28d9              !important; }
 html[data-theme="light"] pre,
 html[data-theme="light"] code {
   background-color: var(--s2) !important;
@@ -1639,4 +1695,47 @@ html[data-theme="light"] code {
   color: #4a2c8a !important;
 }
 
+/* ── Hover backgrounds with opacity fractions ─────────────────────────────────── */
+html[data-theme="light"] .hover\:bg-\[\#141418\]\/30:hover { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#141418\]\/40:hover { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#141418\]\/60:hover { background-color: var(--s3) !important; }
+html[data-theme="light"] .hover\:bg-\[\#0c0c0f\]\/80:hover { background-color: var(--s1) !important; }
 
+/* ── bg-black (modal overlay + git page) ────────────────────────────────────── */
+html[data-theme="light"] .bg-black         { background-color: var(--s0) !important; }
+html[data-theme="light"] .bg-black\/40     { background-color: rgba(50, 30, 80, 0.20) !important; }
+html[data-theme="light"] .bg-black\/60     { background-color: rgba(50, 30, 80, 0.30) !important; }
+
+/* ── Tailwind built-in gray/zinc/white text (used as near-white on dark pages) ── */
+html[data-theme="light"] .text-white     { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-gray-100  { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-gray-200  { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-gray-300  { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-gray-400  { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-gray-500  { color: var(--text-muted)     !important; }
+html[data-theme="light"] .text-zinc-100  { color: var(--text-primary)   !important; }
+html[data-theme="light"] .text-zinc-200  { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-zinc-300  { color: var(--text-secondary) !important; }
+html[data-theme="light"] .text-zinc-400  { color: var(--text-muted)     !important; }
+html[data-theme="light"] .hover\:text-white:hover   { color: var(--text-primary) !important; }
+html[data-theme="light"] .hover\:text-gray-300:hover { color: var(--text-secondary) !important; }
+
+/* ── Native <select> form elements ──────────────────────────────────────────── */
+html[data-theme="light"] select {
+  color: var(--text-primary) !important;
+  background-color: var(--s1) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ── Dashed border (empty state outlines) ────────────────────────────────────── */
+html[data-theme="light"] .border-dashed.border-\[\#1a1a22\],
+html[data-theme="light"] .border-dashed.border-\[\#2a2a35\] {
+  border-color: var(--border-default) !important;
+}
+
+
+
+/* Status-tinted task card backgrounds (tasks page) — light theme equivalents */
+html[data-theme="light"] .bg-\[\#1a1228\] { background-color: #f3efff !important; }
+html[data-theme="light"] .bg-\[\#0a1f0e\] { background-color: #eafaf2 !important; }
+html[data-theme="light"] .bg-\[\#1f0a0a\] { background-color: #fdeeee !important; }
