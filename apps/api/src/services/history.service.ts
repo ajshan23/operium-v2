@@ -7,6 +7,29 @@ const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+// Custom-integration URLs are fetched server-side; block private/internal targets (SSRF).
+const PRIVATE_HOST_PATTERNS = [
+  /^localhost$/, /^127\./, /^0\./, /^10\./, /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./,
+  /^::1$/, /^\[::1\]$/, /^f[cd]/i, /^fe80/i,
+];
+
+function assertSafeIntegrationUrl(raw: string): void {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ApiError(400, `Invalid integration URL: ${raw}`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ApiError(400, "Integration URLs must use http or https");
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (PRIVATE_HOST_PATTERNS.some(p => p.test(host))) {
+    throw new ApiError(400, "Integration URL points to a private or internal address");
+  }
+}
+
 function buildFilter(userId: string, opts: HistoryQueryOpts) {
   const filter: Record<string, any> = { userId };
 
@@ -520,11 +543,25 @@ export class HistoryService {
     }));
   }
 
-  async saveCustomIntegrations(userId: string, integrations: Array<{ name: string; url: string; method?: string }>) {
+  async saveCustomIntegrations(
+    userId: string,
+    integrations: Array<{
+      name: string;
+      url: string;
+      method?: string;
+      headers?: Record<string, string>;
+      body?: string;
+      mapping?: { arrayPath?: string; titlePath?: string; descriptionPath?: string; datePath?: string; category?: string };
+    }>
+  ) {
+    for (const i of integrations) assertSafeIntegrationUrl(i.url);
     const docs = integrations.map(i => ({
-      name:   i.name,
-      url:    i.url,
-      method: i.method || "GET",
+      name:    i.name,
+      url:     i.url,
+      method:  i.method || "GET",
+      headers: i.headers,
+      body:    i.body,
+      mapping: i.mapping,
     }));
     await User.updateOne({ _id: userId }, { customIntegrations: docs });
   }
@@ -538,6 +575,7 @@ export class HistoryService {
     let upserted = 0;
     for (const integration of integrations) {
       try {
+        assertSafeIntegrationUrl(integration.url);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 30_000);
         const fetchOpts: RequestInit = {

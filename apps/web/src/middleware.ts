@@ -5,6 +5,8 @@ import { jwtVerify } from "jose";
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-do-not-use-in-prod";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password"];
+// Publicly viewable content — no auth, no logged-in redirect
+const OPEN_PATHS = ["/shared"];
 const ONBOARDING_PATH = "/public-onboarding";
 
 async function verifyToken(token: string): Promise<boolean> {
@@ -19,6 +21,11 @@ async function verifyToken(token: string): Promise<boolean> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Public content (e.g. shared notes) — always accessible
+  if (OPEN_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
 
   // Auth pages — redirect to dashboard if already logged in
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {

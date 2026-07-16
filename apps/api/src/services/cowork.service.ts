@@ -33,23 +33,24 @@ export interface CreateData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildScopeFilter(userId: string, scope?: string) {
+// "Shared" visibility is bounded to the caller's active org — never global.
+function buildScopeFilter(userId: string, orgId: string, scope?: string) {
   if (scope === "personal") return { userId, isShared: false };
-  if (scope === "team")     return { isShared: true };
-  // default: everything the user can see (own + shared)
-  return { $or: [{ userId }, { isShared: true }] };
+  if (scope === "team")     return { isShared: true, orgId };
+  // default: everything the user can see (own + shared within the org)
+  return { $or: [{ userId }, { isShared: true, orgId }] };
 }
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export class CoworkService {
 
-  async list(userId: string, params: ListParams) {
+  async list(userId: string, orgId: string, params: ListParams) {
     const limit  = Math.min(params.limit  ?? 20, 100);
     const page   = Math.max(params.page   ?? 1,  1);
     const skip   = (page - 1) * limit;
 
-    const filter: any = buildScopeFilter(userId, params.scope);
+    const filter: any = buildScopeFilter(userId, orgId, params.scope);
     if (params.source) filter.source = params.source;
     if (params.tag)    filter.tags   = { $in: [params.tag] };
 
@@ -67,10 +68,10 @@ export class CoworkService {
     return { sessions: normalized, pagination: { total, page, pages: Math.ceil(total / limit) } };
   }
 
-  async search(userId: string, q: string, scope?: string, limit = 10) {
+  async search(userId: string, orgId: string, q: string, scope?: string, limit = 10) {
     if (!q?.trim()) throw new ApiError(400, "q is required");
 
-    const scopeFilter = buildScopeFilter(userId, scope);
+    const scopeFilter = buildScopeFilter(userId, orgId, scope);
     const filter: any = { ...scopeFilter, $text: { $search: q } };
 
     const sessions = await CoworkSession.find(filter, { score: { $meta: "textScore" } })
@@ -82,10 +83,10 @@ export class CoworkService {
     return sessions.map(s => this._normalize(s, userId));
   }
 
-  async getById(id: string, userId: string) {
+  async getById(id: string, userId: string, orgId: string) {
     const session = await CoworkSession.findOne({
       _id: id,
-      $or: [{ userId }, { isShared: true }],
+      $or: [{ userId }, { isShared: true, orgId }],
     })
       .populate("userId", "name avatar")
       .lean();
@@ -99,10 +100,10 @@ export class CoworkService {
     return { session: this._normalize(session, userId), chunks };
   }
 
-  async getRelated(id: string, userId: string, limit = 5) {
+  async getRelated(id: string, userId: string, orgId: string, limit = 5) {
     const source = await CoworkSession.findOne({
       _id: id,
-      $or: [{ userId }, { isShared: true }],
+      $or: [{ userId }, { isShared: true, orgId }],
     }).lean();
 
     if (!source) throw new ApiError(404, "Session not found");
@@ -116,7 +117,7 @@ export class CoworkService {
     const candidates = await CoworkSession.find({
       _id: { $ne: id },
       $and: [
-        { $or: [{ userId }, { isShared: true }] },
+        { $or: [{ userId }, { isShared: true, orgId }] },
         { $or: conditions },
       ],
     })
@@ -138,13 +139,14 @@ export class CoworkService {
     return { related };
   }
 
-  async create(userId: string, data: CreateData) {
+  async create(userId: string, orgId: string, data: CreateData) {
     if (!data.source) throw new ApiError(400, "source is required");
     if (!data.title?.trim()) throw new ApiError(400, "title is required");
     if (!data.summary?.trim()) throw new ApiError(400, "summary is required");
 
     const session = await CoworkSession.create({
       userId,
+      orgId,
       source:       data.source,
       title:        data.title,
       summary:      data.summary,
@@ -167,6 +169,7 @@ export class CoworkService {
         data.chunks.map((text, i) => ({
           sessionId:     session._id,
           userId,
+          orgId,
           isShared:      data.isShared ?? true,
           order:         i,
           text,
@@ -181,10 +184,10 @@ export class CoworkService {
     return { session: session.toObject(), chunks };
   }
 
-  async feedback(id: string, userId: string, helpful?: boolean) {
+  async feedback(id: string, userId: string, orgId: string, helpful?: boolean) {
     const session = await CoworkSession.findOne({
       _id: id,
-      $or: [{ userId }, { isShared: true }],
+      $or: [{ userId }, { isShared: true, orgId }],
     });
     if (!session) throw new ApiError(404, "Session not found");
 
@@ -201,7 +204,7 @@ export class CoworkService {
     };
   }
 
-  async chat(userId: string, messages: { role: "user" | "model"; content: string }[], sessionId?: string) {
+  async chat(userId: string, orgId: string, messages: { role: "user" | "model"; content: string }[], sessionId?: string) {
     // Fetch user's Gemini key
     const user = await User.findById(userId).select("geminiApiKey").lean() as any;
     if (!user?.geminiApiKey) {
@@ -214,7 +217,7 @@ export class CoworkService {
     let context = "";
     try {
       const queryEmb = await embeddingService.embed(query, user.geminiApiKey).catch(() => null);
-      const chunkFilter: any = { $or: [{ userId }, { isShared: true }] };
+      const chunkFilter: any = { $or: [{ userId }, { isShared: true, orgId }] };
       if (sessionId) chunkFilter.sessionId = sessionId;
 
       const chunks = await CoworkChunk.find(chunkFilter)

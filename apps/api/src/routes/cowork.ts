@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { IRouter } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.js";
+import { requireTenantAccess } from "../middlewares/tenant.middleware.js";
 import {
   listSessions, searchSessions, createSession,
   getSession, getRelated, recordFeedback, deleteSession, chatWithSession,
@@ -8,6 +9,7 @@ import {
 
 const router: IRouter = Router();
 router.use(requireAuth);
+router.use(requireTenantAccess);
 
 router.get("/",             listSessions);
 router.get("/search",       searchSessions);

@@ -5,8 +5,8 @@ import { userRepository } from "../repositories/user.repository.js";
 import { IUser, OTP } from "@operium/db";
 import { TokenPayload } from "../types/auth.types.js";
 import { emailService } from "./email.service.js";
+import { JWT_SECRET } from "../utils/jwtSecret.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-do-not-use-in-prod";
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 

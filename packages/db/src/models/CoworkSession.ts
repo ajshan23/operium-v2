@@ -6,6 +6,7 @@ export type CoworkOutcome  = "fixed" | "implemented" | "explored" | "blocked" | 
 
 export interface ICoworkSession extends Document {
   userId:          mongoose.Types.ObjectId;
+  orgId?:          mongoose.Types.ObjectId;
   source:          CoworkSource;
   title:           string;
   summary:         string;
@@ -30,6 +31,7 @@ export interface ICoworkSession extends Document {
 const CoworkSessionSchema = new Schema<ICoworkSession>(
   {
     userId:  { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    orgId:   { type: Schema.Types.ObjectId, ref: "Org", index: true },
     source:  { type: String, enum: ["antigravity","claude-code","cursor","system"], required: true },
     title:   { type: String, required: true },
     summary: { type: String, required: true, default: "" },

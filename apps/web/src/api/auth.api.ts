@@ -1,5 +1,6 @@
 import { apiClient, API_BASE_URL } from "./client";
 import { setToken, setUser, removeToken, removeUser } from "@/lib/auth";
+import { removeActiveOrgId } from "@/lib/org";
 
 async function saveSessionFromResponse(res: any) {
   const data = res?.data;
@@ -49,6 +50,7 @@ export const authApi = {
     } finally {
       removeToken();
       removeUser();
+      removeActiveOrgId();
     }
   },
 

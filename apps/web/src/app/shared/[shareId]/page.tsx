@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { API_BASE_URL } from "@/api/client";
 import { FileText, Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 
@@ -51,7 +52,7 @@ export default function SharedNotePage() {
         <AlertTriangle size={36} className="text-[#3a3a4a]" />
         <h1 className="text-[#fafafa] text-xl font-semibold">Note not found</h1>
         <p className="text-[#63637a] text-sm">{error || "This shared note doesn't exist or sharing has been disabled."}</p>
-        <a href="/" className="mt-2 text-[#8b5cf6] text-sm hover:underline">Go to Operium</a>
+        <Link href="/" className="mt-2 text-[#8b5cf6] text-sm hover:underline">Go to Operium</Link>
       </div>
     );
   }
@@ -144,13 +145,13 @@ export default function SharedNotePage() {
             <span className="text-[#2a2a35] text-sm">/</span>
             <span className="text-sm text-[#63637a]">Shared Note</span>
           </div>
-          <a
+          <Link
             href="/"
             className="flex items-center gap-1.5 text-xs text-[#63637a] hover:text-[#8b5cf6] transition-colors"
           >
             <ExternalLink size={12} />
             Open Operium
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -182,7 +183,7 @@ export default function SharedNotePage() {
         <div className="mt-16 pt-8 border-t border-[#1a1a22] text-center">
           <p className="text-xs text-[#3a3a4a]">
             Shared via{" "}
-            <a href="/" className="text-[#8b5cf6] hover:underline">Operium</a>
+            <Link href="/" className="text-[#8b5cf6] hover:underline">Operium</Link>
             {" "}— persistent memory for AI coding assistants
           </p>
         </div>

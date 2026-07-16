@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { orgApi } from "@/api/org.api";
+import { setActiveOrgId } from "@/lib/org";
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 function PlusIcon() {
@@ -67,7 +68,9 @@ export default function PublicOnboardingPage() {
     setIsLoading(true);
     setError("");
     try {
-      await orgApi.createOrg(orgName.trim());
+      const res: any = await orgApi.createOrg(orgName.trim());
+      const orgId = res?.data?._id ?? res?.data?.id;
+      if (orgId) setActiveOrgId(String(orgId));
       window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Failed to create organization");
@@ -81,7 +84,9 @@ export default function PublicOnboardingPage() {
     setIsLoading(true);
     setError("");
     try {
-      await orgApi.joinOrg(inviteCode.trim());
+      const res: any = await orgApi.joinOrg(inviteCode.trim());
+      const orgId = res?.data?._id ?? res?.data?.id;
+      if (orgId) setActiveOrgId(String(orgId));
       window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Invalid invite code");

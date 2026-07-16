@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const uid = (req: Request): string => (req as any).user.userId as string;
+const oid = (req: Request): string => req.orgId as string;
 const pid = (req: Request): string => String(req.params["id"]);
 
 const handle = (fn: (req: Request, res: Response) => Promise<void>) =>
@@ -21,7 +22,7 @@ const handle = (fn: (req: Request, res: Response) => Promise<void>) =>
 
 export const listSessions = handle(async (req, res) => {
   const { scope, source, tag, limit, page } = req.query as Record<string, string>;
-  const result = await coworkService.list(uid(req), {
+  const result = await coworkService.list(uid(req), oid(req), {
     scope:  scope  as "team" | "personal" | undefined,
     source: source || undefined,
     tag:    tag    || undefined,
@@ -38,33 +39,33 @@ export const searchSessions = handle(async (req, res) => {
     return;
   }
   const sessions = await coworkService.search(
-    uid(req), q, scope as "team" | "personal" | undefined,
+    uid(req), oid(req), q, scope as "team" | "personal" | undefined,
     limit ? Number(limit) : undefined
   );
   res.json(new ApiResponse(200, sessions, "Search results"));
 });
 
 export const createSession = handle(async (req, res) => {
-  const result = await coworkService.create(uid(req), req.body);
+  const result = await coworkService.create(uid(req), oid(req), req.body);
   res.status(201).json(new ApiResponse(201, result, "Session created"));
 });
 
 export const getSession = handle(async (req, res) => {
-  const result = await coworkService.getById(pid(req), uid(req));
+  const result = await coworkService.getById(pid(req), uid(req), oid(req));
   res.json(new ApiResponse(200, result, "Session fetched"));
 });
 
 export const getRelated = handle(async (req, res) => {
   const { limit } = req.query as Record<string, string>;
   const result = await coworkService.getRelated(
-    pid(req), uid(req), limit ? Number(limit) : undefined
+    pid(req), uid(req), oid(req), limit ? Number(limit) : undefined
   );
   res.json(new ApiResponse(200, result, "Related sessions"));
 });
 
 export const recordFeedback = handle(async (req, res) => {
   const { helpful } = req.body as { helpful?: boolean };
-  const result = await coworkService.feedback(pid(req), uid(req), helpful);
+  const result = await coworkService.feedback(pid(req), uid(req), oid(req), helpful);
   res.json(new ApiResponse(200, result, "Feedback recorded"));
 });
 
@@ -82,6 +83,6 @@ export const chatWithSession = handle(async (req, res) => {
     res.status(400).json(new ApiError(400, "messages array is required").toJSON());
     return;
   }
-  const result = await coworkService.chat(uid(req), messages, sessionId);
+  const result = await coworkService.chat(uid(req), oid(req), messages, sessionId);
   res.json(new ApiResponse(200, result, "Reply generated"));
 });
