@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { compositeScore } from "@operium/core";
+import {
+  compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints,
+} from "@operium/core";
 
 /** Per-request context injected by the HTTP or stdio transport. */
 export interface McpContext {
@@ -9,79 +11,6 @@ export interface McpContext {
   geminiKey?: string;
   /** Optional embedding function injected by the transport layer */
   embedFn?: (text: string) => Promise<number[]>;
-}
-
-// ── Query intelligence ────────────────────────────────────────────────────────
-
-function parseQueryHints(
-  query: string,
-  explicit: { intent?: string; outcome?: string; days?: number; tags?: string[] },
-): { intent?: string; outcome?: string; days?: number; tags: string[] } {
-  const q = query.toLowerCase();
-  const hints: { intent?: string; outcome?: string; days?: number; tags: string[] } = { tags: [] };
-
-  if (!explicit.intent) {
-    if (/\b(fix|fixed|bug|broke|crash|error|issue|debug)\b/.test(q)) hints.intent = "bug-fix";
-    else if (/\b(feature|implement|add|built|build|create|ship)\b/.test(q)) hints.intent = "feature";
-    else if (/\b(refactor|restructur|clean|reorganiz|migrat)\b/.test(q)) hints.intent = "refactor";
-    else if (/\b(investigat|research|explor|look into|dig into)\b/.test(q)) hints.intent = "investigation";
-    else if (/\b(plan|design|architect|proposal)\b/.test(q)) hints.intent = "planning";
-    else if (/\b(review|pr review|code review)\b/.test(q)) hints.intent = "review";
-    else if (/\b(doc|docs|document|readme|wiki)\b/.test(q)) hints.intent = "docs";
-  }
-
-  if (!explicit.outcome) {
-    if (/\b(fix|fixed|solved|resolved)\b/.test(q)) hints.outcome = "fixed";
-    else if (/\b(implement|implemented|shipped|built|done)\b/.test(q)) hints.outcome = "implemented";
-    else if (/\b(block|blocked|stuck)\b/.test(q)) hints.outcome = "blocked";
-  }
-
-  if (!explicit.days) {
-    if (/\b(today|this morning)\b/.test(q)) hints.days = 1;
-    else if (/\byesterday\b/.test(q)) hints.days = 2;
-    else if (/\b(recent|recently|last few days)\b/.test(q)) hints.days = 7;
-    else if (/\b(this week|past week|last week)\b/.test(q)) hints.days = 7;
-    else if (/\b(this month|past month|last month)\b/.test(q)) hints.days = 30;
-    else { const m = q.match(/last (\d+) days?/); if (m) hints.days = parseInt(m[1]!, 10); }
-  }
-
-  const existingTags = new Set((explicit.tags || []).map(t => t.toLowerCase()));
-  const patterns: [RegExp, string][] = [
-    [/\b(auth|authentication|login|oauth|jwt|token|session)\b/, "auth"],
-    [/\b(database|db|mongo|mongodb|postgres|sql|migration|schema)\b/, "database"],
-    [/\b(api|endpoint|route|rest|graphql)\b/, "api"],
-    [/\b(frontend|ui|ux|react|next|css|component)\b/, "frontend"],
-    [/\b(backend|server|express|node|middleware)\b/, "backend"],
-    [/\b(deploy|ci|cd|docker|k8s|pipeline)\b/, "deployment"],
-    [/\b(test|testing|jest|vitest|e2e|unit)\b/, "testing"],
-    [/\b(perf|performance|speed|latency|cache|optimization)\b/, "performance"],
-    [/\b(security|xss|csrf|cors|injection|vulnerability)\b/, "security"],
-    [/\b(websocket|realtime|sse|streaming)\b/, "realtime"],
-    [/\b(search|vector|embedding|rag|ai|llm|gemini|openai)\b/, "ai"],
-    [/\b(payment|stripe|billing|subscription)\b/, "payments"],
-    [/\b(upload|file|s3|storage|image|media)\b/, "storage"],
-    [/\b(mcp|cowork|tool|plugin)\b/, "mcp"],
-  ];
-
-  for (const [pattern, tag] of patterns) {
-    if (pattern.test(q) && !existingTags.has(tag)) hints.tags.push(tag);
-  }
-
-  return hints;
-}
-
-// ── Text chunking ─────────────────────────────────────────────────────────────
-
-function splitIntoChunks(text: string, maxLen = 1200, overlap = 150): string[] {
-  if (text.length <= maxLen) return [text];
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + maxLen, text.length);
-    chunks.push(text.slice(start, end));
-    start += maxLen - overlap;
-  }
-  return chunks;
 }
 
 // ── Cosine similarity (in-memory fallback for search without Atlas) ───────────
@@ -100,16 +29,45 @@ function cosine(a: number[], b: number[]): number {
 
 // ── Server factory ────────────────────────────────────────────────────────────
 
+const OPERIUM_INSTRUCTIONS = `Operium is persistent, shared memory for AI coding agents. Everything you save is rendered as rich Markdown in a web app and re-read by other agents and teammates.
+
+Session contract:
+1. START — call get_startup_context first, every session.
+2. BEFORE non-trivial work — recall_context("<topic>"): a teammate or a past session may already have the answer.
+3. DURING — checkpoint_cowork after every significant finding (~every 10-15 messages) so progress survives crashes and context loss.
+4. END — save_chat to finalize with a polished summary. Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
+
+Formatting contract (applies to every finding, summary, note, plan, rule, and description you save):
+- Write well-structured Markdown: ## headings, bullet lists, tables where useful.
+- ALL code, commands, logs, and diffs go in fenced blocks with a language tag (\`\`\`ts, \`\`\`bash, ...). Never paste code inline in prose.
+- Reference files as \`backtick/paths.ts\` and end saves with a "**Files:** ..." line.
+- Never save a single unstructured wall of text — future agents must be able to skim it.`;
+
+/** Static registry — the single source of truth for what this server exposes. */
+export const MCP_TOOL_NAMES = [
+  "get_startup_context", "recall_context", "search",
+  "create_history", "list_history", "update_history", "delete_history",
+  "checkpoint_cowork", "save_chat", "list_cowork", "get_cowork", "cowork_digest",
+  "related_cowork", "mark_cowork_used", "delete_cowork",
+  "list_spaces", "list_notes", "get_note", "create_note", "append_note", "update_note", "delete_note",
+  "save_plan", "list_plans", "update_plan", "search_notes",
+  "save_rule", "list_rules", "learn_correction", "delete_rule",
+  "get_experts", "list_tasks", "create_task", "update_task",
+  "whoami", "ping",
+] as const;
+export const MCP_TOOL_COUNT = MCP_TOOL_NAMES.length;
+
 export function buildMcpServer(ctx: McpContext): McpServer {
-  const server = new McpServer({
-    name: "operium",
-    version: "1.0.0",
-    description:
-      "Operium — persistent secondary memory for AI coding assistants. " +
-      "ALWAYS call get_startup_context at the START of every session to load your memory. " +
-      "Use checkpoint_cowork/save_chat to save discoveries, save_rule for conventions, " +
-      "recall_context/search for past work, and create_history for standup logs.",
-  });
+  const server = new McpServer(
+    { name: "operium", version: "1.1.0" },
+    { instructions: OPERIUM_INSTRUCTIONS },
+  );
+
+  // Shared memory is visible only within the caller's org. With no org
+  // membership, "shared" collapses to the caller's own shared items.
+  const sharedScope: any = ctx.orgId
+    ? { isShared: true, orgId: ctx.orgId }
+    : { isShared: true, userId: ctx.userId };
 
   // Lazy-load heavy deps at tool-call time so the module stays importable without DB.
   async function db() {
@@ -126,6 +84,25 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     }
   }
 
+  /**
+   * Fire-and-forget per-chunk embedding for a session's dirty chunks.
+   * Runs only when the caller has a personal Gemini key (ctx.embedFn);
+   * anything left dirty is picked up by the API's background embed worker.
+   */
+  function embedDirtyChunks(sessionId: any, title: string, source: string) {
+    if (!ctx.embedFn) return;
+    void (async () => {
+      const { CoworkChunk } = await db();
+      const dirty = await CoworkChunk.find({ sessionId, embeddingDirty: true })
+        .sort({ order: 1 }).limit(12).select("_id text").lean();
+      for (const c of dirty) {
+        const emb = await embedText(`[${source}] ${title}\n\n${c.text}`);
+        if (!emb) return; // rate limited / failed — leave dirty for the worker
+        await CoworkChunk.updateOne({ _id: c._id }, { embedding: emb, embeddingDirty: false });
+      }
+    })().catch(() => {});
+  }
+
   // ── Utility: format dates ─────────────────────────────────────────────────
 
   function timeAgo(d: Date): string {
@@ -138,10 +115,43 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     return `${Math.floor(days / 30)}mo ago`;
   }
 
+  // ── Tool registration wrapper: usage logging + friendly error surface ──────
+  type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
+  function tool(
+    name: (typeof MCP_TOOL_NAMES)[number],
+    description: string,
+    schema: z.ZodRawShape,
+    handler: (args: any) => Promise<ToolResult>,
+  ) {
+    server.tool(name, description, schema, (async (args: any) => {
+      const t0 = Date.now();
+      const log = (success: boolean, errorMessage?: string) =>
+        void db()
+          .then(({ McpUsageLog }) => McpUsageLog.create({
+            userId: ctx.userId, toolName: name, success, errorMessage, durationMs: Date.now() - t0,
+          }))
+          .catch(() => {});
+      try {
+        const res = await handler(args);
+        log(true);
+        return res;
+      } catch (err: any) {
+        log(false, String(err?.message ?? err).slice(0, 500));
+        return {
+          content: [{
+            type: "text" as const,
+            text: `❌ ${name} failed: ${err?.message ?? "unknown error"}. Nothing was saved — retry, or tell the user if it keeps failing.`,
+          }],
+          isError: true,
+        };
+      }
+    }) as any);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // get_startup_context
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "get_startup_context",
     "CALL THIS FIRST at the start of every session. Returns your active rules/conventions, recent work history, and pending tasks so you start with full context.",
     {
@@ -157,7 +167,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         ContextRule.find({ userId: uid, isActive: true }).sort({ timesApplied: -1 }).limit(20).lean(),
         WorkHistory.find({ userId: uid, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(15).lean(),
         Task.find({ userId: uid, status: { $in: ["todo", "in_progress"] } }).sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
-        CoworkSession.find({ $or: [{ userId: uid }, { isShared: true }] })
+        CoworkSession.find({ $or: [{ userId: uid }, sharedScope] })
           .sort({ createdAt: -1 }).limit(5).lean(),
       ]);
 
@@ -203,7 +213,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // recall_context
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "recall_context",
     "Fast semantic search across cowork sessions, notes, and work history. Use when the user asks about past work, previous decisions, or wants context about a topic.",
     {
@@ -223,12 +233,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const sections: string[] = [];
 
       // ── Cowork search ─────────────────────────────────────
-      const chunkFilter: any = { $or: [{ userId: uid }, { isShared: true }] };
-      if (hints.intent) chunkFilter.sessionIntent = hints.intent;
+      // Hints are soft ranking boosts, never hard filters (a wrong guess must
+      // not hide relevant results). NOTE: in-memory cosine over a recency
+      // window — swap for Atlas $vectorSearch when the corpus outgrows this.
+      const chunkFilter: any = { $or: [{ userId: uid }, sharedScope] };
 
       const chunks = await CoworkChunk.find(chunkFilter)
         .sort({ createdAt: -1 })
-        .limit(200)
+        .limit(500)
         .select("sessionId text sessionTitle sessionSource sessionIntent sessionOutcome embedding userId createdAt")
         .lean();
 
@@ -270,8 +282,11 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         if (sessions.length > 0) {
           const scored = sessions.map(s => {
             const meta = sessionMap.get(s._id.toString())!;
+            const hintBoost =
+              (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
+              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0);
             const score = compositeScore({
-              relevance: meta.sim || 0.5,
+              relevance: (meta.sim || 0.5) + hintBoost,
               createdAt: s.createdAt,
               helpfulCount: s.helpfulCount,
               notHelpfulCount: s.notHelpfulCount,
@@ -286,7 +301,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             (s.intent ? ` · 🎯 ${s.intent}` : "") +
             (s.outcome ? ` · ✅ ${s.outcome}` : "") + "\n" +
             `🏷️ ${s.tags?.length ? s.tags.join(", ") : "no tags"}\n` +
-            `💬 ${meta.text.slice(0, 200)}...\n` +
+            `💬 ${snippet(meta.text, 300)}\n` +
             `→ get_cowork("${s._id}")`
           ).join("\n\n---\n\n");
 
@@ -297,8 +312,6 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       // ── Work history search ───────────────────────────────
       const histFilter: any = { userId: uid };
       if (since) histFilter.createdAt = { $gte: since };
-      if (hints.intent === "bug-fix") histFilter.category = "Debugging";
-      if (hints.tags.includes("deployment")) histFilter.category = "Deployment";
 
       const histResults = await WorkHistory.find({ ...histFilter, $text: { $search: query } }, { score: { $meta: "textScore" } })
         .sort({ score: { $meta: "textScore" } })
@@ -328,7 +341,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // search (full semantic search)
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "search",
     "Full semantic search across cowork sessions and notes. Generates embeddings and ranks by relevance + recency + helpfulness. Best for open-ended questions.",
     {
@@ -355,12 +368,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       // ── Cowork ───────────────────────────────────────────
       if (scope === "all" || scope === "cowork") {
-        const chunkFilter: any = { $or: [{ userId: uid }, { isShared: true }] };
-        if (effIntent) chunkFilter.sessionIntent = effIntent;
-        if (outcome ?? hints.outcome) chunkFilter.sessionOutcome = outcome ?? hints.outcome;
+        // Only EXPLICIT args filter hard; auto-detected hints are soft boosts.
+        const chunkFilter: any = { $or: [{ userId: uid }, sharedScope] };
+        if (intent)  chunkFilter.sessionIntent  = intent;
+        if (outcome) chunkFilter.sessionOutcome = outcome;
 
         const chunks = await CoworkChunk.find(chunkFilter)
-          .sort({ createdAt: -1 }).limit(300)
+          .sort({ createdAt: -1 }).limit(500)
           .select("sessionId text sessionTitle embedding userId createdAt sessionIntent sessionOutcome")
           .lean();
 
@@ -386,16 +400,19 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
         const sessionFilter: any = { _id: { $in: [...sessionMap.keys()] } };
         if (since) sessionFilter.createdAt = { $gte: since };
-        if (effTags.length) sessionFilter.tags = { $in: effTags };
+        if (tags?.length) sessionFilter.tags = { $in: tags }; // explicit tags only — hint tags stay soft
 
         const sessions = await CoworkSession.find(sessionFilter).lean();
         if (sessions.length > 0) {
           const scored = sessions.map(s => {
             const meta = sessionMap.get(s._id.toString()) ?? { sim: 0.5, text: "" };
+            const hintBoost =
+              (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
+              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0);
             return {
               s, meta,
               score: compositeScore({
-                relevance: meta.sim,
+                relevance: meta.sim + hintBoost,
                 createdAt: s.createdAt,
                 helpfulCount:    s.helpfulCount,
                 notHelpfulCount: s.notHelpfulCount,
@@ -410,7 +427,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             (s.intent ? ` · 🎯 ${s.intent}` : "") +
             (s.outcome ? ` · ✅ ${s.outcome}` : "") + "\n" +
             (s.tags?.length ? `🏷️ ${s.tags.join(", ")}\n` : "") +
-            `💬 ${meta.text.slice(0, 250)}...\n` +
+            `💬 ${snippet(meta.text, 300)}\n` +
             (includeSummary && s.summary ? `\n**Summary**: ${s.summary.slice(0, 500)}\n` : "") +
             `→ get_cowork("${s._id}")`
           ).join("\n\n---\n\n");
@@ -420,24 +437,20 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       }
 
       // ── Notes ─────────────────────────────────────────────
+      // NoteBlock has no embeddings, so this is always a text search.
       if (scope === "all" || scope === "notes") {
-        const blocks = await NoteBlock.find({ userId: uid })
-          .sort({ createdAt: -1 }).limit(200)
-          .select("noteId content").lean();
+        let topBlocks: any[] = await NoteBlock.find(
+          { userId: uid, $text: { $search: query } },
+          { score: { $meta: "textScore" } }
+        )
+          .sort({ score: { $meta: "textScore" } }).limit(10)
+          .select("noteId content").lean().catch(() => []);
 
-        let topBlocks: any[];
-        if (queryEmbedding) {
-          topBlocks = blocks
-            .filter(b => b.content?.trim())
-            .map(b => ({
-              ...b,
-              _sim: cosine(queryEmbedding, []),
-            }))
-            .slice(0, 5);
-        } else {
-          topBlocks = await NoteBlock.find({ userId: uid, $text: { $search: query } }, { score: { $meta: "textScore" } })
-            .sort({ score: { $meta: "textScore" } }).limit(10)
-            .select("noteId content").lean().catch(() => []);
+        if (topBlocks.length === 0) {
+          const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          topBlocks = await NoteBlock.find({ userId: uid, content: { $regex: escaped, $options: "i" } })
+            .sort({ createdAt: -1 }).limit(10)
+            .select("noteId content").lean();
         }
 
         if (topBlocks.length > 0) {
@@ -485,12 +498,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // create_history
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "create_history",
     "Log a new work history entry — meetings, PRs, deployments, debugging sessions, etc. Essential for standup summaries.",
     {
       title:       z.string().min(1).max(200),
-      description: z.string().max(5000).default(""),
+      description: z.string().max(5000).default("").describe(
+        "Optional detail in Markdown, kept scannable (<=5 bullets): what happened, why, result, links, blockers. Shown in standup digests and search results."),
       category:    z.enum(["General","Meeting","PR Review","Daily Standup","Sales Meeting","Coding","Debugging","Design","Planning","Deployment","Wiki"]).default("General"),
       isMilestone: z.boolean().default(false),
       isBlocker:   z.boolean().default(false),
@@ -517,7 +531,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // list_history
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "list_history",
     "List recent work history entries. Useful for standup summaries or reviewing what was done.",
     {
@@ -551,13 +565,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // checkpoint_cowork  (incremental save during a session)
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "checkpoint_cowork",
-    "Save an incremental finding, fix, or decision mid-session. Call this every 10–15 messages to preserve progress. At the end, call save_chat(sessionId) to finalize.",
+    "Save an incremental finding, fix, or decision mid-session — call after every significant discovery (~every 10-15 messages) so progress survives crashes and context loss. Write `finding` as structured Markdown: it is rendered in a web UI and read back by other agents. At session end, call save_chat(sessionId) to finalize.",
     {
       source:       z.string().default("claude-code").describe("Tool or source: claude-code, cursor, system"),
       title:        z.string().min(1).max(200),
-      finding:      z.string().min(1).describe("The finding, fix, or insight to save"),
+      finding:      z.string().min(1).describe(
+        "The finding in rich Markdown (~200-2000 chars). Recommended shape:\n" +
+        "## What happened\nOne short paragraph stating the finding/fix/decision.\n" +
+        "### Root cause / Key insight\n```ts\n// minimal relevant code, error output, or command — ALWAYS in a fenced block with a language tag\n```\n" +
+        "**Files:** `src/foo.ts`, `src/bar.ts`\n**Next:** what remains or what to try.\n" +
+        "Never send an unformatted wall of text; never put code outside ``` fences."),
       intent:       z.enum(["bug-fix","feature","refactor","investigation","planning","review","docs"]).optional(),
       outcome:      z.enum(["fixed","implemented","explored","blocked","abandoned","partial"]).optional(),
       tags:         z.array(z.string()).default([]),
@@ -579,6 +598,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (!session) {
         session = await CoworkSession.create({
           userId: uid,
+          orgId: ctx.orgId ?? undefined,
           source: source as any,
           title,
           summary: finding.slice(0, 500),
@@ -596,13 +616,15 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         await CoworkSession.updateOne({ _id: session._id }, upd);
       }
 
-      // Chunk the finding
-      const chunks = splitIntoChunks(finding);
+      // Chunk the finding (markdown-aware: never splits inside a code fence)
+      const chunks = splitMarkdownChunks(finding);
       const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
       const chunkDocs = chunks.map((text, i) => ({
         sessionId:     session._id,
         userId:        uid,
+        orgId:         ctx.orgId ?? undefined,
         isShared:      true,
+        kind:          "checkpoint" as const,
         order:         existingCount + i,
         text,
         sessionTitle:  title,
@@ -613,20 +635,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       }));
 
       await CoworkChunk.insertMany(chunkDocs);
+      embedDirtyChunks(session._id, title, source);
 
-      // Async embedding — don't block response
-      embedText(finding).then(async (emb) => {
-        if (!emb) return;
-        const ids = await CoworkChunk.find({ sessionId: session._id, embeddingDirty: true }).select("_id").limit(10).lean();
-        for (const { _id } of ids) {
-          await CoworkChunk.updateOne({ _id }, { embedding: emb, embeddingDirty: false });
-        }
-      }).catch(() => {});
-
+      const nudge = markdownQualityNudge(finding);
       return {
         content: [{
           type: "text" as const,
-          text: `✅ Checkpoint saved (${chunks.length} chunk${chunks.length > 1 ? "s" : ""}).\n\nSession ID: ${session._id}\nTitle: ${title}\n\n📦 Call save_chat(sessionId="${session._id}") at end of session to finalize with a polished summary.`,
+          text:
+            `✅ Checkpoint saved (${chunks.length} chunk${chunks.length > 1 ? "s" : ""}) — session ${session._id}.\n` +
+            (nudge ? `\n${nudge}\n` : "") +
+            `\nKeep going — checkpoint again after your next significant finding.\n` +
+            `When the session ends, finalize with:\n` +
+            `save_chat(sessionId="${session._id}", summary=<Markdown: ## Goal / ## What was done / ## Key decisions & gotchas / **Files:** / ## Next steps>)`,
         }],
       };
     },
@@ -635,12 +655,16 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // save_chat  (finalize a session or save a whole conversation at once)
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "save_chat",
-    "Save a complete conversation or finalize a checkpoint_cowork session with a polished summary. Call at the end of every session to persist what was accomplished.",
+    "Finalize a checkpoint_cowork session (pass its sessionId) or save a whole conversation at once. The summary becomes the session's permanent record — rendered as Markdown in the web app and used to answer future recall_context queries from the whole team. Call at the end of every session.",
     {
       title:        z.string().min(1).max(200),
-      summary:      z.string().min(1).describe("Comprehensive summary: what was asked, investigated, fixed, and any next steps"),
+      summary:      z.string().min(1).describe(
+        "Polished summary in rich Markdown (~300-3000 chars), written for a teammate — or a future agent — with zero context. Structure:\n" +
+        "## Goal\n## What was done\n- one bullet per change/fix, naming `file/paths.ts`\n" +
+        "## Key decisions & gotchas\n```lang\n// fenced blocks for any code worth remembering\n```\n" +
+        "**Files:** all touched paths\n## Next steps"),
       source:       z.string().default("claude-code"),
       intent:       z.enum(["bug-fix","feature","refactor","investigation","planning","review","docs"]).optional(),
       outcome:      z.enum(["fixed","implemented","explored","blocked","abandoned","partial"]).optional(),
@@ -655,45 +679,52 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const uid = ctx.userId;
 
       let session: any;
+      let finalized = false;
       if (sessionId) {
         session = await CoworkSession.findOneAndUpdate(
           { _id: sessionId, userId: uid },
           { title, summary, intent, outcome, $addToSet: { tags: { $each: tags }, filesTouched: { $each: filesTouched } }, branch, repoUrl },
           { new: true },
         );
+        finalized = !!session;
       }
 
       if (!session) {
         session = await CoworkSession.create({
           userId: uid,
+          orgId: ctx.orgId ?? undefined,
           source: source as any,
           title, summary, tags, isShared: true,
           intent, outcome, filesTouched, branch, repoUrl,
         });
-        // Chunk the summary
-        const chunks = splitIntoChunks(summary);
-        await CoworkChunk.insertMany(chunks.map((text, i) => ({
-          sessionId: session._id, userId: uid, isShared: true,
-          order: i, text,
-          sessionTitle: title, sessionSource: source,
-          sessionIntent: intent, sessionOutcome: outcome,
-          embeddingDirty: true,
-        })));
       }
 
-      // Async embed summary
-      embedText(summary).then(async (emb) => {
-        if (!emb) return;
-        await CoworkChunk.updateMany(
-          { sessionId: session._id, embeddingDirty: true },
-          { embedding: emb, embeddingDirty: false },
-        );
-      }).catch(() => {});
+      // Index the polished summary as its own chunks (markdown-aware).
+      // On re-finalize, replace prior summary chunks so this stays idempotent;
+      // checkpoint chunks are kept — they hold detail the summary condenses away.
+      await CoworkChunk.deleteMany({ sessionId: session._id, kind: "summary" });
+      const startOrder = await CoworkChunk.countDocuments({ sessionId: session._id });
+      const summaryChunks = splitMarkdownChunks(summary);
+      await CoworkChunk.insertMany(summaryChunks.map((text, i) => ({
+        sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: true,
+        kind: "summary" as const,
+        order: startOrder + i, text,
+        sessionTitle: title, sessionSource: session.source,
+        sessionIntent: intent ?? session.intent, sessionOutcome: outcome ?? session.outcome,
+        embeddingDirty: true,
+      })));
+      embedDirtyChunks(session._id, title, session.source);
 
+      const nudge = markdownQualityNudge(summary);
       return {
         content: [{
           type: "text" as const,
-          text: `✅ Session saved.\n\nID: ${session._id}\nTitle: ${title}${intent ? `\n🎯 Intent: ${intent}` : ""}${outcome ? `\n✅ Outcome: ${outcome}` : ""}${tags.length ? `\n🏷️ Tags: ${tags.join(", ")}` : ""}`,
+          text:
+            `✅ Session ${finalized ? "finalized" : "saved"}: "${title}" (${session._id})\n` +
+            `${summaryChunks.length} summary chunk${summaryChunks.length !== 1 ? "s" : ""} indexed for team search.` +
+            `${intent ? `\n🎯 Intent: ${intent}` : ""}${outcome ? `\n✅ Outcome: ${outcome}` : ""}${tags.length ? `\n🏷️ Tags: ${tags.join(", ")}` : ""}` +
+            (nudge ? `\n\n${nudge}` : "") +
+            `\n\nThis is now shared memory — teammates' agents will find it via recall_context.`,
         }],
       };
     },
@@ -702,7 +733,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // list_cowork
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "list_cowork",
     "List recent cowork sessions with optional filters.",
     {
@@ -718,8 +749,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       let filter: any;
       if (scope === "personal") filter = { userId: uid, isShared: false };
-      else if (scope === "team") filter = { isShared: true };
-      else filter = { $or: [{ userId: uid }, { isShared: true }] };
+      else if (scope === "team") filter = { ...sharedScope };
+      else filter = { $or: [{ userId: uid }, sharedScope] };
 
       if (intent) filter.intent = intent;
       if (tag)    filter.tags   = { $in: [tag] };
@@ -749,7 +780,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // get_cowork
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "get_cowork",
     "Get full details of a cowork session including all chunks.",
     {
@@ -761,7 +792,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       const session = await CoworkSession.findOne({
         _id: sessionId,
-        $or: [{ userId: uid }, { isShared: true }],
+        $or: [{ userId: uid }, sharedScope],
       }).lean();
 
       if (!session) {
@@ -770,7 +801,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       await CoworkSession.updateOne({ _id: sessionId }, { $inc: { useCount: 1 }, lastUsedAt: new Date() });
 
-      const chunks = await CoworkChunk.find({ sessionId }).sort({ order: 1 }).select("text order").lean();
+      const chunks = await CoworkChunk.find({ sessionId, kind: { $ne: "summary" } })
+        .sort({ order: 1 }).select("text order").lean();
 
       const text =
         `# ${session.title}\n\n` +
@@ -789,7 +821,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // cowork_digest
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "cowork_digest",
     "Get a digest of recent cowork sessions — useful for standup prep or catching up on team activity.",
     {
@@ -803,8 +835,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       let filter: any = { createdAt: { $gte: since } };
       if (scope === "personal")   filter.userId = uid;
-      else if (scope === "team")  filter.isShared = true;
-      else filter.$or = [{ userId: uid }, { isShared: true }];
+      else if (scope === "team")  Object.assign(filter, sharedScope);
+      else filter.$or = [{ userId: uid }, sharedScope];
 
       const sessions = await CoworkSession.find(filter).sort({ createdAt: -1 }).limit(30).lean();
 
@@ -836,7 +868,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // related_cowork
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "related_cowork",
     "Find cowork sessions related to a given session by tags and intent.",
     {
@@ -849,7 +881,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       const base = await CoworkSession.findOne({
         _id: sessionId,
-        $or: [{ userId: uid }, { isShared: true }],
+        $or: [{ userId: uid }, sharedScope],
       }).lean();
 
       if (!base) {
@@ -858,7 +890,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       const filter: any = {
         _id: { $ne: base._id },
-        $or: [{ userId: uid }, { isShared: true }],
+        $or: [{ userId: uid }, sharedScope],
       };
       if (base.tags?.length) filter.tags = { $in: base.tags };
 
@@ -886,7 +918,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // mark_cowork_used
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "mark_cowork_used",
     "Mark a cowork session as used and optionally record feedback. Called automatically by get_cowork — only needed for explicit feedback.",
     {
@@ -906,7 +938,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // list_spaces
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "list_spaces",
     "List your spaces (notebooks). Returns names, IDs, and whether context sharing is enabled.",
     {},
@@ -926,7 +958,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // list_notes
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "list_notes",
     "List notes — across all spaces (omit spaceId) or within a specific space.",
     {
@@ -956,7 +988,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // get_note
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "get_note",
     "Get the full content of a note.",
     {
@@ -983,12 +1015,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // create_note
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "create_note",
-    "Create a new note. spaceId is optional — omit it to auto-create or reuse a 'Notes' space.",
+    "Create a new note (rendered as rich Markdown in the web app). spaceId is optional — omit it to auto-create or reuse a 'Notes' space.",
     {
       title:   z.string().max(200).default(""),
-      content: z.string().default("").describe("Note content in markdown"),
+      content: z.string().default("").describe(
+        "Note body in Markdown. Use # headings, bullet lists, tables, and fenced code blocks with language tags — the note renders as rich Markdown in the web app."),
       tags:    z.array(z.string()).default([]),
       spaceId: z.string().optional().describe("Space ID — omit to use the default Notes space"),
     },
@@ -1014,7 +1047,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const note = await Note.create({ title, spaceId: resolvedSpaceId, userId: uid, tags, preview: content.slice(0, 200) });
 
       if (content.trim()) {
-        const chunks = splitIntoChunks(content, 2000, 200);
+        const chunks = splitMarkdownChunks(content, 2000);
         await NoteBlock.insertMany(chunks.map((text, i) => ({
           noteId: note._id, spaceId: resolvedSpaceId, userId: uid, order: i, content: text,
         })));
@@ -1032,15 +1065,15 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // save_plan
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "save_plan",
-    "Save an implementation plan as a structured checklist note. spaceId is optional — omit it and Operium will auto-create a 'Plans' space.",
+    "Save an implementation plan as a Markdown checklist note (each step becomes a '- [ ]' item you can later tick off with update_plan). spaceId is optional — omit it and Operium will auto-create a 'Plans' space.",
     {
       title:    z.string().min(1).max(200),
-      goal:     z.string().min(1).describe("What this plan achieves"),
-      steps:    z.array(z.string()).min(1).describe("Flat list of action steps / tasks"),
+      goal:     z.string().min(1).describe("1-2 sentence statement of what this plan achieves (plain prose, no heading)"),
+      steps:    z.array(z.string()).min(1).describe("Flat list of action steps — one imperative sentence each; they become '- [ ]' checklist items"),
       spaceId:  z.string().optional().describe("Space to save in — omit to auto-create a Plans space"),
-      notes:    z.string().default(""),
+      notes:    z.string().default("").describe("Optional Markdown context: risks, open questions, links, fenced code sketches."),
     },
     async ({ title, goal, steps, spaceId, notes }) => {
       const { Space, Note, NoteBlock } = await db();
@@ -1058,7 +1091,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       const content =
         `# ${title}\n\n**Goal**: ${goal}\n\n` +
-        steps.map(s => `- [ ] ${s}`).join("\n") +
+        steps.map((s: string) => `- [ ] ${s}`).join("\n") +
         (notes ? `\n\n## Notes\n\n${notes}` : "");
 
       const note = await Note.create({
@@ -1078,7 +1111,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // search_notes
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "search_notes",
     "Search notes by keyword across all spaces.",
     {
@@ -1119,12 +1152,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // save_rule
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "save_rule",
     "Save a coding convention, architectural decision, or workflow preference. Rules are loaded at startup and guide every session.",
     {
       title:    z.string().min(1).max(200),
-      rule:     z.string().min(1).describe("The convention or rule to remember"),
+      rule:     z.string().min(1).describe(
+        "The convention as ONE imperative sentence (e.g. 'Always use pnpm, never npm'), optionally followed by a short Markdown example — a ```lang fenced before/after snippet. Keep it directly actionable; it is injected into every future session."),
       category: z.enum(["coding","communication","workflow","architecture","testing","general"]).default("general"),
       tags:     z.array(z.string()).default([]),
     },
@@ -1134,7 +1168,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       if (existing) {
         await ContextRule.updateOne({ _id: existing._id }, { rule, category, tags, isActive: true });
-        return { content: [{ type: "text" as const, text: `✅ Rule updated: "${title}"` }] };
+        const tip = rule.includes("`") ? "" : "\n\nTip: rules render as Markdown — a fenced before/after example makes them easier to apply.";
+        return { content: [{ type: "text" as const, text: `✅ Rule updated: "${title}"${tip}` }] };
       }
 
       const saved = await ContextRule.create({
@@ -1152,7 +1187,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // list_rules
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "list_rules",
     "List your saved rules and conventions.",
     {
@@ -1181,7 +1216,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // learn_correction
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "learn_correction",
     "Save a correction as a rule so the same mistake isn't repeated. Call when the user corrects your behavior.",
     {
@@ -1202,10 +1237,11 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         });
       }
 
+      const tip = correction.includes("`") ? "" : "\nTip: corrections render as Markdown — a fenced wrong/right example makes them easier to apply.";
       return {
         content: [{
           type: "text" as const,
-          text: `✅ Correction saved as rule: "${title}"\n\nThis will be applied in all future sessions.`,
+          text: `✅ Correction saved as rule: "${title}"\n\nThis will be applied in all future sessions.${tip}`,
         }],
       };
     },
@@ -1214,7 +1250,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   // get_experts
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "get_experts",
     "Find team members who have worked on a specific topic based on their cowork session tags.",
     {
@@ -1227,7 +1263,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const tags = parseQueryHints(topic, {}).tags;
       const searchTags = tags.length > 0 ? tags : [topic.toLowerCase()];
 
-      const sessions = await CoworkSession.find({ isShared: true, tags: { $in: searchTags } })
+      const sessions = await CoworkSession.find({ ...sharedScope, tags: { $in: searchTags } })
         .sort({ helpfulCount: -1, createdAt: -1 }).limit(50)
         .select("userId tags title helpfulCount createdAt").lean();
 
@@ -1262,9 +1298,412 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // whoami
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "whoami",
+    "Your identity card: who you are acting as, which organization you belong to, and how much memory exists. Call when unsure about identity, org context, or what Operium already knows.",
+    {},
+    async () => {
+      const { User, Org, Membership, CoworkSession, ContextRule, Note, Task } = await db();
+      const uid = ctx.userId;
+
+      const [user, membership, sessionCount, ruleCount, noteCount, openTasks] = await Promise.all([
+        User.findById(uid).select("name email geminiApiKey").select("+geminiApiKey").lean() as any,
+        ctx.orgId ? Membership.findOne({ userId: uid, orgId: ctx.orgId }).lean() as any : null,
+        CoworkSession.countDocuments({ $or: [{ userId: uid }, sharedScope] }),
+        ContextRule.countDocuments({ userId: uid, isActive: true }),
+        Note.countDocuments({ userId: uid }),
+        Task.countDocuments({ $or: [{ userId: uid }, { assigneeId: uid }], status: { $in: ["todo", "in_progress"] } }),
+      ]);
+
+      let orgLine = "No organization — shared memory is limited to your own items.";
+      let teammateLine = "";
+      if (ctx.orgId) {
+        const [org, memberCount] = await Promise.all([
+          Org.findById(ctx.orgId).lean() as any,
+          Membership.countDocuments({ orgId: ctx.orgId }),
+        ]);
+        orgLine = `**Org:** ${org?.name ?? ctx.orgId} — you are ${membership?.role ?? "member"}`;
+        teammateLine = `**Teammates:** ${Math.max(memberCount - 1, 0)}`;
+      }
+
+      const text =
+        `## Who you are\n\n` +
+        `**User:** ${user?.name ?? "Unknown"} (${user?.email ?? uid})\n` +
+        `${orgLine}\n` +
+        (teammateLine ? `${teammateLine}\n` : "") +
+        `**Semantic search:** ${user?.geminiApiKey ? "on (personal Gemini key configured)" : "keyword-only (no Gemini key — add one in Settings for semantic recall)"}\n\n` +
+        `## Memory on hand\n\n` +
+        `- ${sessionCount} cowork sessions visible to you\n` +
+        `- ${ruleCount} active rules · ${noteCount} notes · ${openTasks} open tasks\n\n` +
+        `Use get_startup_context to load it; recall_context to search it.`;
+
+      return { content: [{ type: "text" as const, text }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // update_history / delete_history
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "update_history",
+    "Fix a work history entry you logged earlier (wrong title, category, flags, or description). Own entries only.",
+    {
+      historyId:   z.string().min(1),
+      title:       z.string().max(200).optional(),
+      description: z.string().max(5000).optional().describe("Markdown, kept scannable — bullets over prose"),
+      category:    z.enum(["General","Meeting","PR Review","Daily Standup","Sales Meeting","Coding","Debugging","Design","Planning","Deployment","Wiki"]).optional(),
+      isMilestone: z.boolean().optional(),
+      isBlocker:   z.boolean().optional(),
+      isImportant: z.boolean().optional(),
+    },
+    async ({ historyId, ...fields }) => {
+      const { WorkHistory } = await db();
+      const upd: any = {};
+      for (const [k, v] of Object.entries(fields)) if (v !== undefined) upd[k] = v;
+      if (Object.keys(upd).length === 0) {
+        return { content: [{ type: "text" as const, text: "Nothing to update — pass at least one field." }] };
+      }
+      const doc = await WorkHistory.findOneAndUpdate({ _id: historyId, userId: ctx.userId }, upd, { new: true }).lean();
+      if (!doc) return { content: [{ type: "text" as const, text: `History entry not found (or not yours): ${historyId}` }] };
+      return { content: [{ type: "text" as const, text: `✅ History entry updated: "${doc.title}" [${doc.category}]` }] };
+    },
+  );
+
+  tool(
+    "delete_history",
+    "Delete a work history entry you logged by mistake. Own entries only; irreversible.",
+    { historyId: z.string().min(1) },
+    async ({ historyId }) => {
+      const { WorkHistory } = await db();
+      const doc = await WorkHistory.findOneAndDelete({ _id: historyId, userId: ctx.userId });
+      if (!doc) return { content: [{ type: "text" as const, text: `History entry not found (or not yours): ${historyId}` }] };
+      return { content: [{ type: "text" as const, text: `🗑️ Deleted history entry "${doc.title}".` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // delete_cowork
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "delete_cowork",
+    "Delete a cowork session you created (plus all its chunks) — for accidental or junk saves. Own sessions only; irreversible.",
+    { sessionId: z.string().min(1) },
+    async ({ sessionId }) => {
+      const { CoworkSession, CoworkChunk } = await db();
+      const doc = await CoworkSession.findOneAndDelete({ _id: sessionId, userId: ctx.userId });
+      if (!doc) return { content: [{ type: "text" as const, text: `Session not found (or not yours): ${sessionId}` }] };
+      const { deletedCount } = await CoworkChunk.deleteMany({ sessionId });
+      return { content: [{ type: "text" as const, text: `🗑️ Deleted session "${doc.title}" and ${deletedCount} chunk(s).` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // append_note / update_note / delete_note
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "append_note",
+    "Append a Markdown section to an existing note — the right tool for running logs and decision journals. Own notes only.",
+    {
+      noteId:  z.string().min(1),
+      content: z.string().min(1).describe("Markdown to append — start with a ## heading so the note stays skimmable; fence any code with a language tag"),
+    },
+    async ({ noteId, content }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
+      if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
+
+      const order = await NoteBlock.countDocuments({ noteId });
+      const chunks = splitMarkdownChunks(content, 2000);
+      await NoteBlock.insertMany(chunks.map((text, i) => ({
+        noteId, spaceId: note.spaceId, userId: ctx.userId, order: order + i, content: text,
+      })));
+      await Note.updateOne({ _id: noteId }, { updatedAt: new Date() });
+
+      return { content: [{ type: "text" as const, text: `✅ Appended ${chunks.length} block(s) to "${note.title || "Untitled"}".` }] };
+    },
+  );
+
+  tool(
+    "update_note",
+    "Replace a note's title, content, or tags. Content is Markdown and fully replaces the existing body — use append_note to add instead. Own notes only.",
+    {
+      noteId:  z.string().min(1),
+      title:   z.string().max(200).optional(),
+      content: z.string().optional().describe("New full body in Markdown (## headings, bullets, fenced code with language tags)"),
+      tags:    z.array(z.string()).optional(),
+    },
+    async ({ noteId, title, content, tags }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
+      if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
+
+      const upd: any = {};
+      if (title !== undefined) upd.title = title;
+      if (tags  !== undefined) upd.tags  = tags;
+      if (content !== undefined) {
+        upd.preview = content.substring(0, 200);
+        await NoteBlock.deleteMany({ noteId });
+        const chunks = splitMarkdownChunks(content, 2000);
+        await NoteBlock.insertMany(chunks.map((text, i) => ({
+          noteId, spaceId: note.spaceId, userId: ctx.userId, order: i, content: text,
+        })));
+      }
+      await Note.updateOne({ _id: noteId }, upd);
+      return { content: [{ type: "text" as const, text: `✅ Note updated: "${title ?? note.title ?? "Untitled"}"` }] };
+    },
+  );
+
+  tool(
+    "delete_note",
+    "Delete a note (and all its content blocks) — also how you delete a plan. Own notes only; irreversible.",
+    { noteId: z.string().min(1) },
+    async ({ noteId }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOneAndDelete({ _id: noteId, userId: ctx.userId });
+      if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
+      await NoteBlock.deleteMany({ noteId });
+      return { content: [{ type: "text" as const, text: `🗑️ Deleted note "${note.title || "Untitled"}".` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // list_plans / update_plan
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "list_plans",
+    "List saved implementation plans with checklist progress (e.g. 3/7 steps done).",
+    { limit: z.number().int().min(1).max(30).default(10) },
+    async ({ limit }) => {
+      const { Note, NoteBlock } = await db();
+      const plans = await Note.find({ userId: ctx.userId, tags: "plan" })
+        .sort({ updatedAt: -1 }).limit(limit).lean();
+      if (plans.length === 0) {
+        return { content: [{ type: "text" as const, text: "No plans saved yet. Use save_plan to create one." }] };
+      }
+      const lines: string[] = [];
+      for (const p of plans) {
+        const blocks = await NoteBlock.find({ noteId: p._id }).sort({ order: 1 }).select("content").lean();
+        const body = blocks.map(b => b.content).join("\n");
+        const done  = (body.match(/^- \[x\]/gim) ?? []).length;
+        const total = done + (body.match(/^- \[ \]/gm) ?? []).length;
+        lines.push(`• **${p.title || "Untitled"}** — ${done}/${total} steps done · ${timeAgo(p.updatedAt)}\n  ID: ${p._id}`);
+      }
+      return { content: [{ type: "text" as const, text: `## Plans (${plans.length})\n\n${lines.join("\n\n")}\n\nUse update_plan(noteId, completeSteps=[...]) to tick steps off.` }] };
+    },
+  );
+
+  tool(
+    "update_plan",
+    "Update plan progress as you work — mark steps done the moment they're completed, add newly-discovered steps, or append notes. Steps are numbered from 1 in checklist order.",
+    {
+      noteId:          z.string().min(1).describe("Plan note ID (from save_plan or list_plans)"),
+      completeSteps:   z.array(z.number().int().min(1)).default([]).describe("1-based step numbers to mark done"),
+      uncompleteSteps: z.array(z.number().int().min(1)).default([]).describe("1-based step numbers to re-open"),
+      addSteps:        z.array(z.string()).default([]).describe("New steps to append as unchecked items"),
+      notes:           z.string().default("").describe("Markdown to append to the plan's Notes section"),
+    },
+    async ({ noteId, completeSteps, uncompleteSteps, addSteps, notes }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
+      if (!note) return { content: [{ type: "text" as const, text: `Plan not found (or not yours): ${noteId}` }] };
+
+      const blocks = await NoteBlock.find({ noteId }).sort({ order: 1 }).select("content").lean();
+      let body = blocks.map(b => b.content).join("\n\n");
+
+      // Toggle checklist items by 1-based position
+      let idx = 0;
+      body = body.split("\n").map(line => {
+        const m = line.match(/^(\s*)- \[( |x)\] (.*)$/i);
+        if (!m) return line;
+        idx += 1;
+        if (completeSteps.includes(idx))   return `${m[1]}- [x] ${m[3]}`;
+        if (uncompleteSteps.includes(idx)) return `${m[1]}- [ ] ${m[3]}`;
+        return line;
+      }).join("\n");
+
+      if (addSteps.length > 0) {
+        const lines = body.split("\n");
+        let lastIdx = -1;
+        lines.forEach((l, i) => { if (/^\s*- \[( |x)\]/i.test(l)) lastIdx = i; });
+        const newItems = addSteps.map((st: string) => `- [ ] ${st}`);
+        if (lastIdx >= 0) lines.splice(lastIdx + 1, 0, ...newItems);
+        else lines.push("", ...newItems);
+        body = lines.join("\n");
+      }
+
+      if (notes.trim()) {
+        body += body.includes("## Notes") ? `\n\n${notes.trim()}` : `\n\n## Notes\n\n${notes.trim()}`;
+      }
+
+      await NoteBlock.deleteMany({ noteId });
+      const chunks = splitMarkdownChunks(body, 2000);
+      await NoteBlock.insertMany(chunks.map((text, i) => ({
+        noteId, spaceId: note.spaceId, userId: ctx.userId, order: i, content: text,
+      })));
+      await Note.updateOne({ _id: noteId }, { preview: body.replace(/^# .*\n/, "").slice(0, 200) });
+
+      const done  = (body.match(/^- \[x\]/gim) ?? []).length;
+      const total = done + (body.match(/^- \[ \]/gm) ?? []).length;
+      const remaining = body.split("\n").filter(l => /^\s*- \[ \]/.test(l)).slice(0, 5).map(l => l.replace(/^\s*- \[ \] /, "• ")).join("\n");
+      return {
+        content: [{
+          type: "text" as const,
+          text: `✅ Plan updated: ${done}/${total} steps done.` + (remaining ? `\n\nNext up:\n${remaining}` : "\n\n🎉 All steps complete — consider save_chat to record the outcome."),
+        }],
+      };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // delete_rule
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "delete_rule",
+    "Deactivate a saved rule that no longer applies (soft delete — it stops loading at startup but stays auditable). Use save_rule with the same title to change a rule instead.",
+    { title: z.string().min(1).describe("Exact rule title (see list_rules)") },
+    async ({ title }) => {
+      const { ContextRule } = await db();
+      const doc = await ContextRule.findOneAndUpdate({ userId: ctx.userId, title }, { isActive: false });
+      if (!doc) return { content: [{ type: "text" as const, text: `Rule not found: "${title}" — check list_rules for exact titles.` }] };
+      return { content: [{ type: "text" as const, text: `🗑️ Rule deactivated: "${title}". It will no longer load at session start.` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // list_tasks / create_task / update_task
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "list_tasks",
+    "List tasks on the team board (org-wide, same view as the web app). Filter by status or just your own.",
+    {
+      status: z.enum(["todo","in_progress","done","cancelled"]).optional(),
+      mine:   z.boolean().default(false).describe("Only tasks created by or assigned to you"),
+      limit:  z.number().int().min(1).max(50).default(20),
+    },
+    async ({ status, mine, limit }) => {
+      const { Task } = await db();
+      const uid = ctx.userId;
+      const base: any = ctx.orgId
+        ? { $or: [{ orgId: ctx.orgId }, { orgId: { $exists: false }, userId: uid }] }
+        : { $or: [{ userId: uid }, { assigneeId: uid }] };
+      const filter: any = mine
+        ? { $and: [base, { $or: [{ userId: uid }, { assigneeId: uid }] }] }
+        : base;
+      if (status) filter.status = status;
+
+      const tasks = await Task.find(filter)
+        .sort({ status: 1, priority: -1, createdAt: -1 }).limit(limit)
+        .populate("assigneeId", "name email").lean();
+
+      if (tasks.length === 0) return { content: [{ type: "text" as const, text: "No matching tasks." }] };
+      const text = tasks.map((t: any) => {
+        const assignee = t.assigneeId && typeof t.assigneeId === "object"
+          ? (t.assigneeId.name || t.assigneeId.email) : null;
+        return `• [${t.status}] **${t.title}** (${t.priority})${assignee ? ` — ${assignee}` : ""}${t.dueDate ? ` · due ${timeAgo(t.dueDate)}` : ""}\n  ID: ${t._id}`;
+      }).join("\n");
+      return { content: [{ type: "text" as const, text: `## Tasks (${tasks.length})\n\n${text}` }] };
+    },
+  );
+
+  tool(
+    "create_task",
+    "Create a task on the team board — e.g. follow-up work discovered during a session. Assign to a teammate by email, or leave it assigned to yourself.",
+    {
+      title:         z.string().min(1).max(300),
+      description:   z.string().default("").describe("Optional detail in Markdown — context, acceptance criteria, links"),
+      priority:      z.enum(["low","medium","high","urgent"]).default("medium"),
+      dueDate:       z.string().optional().describe("ISO date, e.g. 2026-08-01"),
+      assigneeEmail: z.string().optional().describe("Teammate's email — must be a member of your org; omit to assign to yourself"),
+      tags:          z.array(z.string()).default([]),
+    },
+    async ({ title, description, priority, dueDate, assigneeEmail, tags }) => {
+      const { Task, User, Membership } = await db();
+      const uid = ctx.userId;
+
+      let assigneeId: any = uid;
+      let assigneeLabel = "you";
+      if (assigneeEmail) {
+        const assignee: any = await User.findOne({ email: assigneeEmail.toLowerCase().trim() }).select("name email").lean();
+        if (!assignee) return { content: [{ type: "text" as const, text: `No user found with email ${assigneeEmail}.` }] };
+        if (!ctx.orgId) return { content: [{ type: "text" as const, text: "You have no organization — you can only create tasks for yourself." }] };
+        const member = await Membership.findOne({ orgId: ctx.orgId, userId: assignee._id }).lean();
+        if (!member) return { content: [{ type: "text" as const, text: `${assigneeEmail} is not a member of your organization.` }] };
+        assigneeId = assignee._id;
+        assigneeLabel = assignee.name || assignee.email;
+      }
+
+      const task = await Task.create({
+        userId: uid,
+        orgId: ctx.orgId ?? undefined,
+        assigneeId,
+        title,
+        description,
+        priority,
+        status: "todo",
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        tags,
+      });
+
+      return { content: [{ type: "text" as const, text: `✅ Task created and assigned to ${assigneeLabel}: "${title}" (${priority})\nID: ${task._id}\n\nIt is now visible on the team's task board.` }] };
+    },
+  );
+
+  tool(
+    "update_task",
+    "Update a task on the team board — move it to done when the user confirms the work is complete, reassign it, or edit fields.",
+    {
+      taskId:        z.string().min(1),
+      status:        z.enum(["todo","in_progress","done","cancelled"]).optional(),
+      title:         z.string().max(300).optional(),
+      priority:      z.enum(["low","medium","high","urgent"]).optional(),
+      dueDate:       z.string().optional().describe("ISO date; empty string clears it"),
+      assigneeEmail: z.string().optional().describe("Reassign to this org member's email"),
+    },
+    async ({ taskId, status, title, priority, dueDate, assigneeEmail }) => {
+      const { Task, User, Membership } = await db();
+      const uid = ctx.userId;
+
+      const upd: any = {};
+      if (title    !== undefined) upd.title    = title;
+      if (priority !== undefined) upd.priority = priority;
+      if (status   !== undefined) {
+        upd.status = status;
+        if (status === "done") upd.completedAt = new Date();
+        else upd.$unset = { completedAt: "" };
+      }
+      if (dueDate !== undefined) {
+        if (dueDate === "") upd.$unset = { ...upd.$unset, dueDate: "" };
+        else upd.dueDate = new Date(dueDate);
+      }
+      if (assigneeEmail) {
+        const assignee: any = await User.findOne({ email: assigneeEmail.toLowerCase().trim() }).select("_id").lean();
+        if (!assignee) return { content: [{ type: "text" as const, text: `No user found with email ${assigneeEmail}.` }] };
+        if (ctx.orgId) {
+          const member = await Membership.findOne({ orgId: ctx.orgId, userId: assignee._id }).lean();
+          if (!member) return { content: [{ type: "text" as const, text: `${assigneeEmail} is not a member of your organization.` }] };
+        }
+        upd.assigneeId = assignee._id;
+      }
+      if (Object.keys(upd).length === 0) {
+        return { content: [{ type: "text" as const, text: "Nothing to update — pass at least one field." }] };
+      }
+
+      const scope: any = ctx.orgId
+        ? { $or: [{ orgId: ctx.orgId }, { orgId: { $exists: false }, userId: uid }] }
+        : { $or: [{ userId: uid }, { assigneeId: uid }] };
+      const task = await Task.findOneAndUpdate({ _id: taskId, ...scope }, upd, { new: true }).lean();
+      if (!task) return { content: [{ type: "text" as const, text: `Task not found (or not in your org): ${taskId}` }] };
+
+      return { content: [{ type: "text" as const, text: `✅ Task updated: "${task.title}" → [${task.status}] (${task.priority})` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // ping
   // ─────────────────────────────────────────────────────────────────────────────
-  server.tool(
+  tool(
     "ping",
     "Health check — confirms MCP transport and auth are working.",
     {},

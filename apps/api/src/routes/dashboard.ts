@@ -1,7 +1,8 @@
 import { Router, IRouter } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { Task, CoworkSession, Note, WorkHistory, User } from "@operium/db";
+import { Task, CoworkSession, Note, WorkHistory, User, McpUsageLog } from "@operium/db";
+import { MCP_TOOL_COUNT } from "@operium/mcp";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -17,8 +18,10 @@ router.get("/stats", async (req: any, res: any) => {
       noteCount,
       recentHistory,
       user,
+      mcpCallsThisWeek,
     ] = await Promise.all([
-      Task.find({ userId }).select("status").lean(),
+      // "My tasks" for the personal dashboard: created by me or assigned to me
+      Task.find({ $or: [{ userId }, { assigneeId: userId }] }).select("status").lean(),
       CoworkSession.countDocuments({ userId }),
       Note.countDocuments({ userId }),
       WorkHistory.find({ userId })
@@ -27,6 +30,7 @@ router.get("/stats", async (req: any, res: any) => {
         .select("category title summary createdAt source isMilestone isBlocker")
         .lean(),
       User.findById(userId).select("+githubToken +azureDevOpsToken +geminiApiKey githubLastSync azureLastSync").lean() as any,
+      McpUsageLog.countDocuments({ userId, createdAt: { $gte: new Date(Date.now() - 7 * 86_400_000) } }),
     ]);
 
     // Task counts
@@ -41,6 +45,8 @@ router.get("/stats", async (req: any, res: any) => {
       azure:     !!user?.azureDevOpsToken,
       gemini:    !!user?.geminiApiKey,
       mcp:       true,
+      mcpToolCount: MCP_TOOL_COUNT,
+      mcpCallsThisWeek,
       githubLastSync: user?.githubLastSync ?? null,
       azureLastSync:  user?.azureLastSync  ?? null,
     };

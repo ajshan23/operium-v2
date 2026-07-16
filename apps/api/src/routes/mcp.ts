@@ -4,11 +4,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import jwt from "jsonwebtoken";
 import { buildMcpServer } from "@operium/mcp";
-import { User } from "@operium/db";
+import { User, Membership } from "@operium/db";
 import { embeddingService } from "../services/embedding.service.js";
+import { JWT_SECRET } from "../utils/jwtSecret.js";
 
 const router: IRouter = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-do-not-use-in-prod";
 
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
@@ -33,11 +33,6 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     token = req.headers.authorization.split(" ")[1];
   }
 
-  // 3. ?token= query param (for editors that don't support custom headers)
-  if (!token && req.query?.token) {
-    token = String(req.query.token);
-  }
-
   if (!token) return null;
 
   try {
@@ -48,7 +43,11 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     const user = await User.findById(userId).select("isBlocked geminiApiKey").lean() as any;
     if (!user || user.isBlocked) return null;
 
-    return { userId, orgId: null, geminiKey: user.geminiApiKey ?? undefined };
+    // Resolve the user's org so shared-memory tools stay tenant-scoped
+    const membership = await Membership.findOne({ userId }).lean() as any;
+    const orgId = membership ? String(membership.orgId) : null;
+
+    return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined };
   } catch {
     return null;
   }

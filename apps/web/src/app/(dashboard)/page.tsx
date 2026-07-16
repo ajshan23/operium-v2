@@ -25,7 +25,7 @@ interface DashboardStats {
   coworkSessions: number;
   notes: number;
   recentHistory: Array<{ _id: string; category: string; title: string; summary: string; createdAt: string; source?: string; isMilestone?: boolean }>;
-  integrations: { github: boolean; azure: boolean; gemini: boolean; mcp: boolean; githubLastSync: string | null; azureLastSync: string | null };
+  integrations: { github: boolean; azure: boolean; gemini: boolean; mcp: boolean; mcpToolCount?: number; mcpCallsThisWeek?: number; githubLastSync: string | null; azureLastSync: string | null };
 }
 
 function timeAgo(date: string) {
@@ -115,7 +115,7 @@ export default function DashboardPage() {
     {
       name: "MCP Server",
       status: "connected",
-      value: "23 tools available",
+      value: `${stats.integrations.mcpToolCount ?? "—"} tools · ${stats.integrations.mcpCallsThisWeek ?? 0} calls this week`,
       icon: Cpu,
       color: "text-[#22c55e]",
       dot: "bg-[#22c55e]",
@@ -146,7 +146,7 @@ export default function DashboardPage() {
         : "Link token in Settings",
       icon: Database,
       color: stats.integrations.azure ? "text-[#22c55e]" : "text-[#ef4444]",
-      dot: stats.integrations.azure ? "bg-[#ef4444]" : "bg-[#ef4444]",
+      dot: stats.integrations.azure ? "bg-[#22c55e]" : "bg-[#ef4444]",
     },
   ] : [];
 
