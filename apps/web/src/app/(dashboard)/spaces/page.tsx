@@ -147,13 +147,30 @@ export default function SpacesPage() {
     if (activeSpaceId) loadNotes(activeSpaceId);
   }, [activeSpaceId]);
 
-  // Populate draft when active note changes
+  // Populate draft when active note changes. The list endpoint returns only
+  // `preview` (first 200 chars); full content lives in note blocks, so fetch it
+  // via notesApi.get on first open and cache it back into the notes array.
   useEffect(() => {
     const note = notes.find(n => n._id === activeNoteId);
-    if (note) {
-      setDraftTitle(note.title ?? "");
-      setDraftContent(note.content ?? note.preview ?? "");
+    if (!note) return;
+    setDraftTitle(note.title ?? "");
+
+    if (note.content !== undefined) {
+      setDraftContent(note.content);
+      return;
     }
+
+    setDraftContent(note.preview ?? "");   // instant preview, then hydrate
+    let cancelled = false;
+    notesApi.get(activeNoteId)
+      .then(res => {
+        if (cancelled) return;
+        const full = (res as any).data as Note;
+        setNotes(prev => prev.map(n => n._id === activeNoteId ? { ...n, content: full.content ?? "" } : n));
+        setDraftContent(full.content ?? note.preview ?? "");
+      })
+      .catch(() => { /* keep preview on failure */ });
+    return () => { cancelled = true; };
   }, [activeNoteId, notes]);
 
   // Close the share panel when switching notes

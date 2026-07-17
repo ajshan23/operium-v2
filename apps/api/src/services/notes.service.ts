@@ -97,7 +97,9 @@ export class NotesService {
     const note = await Note.findOne({ _id: id, userId }).lean();
     if (!note) throw new ApiError(404, "Note not found");
     const blocks = await NoteBlock.find({ noteId: id }).sort({ order: 1 }).lean();
-    const content = blocks.map(b => b.content).join("\n");
+    // Each block is a discrete markdown element (heading, paragraph, code fence)
+    // with no trailing newline — rejoin with a blank line to reconstruct valid markdown.
+    const content = blocks.map(b => b.content).join("\n\n");
     return { ...note, content, blocks };
   }
 
@@ -129,7 +131,7 @@ export class NotesService {
     const updated = await Note.findOneAndUpdate({ _id: id, userId }, noteUpdate, { new: true }).lean();
     if (!updated) throw new ApiError(404, "Note not found");
 
-    const content = data.content ?? (await NoteBlock.find({ noteId: id }).sort({ order: 1 }).lean()).map(b => b.content).join("\n");
+    const content = data.content ?? (await NoteBlock.find({ noteId: id }).sort({ order: 1 }).lean()).map(b => b.content).join("\n\n");
     return { ...updated, content };
   }
 
