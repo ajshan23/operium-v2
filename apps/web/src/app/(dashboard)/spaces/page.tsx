@@ -4,9 +4,11 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Folder, User, Users, Plus, Search, FileText, Trash2, Edit2,
   Eye, X, BookOpen, Clock, Tag, Check, Star, Loader2, AlertTriangle,
-  Share2, Copy, Globe,
+  Share2, Copy, Globe, Palette,
 } from "lucide-react";
 import TipTapEditor from "./TipTapEditor";
+import MarkdownViewer from "@/components/MarkdownViewer";
+import CanvasEditor, { EMPTY_CANVAS_CONTENT } from "@/components/CanvasEditor";
 import { spacesApi, notesApi } from "@/api/notes.api";
 import type { Space, Note } from "@/api/notes.api";
 
@@ -22,36 +24,6 @@ function SpaceIcon({ icon, size = 15 }: { icon?: string; size?: number }) {
   const found = SPACE_ICONS.find(i => i.id === icon);
   const { Icon, color } = found ?? { Icon: Folder, color: "text-amber-500" };
   return <Icon size={size} className={color} />;
-}
-
-// ── Markdown preview (same renderer as before) ────────────────────────────────
-
-function renderMarkdown(text: string) {
-  if (!text.trim()) return <p className="text-[#55556a] italic">No content yet.</p>;
-  return text.split("\n").map((line, idx) => {
-    if (line.startsWith("# "))
-      return <h1 key={idx} className="text-[22px] font-extrabold text-[#fafafa] tracking-tight mt-5 mb-3 border-b border-[#1a1a22] pb-1">{line.slice(2)}</h1>;
-    if (line.startsWith("## "))
-      return <h2 key={idx} className="text-[17px] font-bold text-[#fafafa] mt-4 mb-2">{line.slice(3)}</h2>;
-    if (line.startsWith("### "))
-      return <h3 key={idx} className="text-[14px] font-bold text-[#e1e1e6] mt-3 mb-1.5">{line.slice(4)}</h3>;
-    if (line.startsWith("- [x] ") || line.startsWith("- [ ] ")) {
-      const checked = line.startsWith("- [x] ");
-      return (
-        <div key={idx} className="flex items-center gap-2 my-1">
-          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-[#22c55e]/20 border-[#22c55e] text-[#22c55e]" : "border-[#2a2a35] bg-[#141418]"}`}>
-            {checked && <Check size={9} strokeWidth={3} />}
-          </div>
-          <span className={`text-[13px] ${checked ? "text-[#55556a] line-through" : "text-[#a1a1aa]"}`}>{line.slice(checked ? 6 : 6)}</span>
-        </div>
-      );
-    }
-    if (line.startsWith("- "))
-      return <li key={idx} className="text-[13px] text-[#a1a1aa] list-disc pl-1 ml-5 my-0.5">{line.slice(2)}</li>;
-    if (line.trim() === "")
-      return <div key={idx} className="h-3" />;
-    return <p key={idx} className="text-[13px] text-[#a1a1aa] leading-relaxed mb-1.5 whitespace-pre-wrap">{line}</p>;
-  });
 }
 
 // ── Main page ────────────────────────────────────────────────────────────────
@@ -73,6 +45,7 @@ export default function SpacesPage() {
   const [searchQuery,   setSearchQuery]   = useState("");
   const [isEditMode,    setIsEditMode]    = useState(true);
   const [tagInput,      setTagInput]      = useState("");
+  const [newNoteMenuOpen, setNewNoteMenuOpen] = useState(false);
 
   // ── Sharing ──
   const [shareOpen,  setShareOpen]  = useState(false);
@@ -223,6 +196,12 @@ export default function SpacesPage() {
     scheduleAutoSave(title, draftContent, activeNoteId);
   };
 
+  // Canvas notes: content is the serialized Excalidraw scene, no title detection
+  const handleCanvasChange = (json: string) => {
+    setDraftContent(json);
+    scheduleAutoSave(draftTitle, json, activeNoteId);
+  };
+
   // ────────────────────────────────────────────────────────────────────────────
   // Spaces
 
@@ -261,13 +240,15 @@ export default function SpacesPage() {
   // ────────────────────────────────────────────────────────────────────────────
   // Notes
 
-  const handleCreateNote = async () => {
+  const handleCreateNote = async (type: "text" | "canvas" = "text") => {
     if (!activeSpaceId) return;
+    setNewNoteMenuOpen(false);
     try {
       const res = await notesApi.create({
         spaceId: activeSpaceId,
-        title:   "Untitled Note",
-        content: "# Untitled Note\n\nStart writing your note here...",
+        title:   type === "canvas" ? "Untitled Canvas" : "Untitled Note",
+        content: type === "canvas" ? EMPTY_CANVAS_CONTENT : "# Untitled Note\n\nStart writing your note here...",
+        type,
       });
       const note = (res as any).data as Note;
       setNotes(prev => [note, ...prev]);
@@ -444,10 +425,27 @@ export default function SpacesPage() {
             <h3 className="text-[14px] font-extrabold text-[#fafafa] truncate">{activeSpace?.name ?? "Notes"}</h3>
             <span className="text-[10px] text-[#63637a]">{notes.length} note{notes.length !== 1 ? "s" : ""}</span>
           </div>
-          <button onClick={handleCreateNote} disabled={!activeSpaceId}
-            className="w-8 h-8 rounded-xl bg-[#120e20]/60 border border-[#8b5cf6]/40 hover:border-[#8b5cf6]/80 flex items-center justify-center text-[#8b5cf6] hover:text-white transition-all shadow-sm shrink-0 disabled:opacity-40">
-            <Plus size={15} />
-          </button>
+          <div className="relative shrink-0">
+            <button onClick={() => setNewNoteMenuOpen(o => !o)} disabled={!activeSpaceId}
+              className="w-8 h-8 rounded-xl bg-[#120e20]/60 border border-[#8b5cf6]/40 hover:border-[#8b5cf6]/80 flex items-center justify-center text-[#8b5cf6] hover:text-white transition-all shadow-sm disabled:opacity-40">
+              <Plus size={15} className={`transition-transform duration-200 ${newNoteMenuOpen ? "rotate-45" : ""}`} />
+            </button>
+            {newNoteMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setNewNoteMenuOpen(false)} />
+                <div className="absolute right-0 top-9 w-[160px] bg-[#0c0c0f] border border-[#2a2a35] rounded-xl p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.6)] z-40">
+                  <button onClick={() => handleCreateNote("text")}
+                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-[#a1a1aa] hover:text-[#fafafa] hover:bg-white/5 transition-colors">
+                    <FileText size={13} className="text-[#8b5cf6]" /> Text note
+                  </button>
+                  <button onClick={() => handleCreateNote("canvas")}
+                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-[#a1a1aa] hover:text-[#fafafa] hover:bg-white/5 transition-colors">
+                    <Palette size={13} className="text-[#3b82f6]" /> Canvas
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="p-3 border-b border-[#1a1a22]/50 shrink-0">
@@ -480,7 +478,10 @@ export default function SpacesPage() {
                       : "bg-[#0c0c0f]/40 border-[#1e1e24] hover:border-[#2a2a35] hover:bg-[#0c0c0f]/75"
                   }`}>
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-[13px] font-bold text-[#fafafa] line-clamp-1 truncate">{note.title || "Untitled"}</span>
+                    <span className="text-[13px] font-bold text-[#fafafa] line-clamp-1 truncate flex items-center gap-1.5">
+                      {note.type === "canvas" && <Palette size={11} className="text-[#3b82f6] shrink-0" />}
+                      {note.title || "Untitled"}
+                    </span>
                     <div className="flex items-center gap-1 shrink-0 -mt-0.5 opacity-0 group-hover:opacity-100 transition-all">
                       {note.isShared && <Globe size={10} className="text-[#22c55e]" />}
                       {note.isStarred && <Star size={10} className="text-amber-400 fill-amber-400" />}
@@ -491,7 +492,9 @@ export default function SpacesPage() {
                     </div>
                   </div>
                   <p className="text-[11px] text-[#63637a] line-clamp-2 leading-relaxed">
-                    {note.preview?.replace(/^#\s*/gm, "").trim() || "Empty note"}
+                    {note.type === "canvas"
+                      ? "Canvas drawing"
+                      : note.preview?.replace(/^#\s*/gm, "").trim() || "Empty note"}
                   </p>
                   <div className="flex items-center justify-between text-[9px] text-[#55556a] mt-0.5 font-mono">
                     <span className="flex items-center gap-1">
@@ -540,18 +543,22 @@ export default function SpacesPage() {
                   <Share2 size={11} />
                   {activeNote.isShared && <span className="font-semibold">Shared</span>}
                 </button>
-                <button onClick={() => setIsEditMode(true)}
-                  className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
-                    isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
-                  }`}>
-                  <Edit2 size={11} /><span>Edit</span>
-                </button>
-                <button onClick={() => setIsEditMode(false)}
-                  className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
-                    !isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
-                  }`}>
-                  <Eye size={11} /><span>Preview</span>
-                </button>
+                {activeNote.type !== "canvas" && (
+                  <>
+                    <button onClick={() => setIsEditMode(true)}
+                      className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
+                        isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
+                      }`}>
+                      <Edit2 size={11} /><span>Edit</span>
+                    </button>
+                    <button onClick={() => setIsEditMode(false)}
+                      className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
+                        !isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
+                      }`}>
+                      <Eye size={11} /><span>Preview</span>
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Share panel */}
@@ -627,7 +634,23 @@ export default function SpacesPage() {
                 </form>
               </div>
 
-              {isEditMode ? (
+              {activeNote.type === "canvas" ? (
+                <div className="flex-1 flex flex-col gap-4 min-h-0">
+                  <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
+                    placeholder="Canvas Title"
+                    className="w-full bg-transparent text-[22px] font-extrabold text-[#fafafa] placeholder:text-[#333342] focus:outline-none border-b border-transparent focus:border-[#1a1a22] pb-2 transition-colors shrink-0" />
+                  <div className="flex-1 min-h-[400px]">
+                    {activeNote.content !== undefined ? (
+                      // key: remount per note — Excalidraw reads initialData once
+                      <CanvasEditor key={activeNote._id} value={activeNote.content} onChange={handleCanvasChange} />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#55556a]">
+                        <Loader2 size={18} className="animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : isEditMode ? (
                 <div className="flex-1 flex flex-col gap-4">
                   <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
                     placeholder="Note Title"
@@ -637,8 +660,10 @@ export default function SpacesPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 prose prose-invert select-text max-w-none">
-                  {renderMarkdown(draftContent)}
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                  {draftContent.trim()
+                    ? <MarkdownViewer content={draftContent} />
+                    : <p className="text-[#55556a] italic text-[13px]">No content yet.</p>}
                 </div>
               )}
             </div>

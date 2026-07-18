@@ -1739,3 +1739,107 @@ html[data-theme="light"] .border-dashed.border-\[\#2a2a35\] {
 html[data-theme="light"] .bg-\[\#1a1228\] { background-color: #f3efff !important; }
 html[data-theme="light"] .bg-\[\#0a1f0e\] { background-color: #eafaf2 !important; }
 html[data-theme="light"] .bg-\[\#1f0a0a\] { background-color: #fdeeee !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   NOTE CONTENT — syntax highlighting + task lists (.note-prose)
+   Code blocks keep a dark surface in both themes, so one token palette suffices.
+   Palette: subdued One Dark — neutral base text, color only on tokens.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.note-prose .hljs-comment,
+.note-prose .hljs-quote { color: #6b7280; font-style: italic; }
+
+.note-prose .hljs-keyword,
+.note-prose .hljs-selector-tag,
+.note-prose .hljs-doctag,
+.note-prose .hljs-meta .hljs-keyword { color: #c678dd; }
+
+.note-prose .hljs-string,
+.note-prose .hljs-regexp,
+.note-prose .hljs-addition,
+.note-prose .hljs-meta .hljs-string { color: #98c379; }
+
+.note-prose .hljs-number,
+.note-prose .hljs-literal,
+.note-prose .hljs-symbol,
+.note-prose .hljs-bullet { color: #d19a66; }
+
+.note-prose .hljs-title,
+.note-prose .hljs-title.function_,
+.note-prose .hljs-section { color: #61afef; }
+
+.note-prose .hljs-title.class_,
+.note-prose .hljs-type,
+.note-prose .hljs-built_in,
+.note-prose .hljs-template-variable { color: #e5c07b; }
+
+.note-prose .hljs-attr,
+.note-prose .hljs-attribute,
+.note-prose .hljs-variable,
+.note-prose .hljs-property,
+.note-prose .hljs-name,
+.note-prose .hljs-selector-class,
+.note-prose .hljs-selector-id { color: #e06c75; }
+
+.note-prose .hljs-operator,
+.note-prose .hljs-punctuation { color: #abb2bf; }
+
+.note-prose .hljs-meta { color: #56b6c2; }
+.note-prose .hljs-deletion { color: #e06c75; background: rgba(224, 108, 117, 0.08); }
+.note-prose .hljs-emphasis { font-style: italic; }
+.note-prose .hljs-strong { font-weight: 700; }
+.note-prose .hljs-link { text-decoration: underline; }
+
+/* ── Task lists (- [ ] / - [x] checklists) ──────────────────────────────────── */
+.note-prose ul.task-list {
+  list-style: none;
+  padding-left: 0.25rem;
+  margin: 0.5rem 0;
+}
+.note-prose ul.task-list li.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-left: 0;
+  margin: 0.25rem 0;
+}
+.note-prose ul.task-list li.task-item > label {
+  flex-shrink: 0;
+  margin-top: 2px;
+  user-select: none;
+}
+.note-prose ul.task-list li.task-item > div {
+  flex: 1;
+  min-width: 0;
+}
+.note-prose ul.task-list li.task-item input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #2a2a35;
+  border-radius: 4px;
+  background: #141418;
+  cursor: pointer;
+  display: inline-block;
+  position: relative;
+  vertical-align: middle;
+}
+.note-prose ul.task-list li.task-item input[type="checkbox"]:checked {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+}
+.note-prose ul.task-list li.task-item input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #22c55e;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.note-prose ul.task-list li.task-item[data-checked="true"] > div p {
+  color: #55556a;
+  text-decoration: line-through;
+}
