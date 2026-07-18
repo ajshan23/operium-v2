@@ -50,6 +50,7 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { gitRouter }     from "./routes/git.js";
 import { mcpRouter }     from "./routes/mcp.js";
 import { sharedRouter }  from "./routes/shared.js";
+import { boardsRouter }  from "./routes/boards.js";
 
 app.use("/api/auth",    authRouter);
 app.use("/api/orgs",    orgRouter);
@@ -61,6 +62,7 @@ app.use("/api/tasks",     tasksRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/git",     gitRouter);
 app.use("/api/shared",  sharedRouter);
+app.use("/api/boards",  boardsRouter);
 app.use("/mcp",         mcpRouter);
 
 // ── 404 + error handling ─────────────────────────────────────────────────────

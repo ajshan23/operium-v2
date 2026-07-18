@@ -343,8 +343,14 @@ export class HistoryService {
     const cutoff  = new Date(Date.now() - days * 86400 * 1000).toISOString();
     const API_VER = "api-version=7.1-preview.1";
 
-    // Validate token
-    await azFetch(`https://dev.azure.com/${org}/_apis/connectiondata`, token);
+    // Validate token and resolve the authenticated user's identity so we only
+    // sync their own activity, not the whole org's
+    const connData = await azFetch(`https://dev.azure.com/${org}/_apis/connectiondata`, token);
+    const myId: string | undefined = connData?.authenticatedUser?.id;
+    const myUniqueName: string | undefined =
+      connData?.authenticatedUser?.properties?.Account?.$value ||
+      connData?.authenticatedUser?.providerDisplayName;
+    if (!myId) throw new ApiError(400, "Could not resolve Azure DevOps user identity");
 
     // List projects
     const projectsData = await azFetch(
@@ -372,7 +378,7 @@ export class HistoryService {
         // Pushes
         try {
           const pushesData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pushes?searchCriteria.fromDate=${cutoff}&$top=50&${API_VER}`,
+            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pushes?searchCriteria.fromDate=${cutoff}&searchCriteria.pusherId=${myId}&$top=50&${API_VER}`,
             token
           );
           for (const push of (pushesData.value || [])) {
@@ -403,7 +409,7 @@ export class HistoryService {
         // Pull Requests
         try {
           const prsData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests?searchCriteria.status=all&$top=50&${API_VER}`,
+            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests?searchCriteria.status=all&searchCriteria.creatorId=${myId}&$top=50&${API_VER}`,
             token
           );
           for (const pr of (prsData.value || [])) {
@@ -451,11 +457,14 @@ export class HistoryService {
 
       // Builds per project
       try {
+        const requestedForParam = myUniqueName ? `&requestedFor=${encodeURIComponent(myUniqueName)}` : "";
         const buildsData = await azFetch(
-          `https://dev.azure.com/${org}/${pName}/_apis/build/builds?minTime=${cutoff}&$top=50&${API_VER}`,
+          `https://dev.azure.com/${org}/${pName}/_apis/build/builds?minTime=${cutoff}${requestedForParam}&$top=50&${API_VER}`,
           token
         );
         for (const build of (buildsData.value || [])) {
+          const requester = build.requestedFor || build.requestedBy;
+          if (requester?.id && requester.id !== myId) continue;
           const result = build.result || build.status;
           await workHistoryRepository.upsertByExternalId(userId, `az-build-${build.id}`,
             {

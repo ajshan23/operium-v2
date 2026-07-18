@@ -2,6 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints,
+  AzureBoardsClient, AzureBoardsError, buildTree,
+  type BoardItem, type BoardItemNode, type BoardComment, type QueryWorkItemsOpts,
+  type UpdateWorkItemPatch, type CreateWorkItemFields,
 } from "@operium/core";
 
 /** Per-request context injected by the HTTP or stdio transport. */
@@ -37,6 +40,8 @@ Session contract:
 3. DURING — checkpoint_cowork after every significant finding (~every 10-15 messages) so progress survives crashes and context loss.
 4. END — save_chat to finalize with a polished summary. Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
 
+Live Azure Boards: list_board_items / list_sprints / update_board_item / create_board_item read and write real Azure DevOps work items. Call update_board_item to move a work item's state and sprint the moment the user says they've finished sprint work on it.
+
 Formatting contract (applies to every finding, summary, note, plan, rule, and description you save):
 - Write well-structured Markdown: ## headings, bullet lists, tables where useful.
 - ALL code, commands, logs, and diffs go in fenced blocks with a language tag (\`\`\`ts, \`\`\`bash, ...). Never paste code inline in prose.
@@ -53,6 +58,8 @@ export const MCP_TOOL_NAMES = [
   "save_plan", "list_plans", "update_plan", "search_notes",
   "save_rule", "list_rules", "learn_correction", "delete_rule",
   "get_experts", "list_tasks", "create_task", "update_task",
+  "list_board_items", "list_sprints", "get_board_item", "update_board_item", "create_board_item",
+  "delete_board_item", "add_board_comment",
   "whoami", "ping",
 ] as const;
 export const MCP_TOOL_COUNT = MCP_TOOL_NAMES.length;
@@ -73,6 +80,146 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   async function db() {
     const mod = await import("@operium/db");
     return mod;
+  }
+
+  // ── Azure Boards: shared plumbing ──────────────────────────────────────────
+  const BOARDS_NOT_CONNECTED =
+    "Azure DevOps is not connected. Add your organisation and a PAT with Work Items (read & write) scope in Operium Settings → Integrations.";
+
+  async function boardsClient(): Promise<{ client: AzureBoardsClient; org: string; pat: string } | null> {
+    const { User } = await db();
+    const user = await User.findById(ctx.userId).select("+azureDevOpsToken azureDevOpsOrg").lean() as any;
+    if (!user?.azureDevOpsToken || !user?.azureDevOpsOrg) return null;
+    const org = user.azureDevOpsOrg as string;
+    const pat = user.azureDevOpsToken as string;
+    return { client: new AzureBoardsClient({ org, pat }), org, pat };
+  }
+
+  function formatAzureError(err: unknown): string {
+    if (err instanceof AzureBoardsError) {
+      if (err.status === 401 || err.status === 403) {
+        return "Azure DevOps PAT is invalid, expired, or missing the Work Items (read & write) scope. Update it in Operium Settings → Integrations.";
+      }
+      if (err.status === 409) {
+        return "This work item changed in Azure since it was last read — re-list and retry.";
+      }
+      if (err.status === 429) {
+        return `Azure is throttling requests${err.retryAfterSec !== undefined ? ` — retry in ${err.retryAfterSec}s` : " — retry shortly"}.`;
+      }
+      return `Azure DevOps error: ${err.message}`;
+    }
+    return `Azure DevOps error: ${(err as Error)?.message ?? String(err)}`;
+  }
+
+  /** Resolves the target project — returns its name, or a ToolResult to send back when ambiguous. */
+  async function resolveProject(client: AzureBoardsClient, project?: string): Promise<string | ToolResult> {
+    if (project) return project;
+    const projects = await client.listProjects();
+    if (projects.length === 1) return projects[0]!.name;
+    if (projects.length === 0) {
+      return { content: [{ type: "text" as const, text: "No Azure DevOps projects found for this organisation." }] };
+    }
+    const list = projects.map((p) => `- ${p.name}`).join("\n");
+    return {
+      content: [{
+        type: "text" as const,
+        text: `Multiple projects found — pass \`project\` to pick one:\n\n${list}`,
+      }],
+    };
+  }
+
+  /** Resolves the target team — the first team from listTeams when none is given. */
+  async function resolveTeam(client: AzureBoardsClient, project: string, team?: string): Promise<string | ToolResult> {
+    if (team) return team;
+    const teams = await client.listTeams(project);
+    if (teams.length === 0) {
+      return { content: [{ type: "text" as const, text: `No teams found for project "${project}".` }] };
+    }
+    return teams[0]!.name;
+  }
+
+  /** Resolves a sprint name (or a full "\"-separated path, passed through as-is) to its iteration path. */
+  async function resolveSprintPath(
+    client: AzureBoardsClient,
+    project: string,
+    sprint: string,
+    team?: string,
+  ): Promise<string | ToolResult> {
+    if (sprint.includes("\\")) return sprint;
+    const resolvedTeam = await resolveTeam(client, project, team);
+    if (typeof resolvedTeam !== "string") return resolvedTeam;
+    const iterations = await client.listIterations(project, resolvedTeam);
+    const match = iterations.find((it) => it.name.toLowerCase() === sprint.toLowerCase());
+    if (!match) {
+      const names = iterations.map((it) => it.name).join(", ") || "(none configured)";
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Sprint "${sprint}" not found for team "${resolvedTeam}". Available: ${names}`,
+        }],
+      };
+    }
+    return match.path;
+  }
+
+  /** Best-effort resolution of "me" (the PAT holder) to an Azure identity for assignee filtering. */
+  async function resolveMyAzureIdentity(org: string, pat: string): Promise<string | null> {
+    try {
+      const res = await fetch(`https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`, {
+        headers: { Authorization: `Basic ${Buffer.from(":" + pat).toString("base64")}` },
+      });
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      return data?.authenticatedUser?.properties?.Account?.$value ?? data?.authenticatedUser?.providerDisplayName ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** One-line "connected as ..." status for whoami; never throws. */
+  async function azureIdentityLine(org: string, pat: string): Promise<string> {
+    try {
+      const res = await fetch(`https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`, {
+        headers: { Authorization: `Basic ${Buffer.from(":" + pat).toString("base64")}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return `connected to org **${org}**, but the PAT check failed (${res.status}) — it may be expired or revoked`;
+      const data: any = await res.json();
+      const au = data?.authenticatedUser;
+      const name = au?.providerDisplayName ?? au?.customDisplayName;
+      const account = au?.properties?.Account?.$value;
+      return `connected as **${name ?? "unknown"}**${account ? ` (${account})` : ""} — org **${org}**`;
+    } catch {
+      return `connected to org **${org}**, but Azure DevOps could not be reached`;
+    }
+  }
+
+  /** One-line "connected as ..." status for whoami; never throws. */
+  async function githubIdentityLine(token: string): Promise<string> {
+    try {
+      const res = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "operium-mcp",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return `connected, but the token check failed (${res.status}) — it may be expired or revoked`;
+      const gh: any = await res.json();
+      return `connected as **${gh?.login ?? "unknown"}**${gh?.name ? ` (${gh.name})` : ""}`;
+    } catch {
+      return "connected, but GitHub could not be reached";
+    }
+  }
+
+  function renderBoardTree(nodes: BoardItemNode[], depth: number, lines: string[]): void {
+    for (const n of nodes) {
+      const assignee = n.assignee ? ` (${n.assignee.displayName})` : "";
+      const sprintTag = n.iterationPath ? ` {${n.iterationPath.split("\\").pop()}}` : "";
+      lines.push(`${"  ".repeat(depth)}- #${n.id} [${n.type}] ${n.title} — ${n.state}${assignee}${sprintTag}`);
+      renderBoardTree(n.children, depth + 1, lines);
+    }
   }
 
   async function embedText(text: string): Promise<number[] | null> {
@@ -1302,14 +1449,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "whoami",
-    "Your identity card: who you are acting as, which organization you belong to, and how much memory exists. Call when unsure about identity, org context, or what Operium already knows.",
+    "Your identity card: who you are acting as, which organization you belong to, which Azure DevOps and GitHub accounts are connected, and how much memory exists. Call when unsure about identity, org context, or what Operium already knows.",
     {},
     async () => {
       const { User, Org, Membership, CoworkSession, ContextRule, Note, Task } = await db();
       const uid = ctx.userId;
 
       const [user, membership, sessionCount, ruleCount, noteCount, openTasks] = await Promise.all([
-        User.findById(uid).select("name email geminiApiKey").select("+geminiApiKey").lean() as any,
+        User.findById(uid).select("name email azureDevOpsOrg +geminiApiKey +githubToken +azureDevOpsToken").lean() as any,
         ctx.orgId ? Membership.findOne({ userId: uid, orgId: ctx.orgId }).lean() as any : null,
         CoworkSession.countDocuments({ $or: [{ userId: uid }, sharedScope] }),
         ContextRule.countDocuments({ userId: uid, isActive: true }),
@@ -1328,12 +1475,24 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         teammateLine = `**Teammates:** ${Math.max(memberCount - 1, 0)}`;
       }
 
+      const [azureLine, githubLine] = await Promise.all([
+        user?.azureDevOpsToken && user?.azureDevOpsOrg
+          ? azureIdentityLine(user.azureDevOpsOrg, user.azureDevOpsToken)
+          : Promise.resolve("not connected — add an organisation + PAT in Settings to use the *_board_* tools"),
+        user?.githubToken
+          ? githubIdentityLine(user.githubToken)
+          : Promise.resolve("not connected — add a token in Settings to sync git activity"),
+      ]);
+
       const text =
         `## Who you are\n\n` +
         `**User:** ${user?.name ?? "Unknown"} (${user?.email ?? uid})\n` +
         `${orgLine}\n` +
         (teammateLine ? `${teammateLine}\n` : "") +
         `**Semantic search:** ${user?.geminiApiKey ? "on (personal Gemini key configured)" : "keyword-only (no Gemini key — add one in Settings for semantic recall)"}\n\n` +
+        `## Connected integrations\n\n` +
+        `- **Azure DevOps:** ${azureLine}\n` +
+        `- **GitHub:** ${githubLine}\n\n` +
         `## Memory on hand\n\n` +
         `- ${sessionCount} cowork sessions visible to you\n` +
         `- ${ruleCount} active rules · ${noteCount} notes · ${openTasks} open tasks\n\n` +
@@ -1697,6 +1856,367 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (!task) return { content: [{ type: "text" as const, text: `Task not found (or not in your org): ${taskId}` }] };
 
       return { content: [{ type: "text" as const, text: `✅ Task updated: "${task.title}" → [${task.status}] (${task.priority})` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // list_board_items / list_sprints / update_board_item / create_board_item
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "list_board_items",
+    "List Azure Boards work items (Epics, Features, User Stories, Tasks, Bugs...) as a hierarchy. Live from Azure DevOps.",
+    {
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+      team: z.string().optional().describe("Team name, used for sprint resolution; omit to use the project's first team"),
+      sprint: z.string().optional().describe('"current" for the active sprint, "backlog" for unscheduled items, or an iteration name/path'),
+      mine: z.boolean().default(false).describe("Only items assigned to you (reliable only when your Azure identity resolves from the PAT)"),
+      types: z.array(z.string()).optional().describe('Filter by work item type, e.g. ["Task", "Bug"]'),
+      include_completed: z.boolean().default(false).describe("Include Completed/Removed items"),
+    },
+    async ({ project, team, sprint, mine, types, include_completed }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client, org, pat } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        let iterationPath: string | undefined;
+        let sprintLabel = "";
+        const notes: string[] = [];
+
+        if (sprint === "current") {
+          const resolvedTeam = await resolveTeam(client, resolvedProject, team);
+          if (typeof resolvedTeam !== "string") return resolvedTeam;
+          const iterations = await client.listIterations(resolvedProject, resolvedTeam);
+          const current = iterations.find((it) => it.timeFrame === "current");
+          if (current) {
+            iterationPath = current.path;
+            sprintLabel = current.name;
+          } else {
+            notes.push(`No current sprint found for team "${resolvedTeam}" — showing all items instead.`);
+          }
+        } else if (sprint === "backlog") {
+          sprintLabel = "Backlog";
+        } else if (sprint) {
+          const resolvedPath = await resolveSprintPath(client, resolvedProject, sprint, team);
+          if (typeof resolvedPath !== "string") return resolvedPath;
+          iterationPath = resolvedPath;
+          sprintLabel = sprint;
+        }
+
+        let assignedTo: string | undefined;
+        if (mine) {
+          const identity = await resolveMyAzureIdentity(org, pat);
+          if (identity) {
+            assignedTo = identity;
+          } else {
+            notes.push('Could not resolve your Azure identity from the PAT — "mine" filter was skipped.');
+          }
+        }
+
+        const queryOpts: QueryWorkItemsOpts = {
+          project: resolvedProject,
+          iterationPath,
+          assignedTo,
+          types: types && types.length > 0 ? types : undefined,
+          includeCompleted: include_completed,
+        };
+        let items: BoardItem[] = await client.queryWorkItems(queryOpts);
+
+        if (sprint === "backlog") {
+          items = items.filter((it) => it.iterationPath === resolvedProject);
+        }
+
+        const total = items.length;
+        let truncatedNote = "";
+        if (total > 150) {
+          items = items.slice(0, 150);
+          truncatedNote = `\n\n…truncated — showing 150 of ${total} items.`;
+        }
+
+        const lines: string[] = [];
+        renderBoardTree(buildTree(items), 0, lines);
+
+        const headerParts = [`**Project:** ${resolvedProject}`];
+        if (sprintLabel) headerParts.push(`**Sprint:** ${sprintLabel}`);
+        headerParts.push(`**Count:** ${items.length}`);
+
+        const text =
+          `## Azure Boards items\n\n${headerParts.join(" · ")}\n` +
+          (notes.length > 0 ? `\n${notes.join("\n")}\n` : "") +
+          `\n${lines.join("\n") || "(no items match)"}${truncatedNote}`;
+
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "list_sprints",
+    "List sprints (iterations) for an Azure Boards team, with current/past/future time frames.",
+    {
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+      team: z.string().optional().describe("Team name; omit to use the project's first team"),
+    },
+    async ({ project, team }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+        const resolvedTeam = await resolveTeam(client, resolvedProject, team);
+        if (typeof resolvedTeam !== "string") return resolvedTeam;
+
+        const iterations = await client.listIterations(resolvedProject, resolvedTeam);
+        if (iterations.length === 0) {
+          return { content: [{ type: "text" as const, text: "This team has no sprints configured — work items live in the backlog." }] };
+        }
+
+        const rows = iterations
+          .map((it) => `| ${it.name} | ${it.path} | ${it.timeFrame} | ${it.startDate ?? "—"} – ${it.finishDate ?? "—"} |`)
+          .join("\n");
+        const text =
+          `## Sprints — ${resolvedProject} / ${resolvedTeam}\n\n` +
+          `| Name | Path | Time frame | Dates |\n|---|---|---|---|\n${rows}`;
+
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "get_board_item",
+    "Full detail of one Azure Boards work item: description, state, sprint, assignee, parent, direct children, and recent comments. Live from Azure DevOps.",
+    {
+      id: z.number().int().describe("Work item ID"),
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+    },
+    async ({ id, project }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        const [item] = await client.getWorkItems(resolvedProject, [id]);
+        if (!item) {
+          return { content: [{ type: "text" as const, text: `Work item #${id} not found in project "${resolvedProject}".` }] };
+        }
+
+        const [parent, children, comments] = await Promise.all([
+          item.parentId !== undefined
+            ? client.getWorkItems(resolvedProject, [item.parentId]).then((r) => r[0] ?? null).catch(() => null)
+            : Promise.resolve(null),
+          client.queryWorkItems({ project: resolvedProject, parentId: id }).catch(() => [] as BoardItem[]),
+          client.getWorkItemComments(resolvedProject, id, 5).catch(() => [] as BoardComment[]),
+        ]);
+
+        const lines: string[] = [`## #${item.id} [${item.type}] ${item.title}`, ""];
+        lines.push(`- **State:** ${item.state} (${item.stateCategory})`);
+        lines.push(`- **Sprint:** ${item.iterationPath.split("\\").pop() || "—"}`);
+        lines.push(`- **Assignee:** ${item.assignee ? `${item.assignee.displayName} (${item.assignee.uniqueName})` : "Unassigned"}`);
+        if (item.priority !== undefined) lines.push(`- **Priority:** ${item.priority}`);
+        if (item.tags.length > 0) lines.push(`- **Tags:** ${item.tags.join(", ")}`);
+        if (parent) lines.push(`- **Parent:** #${parent.id} [${parent.type}] ${parent.title} — ${parent.state}`);
+        lines.push(`- **URL:** ${item.url}`);
+        if (item.description) lines.push("", "### Description", "", item.description);
+        if (children.length > 0) {
+          lines.push("", `### Children (${children.length})`, "");
+          for (const c of children) {
+            lines.push(`- #${c.id} [${c.type}] ${c.title} — ${c.state}${c.assignee ? ` (${c.assignee.displayName})` : ""}`);
+          }
+        }
+        if (comments.length > 0) {
+          lines.push("", "### Recent comments", "");
+          for (const cm of comments) {
+            lines.push(`- **${cm.createdBy?.displayName ?? "Unknown"}** (${cm.createdDate.slice(0, 10)}): ${cm.text.slice(0, 300)}`);
+          }
+        }
+
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "update_board_item",
+    "Update an Azure Boards work item live: change state, move to another sprint, reassign, retitle, or set priority.",
+    {
+      id: z.number().int().describe("Work item ID"),
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+      state: z.string().optional().describe('New state, e.g. "Active", "Resolved", "Closed"'),
+      sprint: z.string().optional().describe("Iteration name or full path to move this item to"),
+      assignee_email: z.string().optional().describe('Assignee email/unique name; "" or "none" unassigns'),
+      title: z.string().optional().describe("New title"),
+      description: z.string().optional().describe("New description (plain text or HTML)"),
+      priority: z.number().int().min(1).max(4).optional(),
+      team: z.string().optional().describe("Team name, used only to resolve `sprint` by name"),
+    },
+    async ({ id, project, state, sprint, assignee_email, title, description, priority, team }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        const patch: UpdateWorkItemPatch = {};
+        if (title !== undefined) patch.title = title;
+        if (description !== undefined) patch.description = description;
+        if (state !== undefined) patch.state = state;
+        if (priority !== undefined) patch.priority = priority;
+        if (assignee_email !== undefined) {
+          patch.assignee = assignee_email === "" || assignee_email.toLowerCase() === "none" ? null : assignee_email;
+        }
+        if (sprint !== undefined) {
+          const resolvedSprint = await resolveSprintPath(client, resolvedProject, sprint, team);
+          if (typeof resolvedSprint !== "string") return resolvedSprint;
+          patch.iterationPath = resolvedSprint;
+        }
+
+        if (Object.keys(patch).length === 0) {
+          return { content: [{ type: "text" as const, text: "Nothing to update — pass at least one field (state, sprint, assignee_email, title, description, priority)." }] };
+        }
+
+        const updated = await client.updateWorkItem(resolvedProject, id, patch);
+        const sprintName = updated.iterationPath.split("\\").pop();
+        return {
+          content: [{
+            type: "text" as const,
+            text: `✅ #${updated.id} ${updated.title} → ${updated.state} (${sprintName}), ${updated.url}`,
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "create_board_item",
+    "Create a work item in Azure Boards (Task, Bug, User Story, ...), optionally under a parent (e.g. a Task under a User Story).",
+    {
+      title: z.string().min(1),
+      type: z.string().min(1).describe('Work item type, e.g. "Task", "Bug", "User Story"'),
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+      description: z.string().optional().describe("Plain text or HTML description"),
+      parent_id: z.number().int().optional().describe("Parent work item ID to link under (e.g. a User Story)"),
+      sprint: z.string().optional().describe("Iteration name or full path"),
+      assignee_email: z.string().optional(),
+      priority: z.number().int().min(1).max(4).optional(),
+      team: z.string().optional().describe("Team name, used only to resolve `sprint` by name"),
+    },
+    async ({ title, type, project, description, parent_id, sprint, assignee_email, priority, team }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        const validTypes = await client.getWorkItemTypes(resolvedProject);
+        const match = validTypes.find((t) => t.name.toLowerCase() === type.toLowerCase());
+        if (!match) {
+          const names = validTypes.map((t) => t.name).join(", ");
+          return { content: [{ type: "text" as const, text: `"${type}" is not a valid work item type for project "${resolvedProject}". Valid types: ${names}` }] };
+        }
+
+        const fields: CreateWorkItemFields = { title };
+        if (description !== undefined) fields.description = description;
+        if (parent_id !== undefined) fields.parentId = parent_id;
+        if (assignee_email !== undefined) fields.assignee = assignee_email;
+        if (priority !== undefined) fields.priority = priority;
+        if (sprint !== undefined) {
+          const resolvedSprint = await resolveSprintPath(client, resolvedProject, sprint, team);
+          if (typeof resolvedSprint !== "string") return resolvedSprint;
+          fields.iterationPath = resolvedSprint;
+        }
+
+        const created = await client.createWorkItem(resolvedProject, match.name, fields);
+        return {
+          content: [{
+            type: "text" as const,
+            text: `✅ Created #${created.id} [${created.type}] ${created.title}, ${created.url}`,
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "delete_board_item",
+    "Delete an Azure Boards work item — moves it to the project's Recycle Bin (recoverable in Azure DevOps, not permanent). Only delete when the user explicitly asks.",
+    {
+      id: z.number().int().describe("Work item ID"),
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+    },
+    async ({ id, project }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        // Fetch first so the confirmation names the item, and a bad ID fails cleanly.
+        const [item] = await client.getWorkItems(resolvedProject, [id]);
+        if (!item) {
+          return { content: [{ type: "text" as const, text: `Work item #${id} not found in project "${resolvedProject}".` }] };
+        }
+
+        await client.deleteWorkItem(resolvedProject, id);
+        return {
+          content: [{
+            type: "text" as const,
+            text: `🗑️ Deleted #${item.id} [${item.type}] ${item.title} — moved to the Recycle Bin (recoverable in Azure DevOps).`,
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
+    },
+  );
+
+  tool(
+    "add_board_comment",
+    "Add a comment to an Azure Boards work item's discussion — e.g. a progress note or a summary of work just completed.",
+    {
+      id: z.number().int().describe("Work item ID"),
+      text: z.string().min(1).describe("Comment text (plain text or simple HTML)"),
+      project: z.string().optional().describe("Azure DevOps project name; omit to auto-resolve when you only have one"),
+    },
+    async ({ id, text, project }) => {
+      const bc = await boardsClient();
+      if (!bc) return { content: [{ type: "text" as const, text: BOARDS_NOT_CONNECTED }] };
+      const { client } = bc;
+
+      try {
+        const resolvedProject = await resolveProject(client, project);
+        if (typeof resolvedProject !== "string") return resolvedProject;
+
+        const comment = await client.addWorkItemComment(resolvedProject, id, text);
+        const preview = comment.text.length > 120 ? `${comment.text.slice(0, 120)}…` : comment.text;
+        return { content: [{ type: "text" as const, text: `💬 Comment added to #${id}: ${preview}` }] };
+      } catch (err) {
+        return { content: [{ type: "text" as const, text: formatAzureError(err) }] };
+      }
     },
   );
 

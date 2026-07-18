@@ -1,5 +1,15 @@
 export const API_BASE_URL = "";
 
+/** Error thrown for non-2xx responses; carries the HTTP status code. */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 interface FetchOptions extends RequestInit {
   data?: any;
 }
@@ -50,8 +60,9 @@ export async function apiClient<T = any>(
 
   if (!response.ok) {
     // Assuming backend returns ApiError payload: { error: true, message: "..." }
-    throw new Error(
-      responseData?.message || responseData?.error || `Request failed with status ${response.status}`
+    throw new ApiError(
+      responseData?.message || responseData?.error || `Request failed with status ${response.status}`,
+      response.status
     );
   }
 

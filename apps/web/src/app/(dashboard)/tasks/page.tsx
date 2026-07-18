@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import AzureBoardsTab from "./AzureBoardsTab";
 import { tasksApi, Task, CreateTaskData } from "@/api/tasks.api";
 import { orgApi, OrgMember } from "@/api/org.api";
 import { getActiveOrgId, setActiveOrgId, removeActiveOrgId } from "@/lib/org";
@@ -281,7 +282,11 @@ function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
   );
 }
 
+type TasksTab = "local" | "boards";
+const TAB_STORAGE_KEY = "operium.tasks.tab";
+
 export default function TasksPage() {
+  const [tab, setTab]             = useState<TasksTab>("local");
   const [tasks, setTasks]         = useState<Task[]>([]);
   const [loading, setLoading]     = useState(true);
   const [stats, setStats]         = useState<Record<string, number>>({});
@@ -338,6 +343,16 @@ export default function TasksPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const stored = localStorage.getItem(TAB_STORAGE_KEY);
+    if (stored === "local" || stored === "boards") setTab(stored);
+  }, []);
+
+  const switchTab = (next: TasksTab) => {
+    setTab(next);
+    localStorage.setItem(TAB_STORAGE_KEY, next);
+  };
+
   const handleCreate = async (data: CreateTaskData) => {
     try {
       const res = await tasksApi.create(data);
@@ -376,31 +391,56 @@ export default function TasksPage() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="border-b border-[#1a1a22] px-8 py-5 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-lg font-semibold text-[#fafafa]">Tasks</h1>
-          <p className="text-xs text-[#63637a] mt-0.5">
-            {total} tasks · {progress}% complete
-          </p>
+        <div className="flex items-center gap-5">
+          <div>
+            <h1 className="text-lg font-semibold text-[#fafafa]">Tasks</h1>
+            <p className="text-xs text-[#63637a] mt-0.5">
+              {tab === "local" ? `${total} tasks · ${progress}% complete` : "Azure DevOps work items"}
+            </p>
+          </div>
+
+          {/* Tab switcher */}
+          <div className="flex gap-1 rounded-xl border border-[#1a1a22] bg-[#111115] p-1">
+            {([["local", "My Tasks"], ["boards", "Azure Boards"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => switchTab(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  tab === key
+                    ? "bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/30"
+                    : "text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] border border-transparent"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="flex items-center gap-4">
-          <div className="w-32 h-1.5 rounded-full bg-[#1a1a22] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#22c55e] transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
+        {/* Progress bar (local tasks only) */}
+        {tab === "local" && (
+          <div className="flex items-center gap-4">
+            <div className="w-32 h-1.5 rounded-full bg-[#1a1a22] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#22c55e] transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8b5cf6] hover:bg-[#7c3aed] text-white text-sm font-medium transition-colors"
+            >
+              <Plus size={15} />
+              New Task
+            </button>
           </div>
-          <button
-            onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8b5cf6] hover:bg-[#7c3aed] text-white text-sm font-medium transition-colors"
-          >
-            <Plus size={15} />
-            New Task
-          </button>
-        </div>
+        )}
       </div>
 
+      {tab === "boards" ? (
+        <AzureBoardsTab />
+      ) : (
+      <>
       {/* Filters */}
       <div className="px-8 py-3 border-b border-[#1a1a22] flex gap-2 shrink-0">
         {(["all", "todo", "in_progress", "done", "cancelled"] as const).map(s => {
@@ -502,6 +542,8 @@ export default function TasksPage() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
