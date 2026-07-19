@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { coworkApi } from "@/api/cowork.api";
 import type { CoworkSession } from "@/api/cowork.api";
+import { repoWebUrl, branchWebUrl } from "@operium/core/repoLinks";
 
 const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ssr: false });
 
@@ -34,6 +35,7 @@ export default function CoworkPage() {
   // ── Filter state ──
   const [searchQuery,  setSearchQuery]  = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [repoFilter,   setRepoFilter]   = useState("");
   const [scopeFilter,  setScopeFilter]  = useState<"team" | "personal">("team");
 
   // ── Delete confirm ──
@@ -132,37 +134,54 @@ export default function CoworkPage() {
     }
   };
 
+  // ── Derived: repo filter options + visible sessions ──────────────────────────
+
+  const repoOptions = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sessions) for (const r of s.repos ?? []) map.set(r.repoKey, r.repoName);
+    return [...map.entries()]
+      .map(([repoKey, repoName]) => ({ repoKey, repoName }))
+      .sort((a, b) => a.repoName.localeCompare(b.repoName));
+  }, [sessions]);
+
+  const visibleSessions = repoFilter
+    ? sessions.filter(s => s.repos?.some(r => r.repoKey === repoFilter))
+    : sessions;
+
+  const isActiveSession = (s: CoworkSession) =>
+    !s.outcome && Date.now() - new Date(s.updatedAt).getTime() < 3 * 3_600_000;
+
   return (
     <div className="flex h-full w-full overflow-hidden relative">
-      <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(139,92,246,0.02),transparent_60%)] rounded-full pointer-events-none blur-3xl" />
+      <div className="dash-glow-purple absolute top-[10%] left-[20%] w-[600px] h-[600px] rounded-full pointer-events-none blur-3xl" />
 
       {/* ── LEFT SECTION: SESSION INDEX ── */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-[#1a1a22] bg-[#050505] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 border-r border-[var(--border-subtle)] bg-[var(--s0)] overflow-hidden">
 
         {/* Header */}
-        <div className="p-6 border-b border-[#1a1a22] shrink-0 bg-[#050505]">
-          <h1 className="text-xl font-bold text-[#fafafa] tracking-tight flex items-center gap-2">
-            <Bot className="text-[#8b5cf6]" size={22} />
+        <div className="p-6 border-b border-[var(--border-subtle)] shrink-0 bg-[var(--s0)]">
+          <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
+            <Bot className="text-[var(--accent)]" size={22} />
             <span>Cowork Knowledge Base</span>
           </h1>
-          <p className="text-[12px] text-[#63637a] mt-1.5 leading-relaxed">
+          <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
             Team-wide AI session history. Search for past solutions and captured decisions.
           </p>
         </div>
 
         {/* Filters Row */}
-        <div className="p-4 border-b border-[#1a1a22]/50 shrink-0 bg-[#050505]/40 flex flex-wrap items-center justify-between gap-3">
+        <div className="p-4 border-b border-[var(--border-subtle)] shrink-0 bg-[var(--s0)] flex flex-wrap items-center justify-between gap-3">
 
           <div className="flex items-center gap-3">
             {/* Search Input */}
             <div className="relative group w-[220px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#55556a] group-focus-within:text-[#8b5cf6] transition-colors" size={13} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors" size={13} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search summaries..."
-                className="w-full h-[34px] bg-[#0c0c0f] border border-[#1e1e24] focus:border-[#8b5cf6]/40 rounded-xl pl-8 pr-3 text-[12px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none transition-all"
+                className="w-full h-[34px] bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl pl-8 pr-3 text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none transition-all"
               />
             </div>
 
@@ -171,7 +190,7 @@ export default function CoworkPage() {
               <select
                 value={sourceFilter}
                 onChange={e => setSourceFilter(e.target.value)}
-                className="h-[34px] px-3.5 bg-[#0c0c0f] border border-[#1e1e24] focus:border-[#8b5cf6]/40 rounded-xl text-[12px] text-[#fafafa] focus:outline-none cursor-pointer transition-all hover:bg-[#141418] appearance-none pr-8"
+                className="h-[34px] px-3.5 bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer transition-all hover:bg-[var(--s2)] appearance-none pr-8"
               >
                 <option value="">All Sources</option>
                 <option value="antigravity">Antigravity</option>
@@ -179,20 +198,39 @@ export default function CoworkPage() {
                 <option value="cursor">Cursor</option>
                 <option value="system">System</option>
               </select>
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#55556a]">
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]">
                 <ChevronDown size={12} />
               </div>
             </div>
+
+            {/* Repo select */}
+            {repoOptions.length > 0 && (
+              <div className="relative group">
+                <select
+                  value={repoFilter}
+                  onChange={e => setRepoFilter(e.target.value)}
+                  className="h-[34px] px-3.5 bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer transition-all hover:bg-[var(--s2)] appearance-none pr-8 max-w-[180px] truncate"
+                >
+                  <option value="">All Repos</option>
+                  {repoOptions.map(r => (
+                    <option key={r.repoKey} value={r.repoKey}>{r.repoName}</option>
+                  ))}
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]">
+                  <ChevronDown size={12} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Scope selection */}
-          <div className="flex bg-[#0c0c0f] border border-[#1e1e24] rounded-xl p-0.5 select-none shrink-0">
+          <div className="flex bg-[var(--s1)] border border-[var(--border-subtle)] rounded-xl p-0.5 select-none shrink-0">
             <button
               onClick={() => setScopeFilter("team")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                 scopeFilter === "team"
-                  ? "bg-[#120e20] border border-[#8b5cf6]/35 text-[#fafafa]"
-                  : "text-[#63637a] hover:text-[#fafafa]"
+                  ? "bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.35)] text-[var(--text-primary)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}
             >
               <Users size={12} />
@@ -202,8 +240,8 @@ export default function CoworkPage() {
               onClick={() => setScopeFilter("personal")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                 scopeFilter === "personal"
-                  ? "bg-[#120e20] border border-[#8b5cf6]/35 text-[#fafafa]"
-                  : "text-[#63637a] hover:text-[#fafafa]"
+                  ? "bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.35)] text-[var(--text-primary)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               }`}
             >
               <User size={12} />
@@ -215,25 +253,26 @@ export default function CoworkPage() {
         {/* Sessions List */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
           {loading ? (
-            <div className="flex items-center justify-center gap-2 text-[#55556a] py-20">
-              <Loader2 size={16} className="animate-spin text-[#8b5cf6]" />
+            <div className="flex items-center justify-center gap-2 text-[var(--text-muted)] py-20">
+              <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
               <span className="text-[12px] font-mono">Loading sessions…</span>
             </div>
-          ) : sessions.length === 0 ? (
-            <div className="py-20 text-center border border-dashed border-[#1a1a22] rounded-3xl bg-[#0c0c0f]/20 flex flex-col items-center justify-center">
-              <Bot className="w-12 h-12 text-[#333342] mb-4" />
-              <h3 className="text-[14px] font-bold text-[#fafafa] mb-1">No sessions found</h3>
-              <p className="text-[12px] text-[#63637a] max-w-sm">
-                {searchQuery
-                  ? "No sessions match your search. Try a different keyword."
+          ) : visibleSessions.length === 0 ? (
+            <div className="py-20 text-center border border-dashed border-[var(--border-subtle)] rounded-3xl bg-[var(--s1)] flex flex-col items-center justify-center">
+              <Bot className="w-12 h-12 text-[var(--border-strong)] mb-4" />
+              <h3 className="text-[14px] font-bold text-[var(--text-primary)] mb-1">No sessions found</h3>
+              <p className="text-[12px] text-[var(--text-muted)] max-w-sm">
+                {searchQuery || repoFilter
+                  ? "No sessions match your filters. Try a different keyword or repo."
                   : "No cowork sessions yet. Sessions created via MCP or API will appear here."}
               </p>
             </div>
           ) : (
-            sessions.map(session => (
+            visibleSessions.map(session => (
               <SessionCard
                 key={session._id || session.id}
                 session={session}
+                isActive={isActiveSession(session)}
                 onDelete={handleDeleteClick}
                 deletingId={deletingId}
               />
@@ -242,26 +281,26 @@ export default function CoworkPage() {
 
           {/* Pagination indicator */}
           {!loading && pagination.total > 0 && (
-            <p className="text-center text-[10px] text-[#55556a] font-mono pt-2">
-              {sessions.length} of {pagination.total} session{pagination.total !== 1 ? "s" : ""}
+            <p className="text-center text-[10px] text-[var(--text-muted)] font-mono pt-2">
+              {visibleSessions.length} of {pagination.total} session{pagination.total !== 1 ? "s" : ""}
             </p>
           )}
         </div>
       </div>
 
       {/* ── RIGHT SECTION: AI CHAT SIDEBAR ── */}
-      <div className="w-[380px] shrink-0 bg-[#070709] flex flex-col overflow-hidden relative">
-        <div className="absolute top-[-30%] left-[20%] w-[300px] h-[300px] bg-[radial-gradient(circle,rgba(139,92,246,0.015),transparent_75%)] rounded-full pointer-events-none blur-3xl" />
+      <div className="w-[380px] shrink-0 bg-[var(--s0)] flex flex-col overflow-hidden relative">
+        <div className="dash-glow-purple absolute top-[-30%] left-[20%] w-[300px] h-[300px] rounded-full pointer-events-none blur-3xl opacity-30" />
 
         {/* Chat Header */}
-        <div className="h-[64px] border-b border-[#1a1a22] px-6 flex items-center justify-between shrink-0 bg-[#070709]">
+        <div className="h-[64px] border-b border-[var(--border-subtle)] px-6 flex items-center justify-between shrink-0 bg-[var(--s0)]">
           <div>
-            <span className="text-[12px] font-mono text-[#55556a] uppercase">Cowork Assistant</span>
-            <span className="ml-2 text-[9px] font-mono text-[#3f3f52] bg-[#1a1a22] px-1.5 py-0.5 rounded">beta</span>
+            <span className="text-[12px] font-mono text-[var(--text-muted)] uppercase">Cowork Assistant</span>
+            <span className="ml-2 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--s2)] px-1.5 py-0.5 rounded">beta</span>
           </div>
           <button
             onClick={() => setChatMessages([])}
-            className="h-[24px] px-2.5 rounded-md border border-[#2a2a35] hover:border-[#8b5cf6]/50 bg-[#120e20]/20 hover:bg-[#120e20]/40 text-[10px] font-semibold text-[#fafafa] flex items-center justify-center transition-all duration-300"
+            className="h-[24px] px-2.5 rounded-md border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.5)] bg-[var(--s1)] hover:bg-[var(--s2)] text-[10px] font-semibold text-[var(--text-primary)] flex items-center justify-center transition-all duration-300"
           >
             Clear Chat
           </button>
@@ -272,8 +311,8 @@ export default function CoworkPage() {
           {chatMessages.length === 0 && (
             <div className="flex flex-col items-start justify-center h-full space-y-4">
               <div className="space-y-1">
-                <h3 className="text-[13px] font-bold text-slate-200">System Assistant Ready</h3>
-                <p className="text-[11px] text-[#63637a] leading-relaxed">
+                <h3 className="text-[13px] font-bold text-[var(--text-primary)]">System Assistant Ready</h3>
+                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                   Query cowork memories, active code fixes, or past agent decisions.
                 </p>
               </div>
@@ -282,7 +321,7 @@ export default function CoworkPage() {
                   <button
                     key={q}
                     onClick={() => setChatInput(q)}
-                    className="text-[11px] text-left px-3.5 py-2.5 rounded-xl bg-[#0c0c0f] border border-[#1e1e24] hover:border-[#8b5cf6]/40 text-[#a1a1aa] hover:text-[#fafafa] transition-all hover:bg-[#120e20]/20"
+                    className="text-[11px] text-left px-3.5 py-2.5 rounded-xl bg-[var(--s1)] border border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all hover:bg-[var(--s2)]"
                   >
                     {q}
                   </button>
@@ -294,13 +333,13 @@ export default function CoworkPage() {
           {chatMessages.map((msg, i) => (
             <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} w-full`}>
               <div className={`relative max-w-[95%] w-full flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <span className="text-[9px] text-[#55556a] font-mono uppercase tracking-wider">
+                <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
                   {msg.role === "user" ? "You" : "Operium AI"}
                 </span>
                 <div className={`px-4 py-3 text-[12px] leading-relaxed w-full rounded-2xl border ${
                   msg.role === "user"
-                    ? "bg-[#120e20]/40 border-[#8b5cf6]/25 text-[#fafafa]"
-                    : "bg-[#0c0c0f]/60 border-[#1e1e24] text-[#a1a1aa]"
+                    ? "bg-[rgba(var(--accent-rgb),0.08)] border-[rgba(var(--accent-rgb),0.25)] text-[var(--text-primary)]"
+                    : "bg-[var(--s1)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
                 }`}>
                   {msg.role === "user"
                     ? <div className="whitespace-pre-wrap font-medium">{msg.content}</div>
@@ -309,16 +348,16 @@ export default function CoworkPage() {
                 </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-col gap-1.5 w-full mt-2">
-                    <span className="text-[9px] text-[#55556a] font-mono uppercase tracking-wider">Sources</span>
+                    <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">Sources</span>
                     {msg.sources.map(src => (
                       <Link
                         key={src.id}
                         href={`/cowork/${src.id}`}
-                        className="flex items-center gap-2 text-[10px] font-medium text-[#8b5cf6] hover:text-[#fafafa] bg-[#120e20]/30 border border-[#8b5cf6]/15 rounded-xl px-3 py-2 transition-all"
+                        className="flex items-center gap-2 text-[10px] font-medium text-[var(--accent)] hover:text-[var(--text-primary)] bg-[rgba(var(--accent-rgb),0.06)] border border-[rgba(var(--accent-rgb),0.15)] rounded-xl px-3 py-2 transition-all"
                       >
                         <ExternalLink size={10} className="shrink-0" />
                         <span className="truncate flex-1">{src.title}</span>
-                        <span className="text-[9px] text-[#55556a] shrink-0 font-mono">{(src.score * 100).toFixed(0)}%</span>
+                        <span className="text-[9px] text-[var(--text-muted)] shrink-0 font-mono">{(src.score * 100).toFixed(0)}%</span>
                       </Link>
                     ))}
                   </div>
@@ -329,10 +368,10 @@ export default function CoworkPage() {
 
           {chatLoading && (
             <div className="flex flex-col items-start w-full gap-1.5">
-              <span className="text-[9px] text-[#55556a] font-mono uppercase tracking-wider">System Bot</span>
-              <div className="bg-[#0c0c0f]/60 border border-[#1e1e24] rounded-2xl px-4 py-3 w-[80%]">
-                <div className="flex items-center gap-2 text-[#55556a]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#8b5cf6]" />
+              <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">System Bot</span>
+              <div className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl px-4 py-3 w-[80%]">
+                <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
                   <span className="text-[11px] font-mono">Querying Operium memory…</span>
                 </div>
               </div>
@@ -342,20 +381,20 @@ export default function CoworkPage() {
         </div>
 
         {/* Input */}
-        <div className="p-4 shrink-0 bg-[#070709] border-t border-[#1a1a22]">
-          <div className="relative flex items-center bg-[#0c0c0f] pl-4 pr-2 py-1.5 rounded-xl border border-[#1e1e24] focus-within:border-[#8b5cf6]/40 transition-colors">
+        <div className="p-4 shrink-0 bg-[var(--s0)] border-t border-[var(--border-subtle)]">
+          <div className="relative flex items-center bg-[var(--s1)] pl-4 pr-2 py-1.5 rounded-xl border border-[var(--border-subtle)] focus-within:border-[rgba(var(--accent-rgb),0.4)] transition-colors">
             <input
               type="text"
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleSendChat(); }}
               placeholder="Query cowork timeline..."
-              className="w-full bg-transparent border-none text-[12px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none focus:ring-0 h-8"
+              className="w-full bg-transparent border-none text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0 h-8"
             />
             <button
               onClick={handleSendChat}
               disabled={!chatInput.trim() || chatLoading}
-              className="shrink-0 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-[#8b5cf6] hover:bg-[#8b5cf6]/10 rounded-lg transition-all disabled:opacity-30 ml-2"
+              className="shrink-0 w-8 h-8 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] rounded-lg transition-all disabled:opacity-30 ml-2"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
@@ -375,26 +414,26 @@ export default function CoworkPage() {
       {/* ── Delete confirm modal ── */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-[#000000]/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0c0c0f] border border-[#2a2a35] w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7)]">
+          <div className="bg-[var(--s1)] border border-[var(--border-default)] w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
                 <Trash2 size={18} className="text-red-400" />
               </div>
               <div>
-                <h3 className="text-[15px] font-bold text-[#fafafa]">Delete Session</h3>
-                <p className="text-[11px] text-[#63637a]">This cannot be undone</p>
+                <h3 className="text-[15px] font-bold text-[var(--text-primary)]">Delete Session</h3>
+                <p className="text-[11px] text-[var(--text-muted)]">This cannot be undone</p>
               </div>
             </div>
-            <div className="bg-[#141418] border border-[#1e1e24] rounded-xl p-3.5 mb-4">
-              <p className="text-[13px] text-[#a1a1aa]">
-                Delete <span className="font-semibold text-[#fafafa]">&ldquo;{deleteConfirm.title}&rdquo;</span>?
+            <div className="bg-[var(--s2)] border border-[var(--border-subtle)] rounded-xl p-3.5 mb-4">
+              <p className="text-[13px] text-[var(--text-secondary)]">
+                Delete <span className="font-semibold text-[var(--text-primary)]">&ldquo;{deleteConfirm.title}&rdquo;</span>?
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
                 disabled={!!deletingId}
-                className="flex-1 h-[38px] rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] text-[13px] font-semibold transition-all disabled:opacity-50"
+                className="flex-1 h-[38px] rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[13px] font-semibold transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -417,6 +456,7 @@ export default function CoworkPage() {
 
 interface SessionCardProps {
   session:   CoworkSession;
+  isActive?: boolean;
   onDelete:  (id: string, title: string, e: React.MouseEvent) => void;
   deletingId:string | null;
 }
@@ -426,7 +466,7 @@ function getSourceClass(source: string) {
     case "antigravity": return "bg-purple-500/10 border-purple-500/20 text-[#a855f7]";
     case "claude-code": return "bg-orange-500/10 border-orange-500/20 text-orange-400";
     case "cursor":      return "bg-blue-500/10 border-blue-500/20 text-[#3b82f6]";
-    default:            return "bg-slate-800/40 border-[#2a2a35] text-slate-400";
+    default:            return "bg-[var(--s2)] border-[var(--border-default)] text-[var(--text-muted)]";
   }
 }
 
@@ -437,15 +477,12 @@ function SourceIcon({ source }: { source: string }) {
   return <ShieldCheck size={16} />;
 }
 
-const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
+const SessionCard = ({ session, isActive = false, onDelete, deletingId }: SessionCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const sid = session._id || session.id;
 
   return (
-    // shrink-0 is load-bearing: cards are flex items of the scroll column, and
-    // overflow-hidden gives them an automatic min-size of 0 — without it every
-    // card compresses to ~40px instead of the list scrolling.
-    <div className="p-5 rounded-2xl bg-[#0c0c0f]/40 border border-[#1e1e24] hover:border-[#8b5cf6]/40 transition-all overflow-hidden relative group shadow-sm flex flex-col gap-3 shrink-0">
+    <div className="p-5 rounded-2xl bg-[var(--s1)] border border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] transition-all overflow-hidden relative group shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)] flex flex-col gap-3 shrink-0">
 
       {/* Top Details */}
       <div className="flex justify-between items-start gap-4">
@@ -456,14 +493,23 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
           </div>
 
           <div className="min-w-0">
-            <Link
-              href={`/cowork/${sid}`}
-              className="text-[#fafafa] font-bold text-[14px] hover:text-[#8b5cf6] transition-colors leading-snug cursor-pointer block truncate"
-            >
-              {session.title}
-            </Link>
-            <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-[#55556a] mt-1 font-medium">
-              <span className="flex items-center gap-1 text-[#a1a1aa]">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/cowork/${sid}`}
+                className="text-[var(--text-primary)] font-bold text-[14px] hover:text-[var(--accent)] transition-colors leading-snug cursor-pointer block truncate"
+              >
+                {session.title}
+              </Link>
+              {isActive && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-500 text-[9px] font-bold uppercase tracking-wider shrink-0"
+                  title="Checkpointed recently and not finalized — this session is in progress">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  live
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-[var(--text-muted)] mt-1 font-medium">
+              <span className="flex items-center gap-1 text-[var(--text-secondary)]">
                 <User size={10} />
                 <span>{session.author?.name ?? "Unknown"}</span>
               </span>
@@ -471,7 +517,31 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
               <span>{new Date(session.createdAt).toLocaleDateString()}</span>
               <span>•</span>
               <span className="capitalize">{session.source}</span>
-              {session.branch && (
+              {session.repos?.length ? (
+                session.repos.map(r => {
+                  const href = r.branch ? branchWebUrl(r.repoKey, r.branch) : repoWebUrl(r.repoKey);
+                  const label = r.branch ? `${r.repoName}@${r.branch}` : r.repoName;
+                  return (
+                    <React.Fragment key={`${r.repoKey}-${r.branch ?? ""}`}>
+                      <span>•</span>
+                      {href ? (
+                        <a href={href} target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-1 font-mono text-[#a855f7] hover:text-[#c4b5fd] hover:underline transition-colors"
+                          title={r.repoKey}>
+                          <GitBranch size={10} />
+                          <span>{label}</span>
+                        </a>
+                      ) : (
+                        <span className="flex items-center gap-1 font-mono text-[#a855f7]" title={r.repoKey}>
+                          <GitBranch size={10} />
+                          <span>{label}</span>
+                        </span>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              ) : session.branch && (
                 <>
                   <span>•</span>
                   <span className="flex items-center gap-1 font-mono text-[#a855f7]">
@@ -488,7 +558,7 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <Link
             href={`/cowork/${sid}`}
-            className="p-1.5 bg-[#141418] hover:bg-[#8b5cf6]/20 text-[#63637a] hover:text-[#8b5cf6] rounded-lg border border-[#2a2a35] hover:border-[#8b5cf6]/25 transition-colors"
+            className="p-1.5 bg-[var(--s2)] hover:bg-[rgba(var(--accent-rgb),0.2)] text-[var(--text-muted)] hover:text-[var(--accent)] rounded-lg border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.25)] transition-colors"
           >
             <ExternalLink size={12} />
           </Link>
@@ -496,7 +566,7 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
             <button
               onClick={e => onDelete(sid, session.title, e)}
               disabled={deletingId === sid}
-              className="p-1.5 bg-[#141418] hover:bg-red-500/20 text-[#63637a] hover:text-red-400 rounded-lg border border-[#2a2a35] hover:border-red-500/25 transition-colors"
+              className="p-1.5 bg-[var(--s2)] hover:bg-red-500/20 text-[var(--text-muted)] hover:text-red-400 rounded-lg border border-[var(--border-default)] hover:border-red-500/25 transition-colors"
             >
               {deletingId === sid
                 ? <Loader2 size={12} className="animate-spin" />
@@ -511,7 +581,7 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
       {session.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 ml-12">
           {session.tags.map((tag, i) => (
-            <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded bg-[#1e1e24]/60 border border-[#2a2a35]/40 text-[#63637a] uppercase tracking-wider">
+            <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--s2)] border border-[var(--border-subtle)] text-[var(--text-muted)] uppercase tracking-wider">
               {tag}
             </span>
           ))}
@@ -522,17 +592,17 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
       {(session.intent || session.outcome) && (
         <div className="flex gap-2 ml-12">
           {session.intent && (
-            <span className="text-[9px] px-2 py-0.5 rounded font-mono bg-[#8b5cf6]/10 text-[#a78bfa] border border-[#8b5cf6]/20">
+            <span className="text-[9px] px-2 py-0.5 rounded font-mono bg-[rgba(var(--accent-rgb),0.1)] text-[#a78bfa] border border-[rgba(var(--accent-rgb),0.2)]">
               {session.intent}
             </span>
           )}
           {session.outcome && (
             <span className={`text-[9px] px-2 py-0.5 rounded font-mono border ${
               session.outcome === "fixed" || session.outcome === "implemented"
-                ? "bg-green-500/10 text-green-400 border-green-500/20"
+                ? "bg-green-500/10 text-green-500 border-green-500/20"
                 : session.outcome === "blocked" || session.outcome === "abandoned"
                 ? "bg-red-500/10 text-red-400 border-red-500/20"
-                : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                : "bg-amber-500/10 text-amber-500 border-amber-500/20"
             }`}>
               {session.outcome}
             </span>
@@ -540,23 +610,21 @@ const SessionCard = ({ session, onDelete, deletingId }: SessionCardProps) => {
         </div>
       )}
 
-      {/* Summary — NOTE: line-clamp collapses to 0-height around block-level
-          markdown in Chromium's standardized line-clamp, so use a max-height
-          collapse with a mask fade instead. */}
+      {/* Summary */}
       <div
-        className={`ml-12 text-[12px] leading-relaxed text-[#a1a1aa] ${expanded ? "" : "max-h-[76px] overflow-hidden"}`}
+        className={`ml-12 text-[12px] leading-relaxed text-[var(--text-secondary)] ${expanded ? "" : "max-h-[76px] overflow-hidden"}`}
         style={expanded ? undefined : { WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 100%)", maskImage: "linear-gradient(to bottom, black 55%, transparent 100%)" }}
       >
         <MarkdownViewer content={session.summary} />
       </div>
 
       {!expanded && session.summary.length > 180 && (
-        <button onClick={() => setExpanded(true)} className="ml-12 text-[11px] font-bold text-[#8b5cf6] hover:text-[#fafafa] transition-colors text-left">
+        <button onClick={() => setExpanded(true)} className="ml-12 text-[11px] font-bold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors text-left">
           Read more
         </button>
       )}
       {expanded && (
-        <button onClick={() => setExpanded(false)} className="ml-12 text-[11px] font-bold text-[#8b5cf6] hover:text-[#fafafa] transition-colors text-left mt-1">
+        <button onClick={() => setExpanded(false)} className="ml-12 text-[11px] font-bold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors text-left mt-1">
           Show less
         </button>
       )}
