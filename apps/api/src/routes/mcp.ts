@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import { buildMcpServer } from "@operium/mcp";
 import { User, Membership } from "@operium/db";
 import { embeddingService } from "../services/embedding.service.js";
+import { gitService } from "../services/git.service.js";
 import { JWT_SECRET } from "../utils/jwtSecret.js";
 
 const router: IRouter = Router();
@@ -123,6 +124,7 @@ router.post("/", async (req: any, res: any) => {
     orgId:     resolved.orgId,
     geminiKey: resolved.geminiKey,
     embedFn,
+    syncGitFn: (full: boolean) => gitService.sync(resolved.userId, full),
   });
 
   await mcpServer.connect(transport);

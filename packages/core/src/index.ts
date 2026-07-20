@@ -1,14 +1,24 @@
-export { sanitize } from "./sanitize.js";
-export { contentHash } from "./hash.js";
-export { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk.js";
-export { parseQueryHints, type QueryHints, type ExplicitFilters } from "./queryHints.js";
+export { sanitize } from "./sanitize";
+export { contentHash } from "./hash";
+export { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk";
+export { parseQueryHints, type QueryHints, type ExplicitFilters } from "./queryHints";
+export { normalizeErrorText, errorSignature } from "./errorSignature";
 export {
   compositeScore,
   recencyDecay,
   helpfulnessBoost,
   type RankInput,
   type RankOptions,
-} from "./ranking.js";
+} from "./ranking";
+export { repoWebUrl, branchWebUrl, commitWebUrl } from "./repoLinks";
+export {
+  normalizeRepoKey,
+  repoNameFromKey,
+  normalizeRepoRefs,
+  stripCredentials,
+  type RepoRef,
+  type NormalizedRepoRef,
+} from "./repoKey";
 export {
   AzureBoardsClient,
   AzureBoardsError,
@@ -30,4 +40,4 @@ export {
   type UpdateWorkItemPatch,
   type CreateWorkItemFields,
   type JsonPatchOp,
-} from "./azureBoards.js";
+} from "./azureBoards";

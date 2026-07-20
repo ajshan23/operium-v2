@@ -1,4 +1,4 @@
-import { CoworkChunk, User } from "@operium/db";
+import { CoworkChunk, NoteBlock, Note, User } from "@operium/db";
 import { embeddingService } from "../services/embedding.service.js";
 
 /**
@@ -76,11 +76,77 @@ async function cycle(): Promise<void> {
   }
 }
 
+/** Same sweep for note blocks — notes join semantic recall once embedded.
+ *  `$ne: false` also catches blocks created before the embedding fields existed. */
+async function noteCycle(): Promise<void> {
+  if (running || Date.now() < backoffUntil) return;
+  running = true;
+  try {
+    const dirty = await NoteBlock.find({
+      embeddingDirty: { $ne: false },
+      $or: [{ embeddingAttempts: { $lt: MAX_ATTEMPTS } }, { embeddingAttempts: { $exists: false } }],
+    })
+      .sort({ createdAt: 1 })
+      .limit(BATCH)
+      .select("_id userId noteId content")
+      .lean();
+    if (dirty.length === 0) return;
+
+    const userIds = [...new Set(dirty.map(b => String(b.userId)))];
+    const users = await User.find({ _id: { $in: userIds } })
+      .select("+geminiApiKey")
+      .lean() as any[];
+    const keyByUser = new Map(users.map(u => [String(u._id), u.geminiApiKey as string | undefined]));
+
+    const noteIds = [...new Set(dirty.map(b => String(b.noteId)))];
+    const notes = await Note.find({ _id: { $in: noteIds } }).select("title").lean() as any[];
+    const titleByNote = new Map(notes.map(n => [String(n._id), n.title as string]));
+
+    for (const block of dirty) {
+      const key = keyByUser.get(String(block.userId));
+      if (!key) continue; // owner has no personal key — leave dirty, never counts as an attempt
+
+      if (!block.content?.trim()) {
+        await NoteBlock.updateOne({ _id: block._id }, { embeddingDirty: false });
+        continue;
+      }
+
+      try {
+        const title = titleByNote.get(String(block.noteId)) ?? "";
+        const embedding = await embeddingService.embed(
+          `${title ? `[note] ${title}\n\n` : ""}${block.content}`,
+          key,
+        );
+        await NoteBlock.updateOne(
+          { _id: block._id },
+          { embedding, embeddingDirty: false },
+        );
+        await new Promise(r => setTimeout(r, RATE_SPACING_MS));
+      } catch (err: any) {
+        if (err?.code === "RATE_LIMIT") {
+          backoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
+          break;
+        }
+        await NoteBlock.updateOne({ _id: block._id }, { $inc: { embeddingAttempts: 1 } });
+        console.error(`[EmbedWorker] note block ${block._id}:`, err?.message ?? err);
+      }
+    }
+  } catch (err: any) {
+    console.error("[EmbedWorker] note cycle failed:", err?.message ?? err);
+  } finally {
+    running = false;
+  }
+}
+
 export function startEmbedWorker(intervalMs = 10_000): void {
   if (timer) return;
   console.log(`🟣 EmbedWorker started (every ${intervalMs / 1000}s, own-key only)`);
-  void cycle();
-  timer = setInterval(() => void cycle(), intervalMs);
+  // Alternate sweeps: cowork chunks get priority, note blocks ride the same
+  // rate budget on the off-beat.
+  let tick = 0;
+  const run = () => void (tick++ % 2 === 0 ? cycle() : noteCycle());
+  run();
+  timer = setInterval(run, intervalMs);
   timer.unref?.();
 }
 

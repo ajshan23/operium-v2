@@ -1,7 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { McpToolName } from "@operium/shared";
 import {
   compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints,
+  normalizeRepoKey, normalizeRepoRefs, type RepoRef, type NormalizedRepoRef,
+  normalizeErrorText, errorSignature,
+  repoWebUrl, branchWebUrl,
   AzureBoardsClient, AzureBoardsError, buildTree,
   type BoardItem, type BoardItemNode, type BoardComment, type QueryWorkItemsOpts,
   type UpdateWorkItemPatch, type CreateWorkItemFields,
@@ -14,6 +18,99 @@ export interface McpContext {
   geminiKey?: string;
   /** Optional embedding function injected by the transport layer */
   embedFn?: (text: string) => Promise<number[]>;
+  /** Optional git-sync function injected by the transport layer (pulls GitHub/Azure activity into WorkHistory) */
+  syncGitFn?: (full: boolean) => Promise<Record<string, any>>;
+}
+
+// ── Multi-repo session context ────────────────────────────────────────────────
+// A session may span several git repos (or several worktree branches of one).
+// Tools accept a `repos` array; the legacy scalar branch/commitSha/repoUrl args
+// are still accepted and folded into it.
+
+const repoRefShape = {
+  repoUrl:      z.string().min(1).describe("Git remote URL, any spelling — https or ssh"),
+  branch:       z.string().optional(),
+  commitSha:    z.string().optional(),
+  prUrl:        z.string().optional(),
+  filesTouched: z.array(z.string()).optional().describe("Paths touched in THIS repo"),
+};
+
+/** Fold legacy scalar args + repos[] into one normalized list. */
+function collectRepoRefs(
+  repos: RepoRef[] | undefined,
+  legacy: { repoUrl?: string; branch?: string; commitSha?: string; prUrl?: string },
+): NormalizedRepoRef[] {
+  const refs: RepoRef[] = [...(repos ?? [])];
+  if (legacy.repoUrl) {
+    refs.push({
+      repoUrl: legacy.repoUrl,
+      branch: legacy.branch,
+      commitSha: legacy.commitSha,
+      prUrl: legacy.prUrl,
+    });
+  }
+  return normalizeRepoRefs(refs);
+}
+
+/** Merge new repo refs into a session's existing repos[], keyed by (repoKey, branch). */
+function mergeRepoLists(existing: NormalizedRepoRef[], incoming: NormalizedRepoRef[]): NormalizedRepoRef[] {
+  return normalizeRepoRefs([...(existing ?? []), ...incoming]);
+}
+
+/** Legacy mirror: repos[0] → scalar fields so old clients/UI keep working. */
+function legacyRepoFields(repos: NormalizedRepoRef[]) {
+  const first = repos[0];
+  if (!first) return {};
+  return {
+    repoUrl:   first.repoUrl,
+    branch:    first.branch,
+    commitSha: first.commitSha,
+    prUrl:     first.prUrl,
+  };
+}
+
+/** Normalize a list of raw repo URL strings to unique repoKeys. */
+function toRepoKeys(repos: string[] | undefined): string[] {
+  return [...new Set((repos ?? []).map((r: string) => normalizeRepoKey(r)).filter((k): k is string => !!k))];
+}
+
+function repoKeysOf(repos: { repoKey: string }[] | undefined): string[] | undefined {
+  const keys = [...new Set((repos ?? []).map(r => r.repoKey))];
+  return keys.length ? keys : undefined;
+}
+
+/** "widget@main, api@feature/x" — compact human-readable repo list. */
+function describeRepos(repos: { repoName: string; branch?: string }[]): string {
+  return repos.map(r => r.branch ? `${r.repoName}@${r.branch}` : r.repoName).join(", ");
+}
+
+/** Ranking boost when a query names a file the session touched (basename match). */
+function fileHintBoost(files: string[], filesTouched?: string[]): number {
+  if (!files.length || !filesTouched?.length) return 0;
+  const base = (p: string) => p.split("/").pop()!.toLowerCase();
+  const touched = new Set(filesTouched.map(base));
+  return files.some(f => touched.has(base(f))) ? 0.06 : 0;
+}
+
+/** Pull a "## Next steps" section (or a "**Next:** ..." line) out of saved Markdown. */
+function extractNextStepsSection(markdown: string): string | null {
+  // $(?![\s\S]) = true end-of-input (with /m, a bare $ matches every line end)
+  const heading = markdown.match(/^#{1,4}\s*(?:next(?:\s+steps?)?|todo|remaining)\b[^\n]*\n([\s\S]*?)(?=\n#{1,4}\s|$(?![\s\S]))/im);
+  if (heading?.[1]?.trim()) return `**Next steps (from your notes):**\n${heading[1].trim().slice(0, 800)}`;
+  const bold = markdown.match(/\*\*Next[^*]*\*\*:?\s*([^\n]+)/i);
+  if (bold?.[1]?.trim()) return `**Next (from your notes):** ${bold[1].trim()}`;
+  return null;
+}
+
+/** Next steps for a resumable session — from its summary, else its latest checkpoint. */
+async function extractNextSteps(CoworkChunk: any, session: any): Promise<string | null> {
+  const fromSummary = session.summary ? extractNextStepsSection(session.summary) : null;
+  if (fromSummary) return fromSummary;
+  const lastChunk = await CoworkChunk.findOne({ sessionId: session._id })
+    .sort({ order: -1 }).select("text").lean();
+  if (!lastChunk?.text) return null;
+  return extractNextStepsSection(lastChunk.text)
+    ?? `**Last checkpoint:**\n${snippet(lastChunk.text, 500)}`;
 }
 
 // ── Cosine similarity (in-memory fallback for search without Atlas) ───────────
@@ -35,10 +132,10 @@ function cosine(a: number[], b: number[]): number {
 const OPERIUM_INSTRUCTIONS = `Operium is persistent, shared memory for AI coding agents. Everything you save is rendered as rich Markdown in a web app and re-read by other agents and teammates.
 
 Session contract:
-1. START — call get_startup_context first, every session.
-2. BEFORE non-trivial work — recall_context("<topic>"): a teammate or a past session may already have the answer.
-3. DURING — checkpoint_cowork after every significant finding (~every 10-15 messages) so progress survives crashes and context loss.
-4. END — save_chat to finalize with a polished summary. Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
+1. START — call get_startup_context first, every session. Pass \`repos\` with the git remote URL of EVERY repo in your workspace (run \`git remote get-url origin\` in each repo root and worktree — work often spans more than one repo).
+2. BEFORE non-trivial work — recall_context("<topic>", repos=[...]): a teammate or a past session may already have the answer.
+3. DURING — checkpoint_cowork after every significant finding (~every 10-15 messages) so progress survives crashes and context loss. Always pass \`repos\` — one entry per repo with its branch; list every repo the work touches, not just the first.
+4. END — save_chat to finalize with a polished summary and the final \`repos\` (branch, commitSha, prUrl per repo). Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
 
 Live Azure Boards: list_board_items / list_sprints / update_board_item / create_board_item read and write real Azure DevOps work items. Call update_board_item to move a work item's state and sprint the moment the user says they've finished sprint work on it.
 
@@ -48,21 +145,9 @@ Formatting contract (applies to every finding, summary, note, plan, rule, and de
 - Reference files as \`backtick/paths.ts\` and end saves with a "**Files:** ..." line.
 - Never save a single unstructured wall of text — future agents must be able to skim it.`;
 
-/** Static registry — the single source of truth for what this server exposes. */
-export const MCP_TOOL_NAMES = [
-  "get_startup_context", "recall_context", "search",
-  "create_history", "list_history", "update_history", "delete_history",
-  "checkpoint_cowork", "save_chat", "list_cowork", "get_cowork", "cowork_digest",
-  "related_cowork", "mark_cowork_used", "delete_cowork",
-  "list_spaces", "list_notes", "get_note", "create_note", "append_note", "update_note", "delete_note",
-  "save_plan", "list_plans", "update_plan", "search_notes",
-  "save_rule", "list_rules", "learn_correction", "delete_rule",
-  "get_experts", "list_tasks", "create_task", "update_task",
-  "list_board_items", "list_sprints", "get_board_item", "update_board_item", "create_board_item",
-  "delete_board_item", "add_board_comment",
-  "whoami", "ping",
-] as const;
-export const MCP_TOOL_COUNT = MCP_TOOL_NAMES.length;
+// Static registry — canonical list lives in @operium/shared (browser-safe, so
+// the web settings screen renders it too); re-exported here for existing consumers.
+export { MCP_TOOL_NAMES, MCP_TOOL_COUNT, type McpToolName } from "@operium/shared";
 
 export function buildMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer(
@@ -232,6 +317,74 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   }
 
   /**
+   * Semantic chunk retrieval with two engines:
+   *
+   * - Atlas $vectorSearch when OPERIUM_VECTOR_INDEX names a vector index on
+   *   CoworkChunk.embedding (with userId/isShared/orgId as filter fields) —
+   *   scales past the in-memory window.
+   * - In-memory cosine over the latest 500 chunks otherwise (the original
+   *   behavior, fine for small corpora).
+   *
+   * minSim applies only to the in-memory path: Atlas normalizes cosine scores
+   * to 0..1 ((1+cos)/2), so raw-cosine thresholds don't transfer — for vector
+   * search we trust the index's top-k ranking instead.
+   */
+  async function findSimilarChunks(
+    CoworkChunk: any,
+    queryEmbedding: number[],
+    opts: { k: number; minSim: number; intent?: string; outcome?: string },
+  ): Promise<any[]> {
+    const vectorIndex = process.env.OPERIUM_VECTOR_INDEX;
+    if (vectorIndex) {
+      try {
+        const mongooseMod = (await import("mongoose")).default;
+        const oid = (s: string) => new mongooseMod.Types.ObjectId(s);
+        const scope = ctx.orgId
+          ? { $or: [{ userId: oid(ctx.userId) }, { $and: [{ isShared: true }, { orgId: oid(ctx.orgId) }] }] }
+          : { userId: oid(ctx.userId) };
+        let docs: any[] = await CoworkChunk.aggregate([
+          {
+            $vectorSearch: {
+              index: vectorIndex,
+              path: "embedding",
+              queryVector: queryEmbedding,
+              numCandidates: Math.max(opts.k * 15, 150),
+              limit: opts.k * 3,
+              filter: scope,
+            },
+          },
+          {
+            $project: {
+              sessionId: 1, text: 1, sessionTitle: 1, sessionSource: 1,
+              sessionIntent: 1, sessionOutcome: 1, userId: 1, createdAt: 1,
+              _sim: { $meta: "vectorSearchScore" },
+            },
+          },
+        ]);
+        if (opts.intent)  docs = docs.filter(c => c.sessionIntent === opts.intent);
+        if (opts.outcome) docs = docs.filter(c => c.sessionOutcome === opts.outcome);
+        return docs.slice(0, opts.k);
+      } catch {
+        // index missing/misconfigured — fall through to in-memory cosine
+      }
+    }
+
+    const chunkFilter: any = { $or: [{ userId: ctx.userId }, sharedScope] };
+    if (opts.intent)  chunkFilter.sessionIntent  = opts.intent;
+    if (opts.outcome) chunkFilter.sessionOutcome = opts.outcome;
+    const chunks = await CoworkChunk.find(chunkFilter)
+      .sort({ createdAt: -1 }).limit(500)
+      .select("sessionId text sessionTitle sessionSource sessionIntent sessionOutcome embedding userId createdAt")
+      .lean();
+    return chunks
+      .filter((c: any) => Array.isArray(c.embedding) && c.embedding.length > 0)
+      .map((c: any) => ({ ...c, _sim: cosine(queryEmbedding, c.embedding) }))
+      .filter((c: any) => c._sim >= opts.minSim)
+      .sort((a: any, b: any) => b._sim - a._sim)
+      .slice(0, opts.k);
+  }
+
+  /**
    * Fire-and-forget per-chunk embedding for a session's dirty chunks.
    * Runs only when the caller has a personal Gemini key (ctx.embedFn);
    * anything left dirty is picked up by the API's background embed worker.
@@ -265,7 +418,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ── Tool registration wrapper: usage logging + friendly error surface ──────
   type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
   function tool(
-    name: (typeof MCP_TOOL_NAMES)[number],
+    name: McpToolName,
     description: string,
     schema: z.ZodRawShape,
     handler: (args: any) => Promise<ToolResult>,
@@ -300,28 +453,113 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "get_startup_context",
-    "CALL THIS FIRST at the start of every session. Returns your active rules/conventions, recent work history, and pending tasks so you start with full context.",
+    "CALL THIS FIRST at the start of every session. Returns your active rules/conventions, recent work history, and pending tasks so you start with full context. " +
+    "Pass `repos` with the remote URL of EVERY git repo in your workspace (run `git remote get-url origin` in each repo root and worktree) — sessions from those repos are surfaced first.",
     {
-      days: z.number().int().min(1).max(90).default(7).describe("How many days of history to include"),
+      days:  z.number().int().min(1).max(90).default(7).describe("How many days of history to include"),
+      repos: z.array(z.string()).default([]).describe(
+        "Git remote URLs (or host/owner/name) of every repo in the current workspace — include all of them when the workspace spans multiple repos"),
     },
-    async ({ days }) => {
-      await db();
-      const { WorkHistory, ContextRule, Task, CoworkSession } = await db();
+    async ({ days, repos }) => {
+      const { WorkHistory, ContextRule, Task, CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
       const since = new Date(Date.now() - days * 86_400_000);
 
-      const [rules, history, tasks, recentCowork] = await Promise.all([
-        ContextRule.find({ userId: uid, isActive: true }).sort({ timesApplied: -1 }).limit(20).lean(),
+      const repoKeys = toRepoKeys(repos);
+      const repoNames = repoKeys.map(k => k.split("/").pop()!);
+
+      // Rules: own rules + org-wide team rules; repo-scoped ones only for
+      // registered repos. With no repos registered, everything loads (can't
+      // tell what applies).
+      const ruleScopeOr: any[] = [
+        { userId: uid },
+        ...(ctx.orgId ? [{ orgId: ctx.orgId, scope: "team" }] : []),
+      ];
+      const ruleFilter: any = { isActive: true, $and: [{ $or: ruleScopeOr }] };
+      if (repoKeys.length) {
+        ruleFilter.$and.push({
+          $or: [
+            { repoKeys: { $exists: false } },
+            { repoKeys: { $size: 0 } },
+            { repoKeys: { $in: repoKeys } },
+          ],
+        });
+      }
+
+      const activeSince = new Date(Date.now() - 8 * 3_600_000);
+      const [rules, history, tasks, repoCowork, recentCowork, resumable, teammateActive] = await Promise.all([
+        ContextRule.find(ruleFilter).sort({ timesApplied: -1 }).limit(20)
+          .populate("userId", "name").lean(),
         WorkHistory.find({ userId: uid, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(15).lean(),
         Task.find({ userId: uid, status: { $in: ["todo", "in_progress"] } }).sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
+        repoKeys.length
+          ? CoworkSession.find({ $or: [{ userId: uid }, sharedScope], "repos.repoKey": { $in: repoKeys } } as any)
+              .sort({ createdAt: -1 }).limit(8).lean()
+          : Promise.resolve([] as any[]),
         CoworkSession.find({ $or: [{ userId: uid }, sharedScope] })
           .sort({ createdAt: -1 }).limit(5).lean(),
+        // Your most recent unfinished session (blocked/partial/never finalized)
+        CoworkSession.findOne({
+          userId: uid,
+          updatedAt: { $gte: new Date(Date.now() - 14 * 86_400_000) },
+          $or: [{ outcome: { $in: ["blocked", "partial"] } }, { outcome: { $exists: false } }],
+          ...(repoKeys.length ? { "repos.repoKey": { $in: repoKeys } } : {}),
+        } as any).sort({ updatedAt: -1 }).lean(),
+        // Teammates working in the same repos right now (active = touched
+        // within the last 8h and not finalized with an outcome)
+        repoKeys.length
+          ? CoworkSession.find({
+              ...sharedScope, userId: { $ne: uid },
+              "repos.repoKey": { $in: repoKeys },
+              updatedAt: { $gte: activeSince },
+              outcome: { $exists: false },
+            } as any).sort({ updatedAt: -1 }).limit(3)
+              .populate("userId", "name").lean()
+          : Promise.resolve([] as any[]),
       ]);
 
       const sections: string[] = [];
 
+      if (repoKeys.length) {
+        sections.push(
+          `## Working Repos Registered\n\n${repoKeys.map(k => `• \`${k}\``).join("\n")}\n\n` +
+          `Pass the same \`repos\` (with branch) to checkpoint_cowork and save_chat so this session is stored against them.`
+        );
+      }
+
+      if (teammateActive.length > 0) {
+        const warnText = teammateActive.map((s: any) =>
+          `• **${(s.userId as any)?.name ?? "A teammate"}** — "${s.title}"` +
+          (s.repos?.length ? ` (${describeRepos(s.repos)})` : "") +
+          ` · last activity ${timeAgo(s.updatedAt)} · get_cowork("${s._id}")`
+        ).join("\n");
+        sections.push(
+          `## ⚠️ Teammates Active In These Repos\n\n${warnText}\n\n` +
+          `Read their session before starting overlapping work — you may be about to duplicate it.`
+        );
+      }
+
+      if (resumable) {
+        const nextSteps = await extractNextSteps(CoworkChunk, resumable);
+        sections.push(
+          `## Resume Where You Left Off\n\n` +
+          `**${resumable.title}** · ${timeAgo(resumable.updatedAt)}` +
+          (resumable.outcome ? ` · ${resumable.outcome}` : " · not finalized") +
+          (resumable.repos?.length ? ` · ${describeRepos(resumable.repos)}` : "") + "\n\n" +
+          (nextSteps ? `${nextSteps}\n\n` : "") +
+          `Full context: get_cowork("${resumable._id}"). ` +
+          `If you continue this work, checkpoint with sessionId="${resumable._id}".`
+        );
+      }
+
       if (rules.length > 0) {
-        const ruleText = rules.map(r => `• [${r.category}] **${r.title}**: ${r.rule}`).join("\n");
+        const ruleText = rules.map((r: any) => {
+          const ruleUid = (r.userId?._id ?? r.userId)?.toString();
+          const byline = r.scope === "team" && ruleUid !== uid
+            ? ` _(team rule by ${r.userId?.name ?? "a teammate"})_`
+            : r.scope === "team" ? " _(team rule)_" : "";
+          return `• [${r.category}] **${r.title}**: ${r.rule}${byline}`;
+        }).join("\n");
         sections.push(`## Your Active Rules & Conventions (${rules.length})\n\n${ruleText}`);
       } else {
         sections.push("## Rules & Conventions\n\nNo rules saved yet. Use save_rule to capture coding conventions.");
@@ -336,19 +574,45 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       }
 
       if (history.length > 0) {
-        const histText = history.map(h =>
-          `• [${timeAgo(h.createdAt)}] **${h.title}** [${h.category}]${h.isMilestone ? " 🏆" : ""}${h.isBlocker ? " 🚫" : ""}`
+        // Repo-matched entries first (metadata.repo / repoName vs registered repos)
+        const matchesRepo = (h: any) => {
+          const repo = h.metadata?.repo ?? h.metadata?.repoName;
+          if (!repo || !repoKeys.length) return false;
+          const key = normalizeRepoKey(String(repo));
+          if (key && repoKeys.includes(key)) return true;
+          return repoNames.some(n => String(repo).toLowerCase().endsWith(n.toLowerCase()));
+        };
+        const sorted = repoKeys.length
+          ? [...history.filter(matchesRepo), ...history.filter(h => !matchesRepo(h))]
+          : history;
+        const histText = sorted.map(h =>
+          `• [${timeAgo(h.createdAt)}] **${h.title}** [${h.category}]${matchesRepo(h) ? " 📦" : ""}${h.isMilestone ? " 🏆" : ""}${h.isBlocker ? " 🚫" : ""}`
         ).join("\n");
         sections.push(`## Recent Work History (last ${days}d)\n\n${histText}`);
       } else {
         sections.push(`## Recent Work History\n\nNo entries in the last ${days} days.`);
       }
 
-      if (recentCowork.length > 0) {
-        const cwText = recentCowork.map(s =>
-          `• [${timeAgo(s.createdAt)}] **${s.title}** — ${s.summary?.slice(0, 100) ?? ""}${s.isShared ? " 🌐" : ""}`
-        ).join("\n");
-        sections.push(`## Recent Cowork Sessions\n\n${cwText}\n\nUse search or list_cowork to explore further.`);
+      const fmtSession = (s: any) =>
+        `• [${timeAgo(s.createdAt)}] **${s.title}**` +
+        (s.repos?.length ? ` (${describeRepos(s.repos)})` : "") +
+        ` — ${s.summary?.slice(0, 100) ?? ""}${s.isShared ? " 🌐" : ""}\n  → get_cowork("${s._id}")`;
+
+      const resumableId = resumable?._id?.toString();
+      const repoCoworkRest = repoCowork.filter(s => s._id.toString() !== resumableId);
+      if (repoCoworkRest.length > 0) {
+        sections.push(
+          `## Cowork Sessions In These Repos (${repoCoworkRest.length})\n\n` +
+          repoCoworkRest.map(fmtSession).join("\n") +
+          `\n\nRead the relevant ones before starting — a past session may already cover this work.`
+        );
+      }
+
+      const repoIds = new Set(repoCowork.map(s => s._id.toString()));
+      const otherCowork = recentCowork.filter(s => !repoIds.has(s._id.toString()) && s._id.toString() !== resumableId);
+      if (otherCowork.length > 0) {
+        const label = repoCowork.length > 0 ? "Other Recent Cowork Sessions" : "Recent Cowork Sessions";
+        sections.push(`## ${label}\n\n${otherCowork.map(fmtSession).join("\n")}\n\nUse search or list_cowork to explore further.`);
       }
 
       sections.push("---\n**Tip**: Use recall_context(query) for semantic search across all your memory.");
@@ -367,8 +631,11 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       query: z.string().min(1).describe("Natural language query — e.g. 'how did we fix the auth bug last week'"),
       days:  z.number().int().optional().describe("Limit to memories from the last N days"),
       limit: z.number().int().min(1).max(20).default(8).describe("Max results"),
+      repos: z.array(z.string()).optional().describe(
+        "Git remote URLs of the repos you're working in — sessions touching them rank higher (soft boost, never a hard filter)"),
     },
-    async ({ query, days, limit }) => {
+    async ({ query, days, limit, repos }) => {
+      const repoKeys = toRepoKeys(repos);
       const hints = parseQueryHints(query, { days });
       const effectiveDays = hints.days ?? days;
       const since = effectiveDays ? new Date(Date.now() - effectiveDays * 86_400_000) : undefined;
@@ -381,24 +648,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       // ── Cowork search ─────────────────────────────────────
       // Hints are soft ranking boosts, never hard filters (a wrong guess must
-      // not hide relevant results). NOTE: in-memory cosine over a recency
-      // window — swap for Atlas $vectorSearch when the corpus outgrows this.
+      // not hide relevant results). Uses Atlas $vectorSearch when
+      // OPERIUM_VECTOR_INDEX is configured, in-memory cosine otherwise.
       const chunkFilter: any = { $or: [{ userId: uid }, sharedScope] };
-
-      const chunks = await CoworkChunk.find(chunkFilter)
-        .sort({ createdAt: -1 })
-        .limit(500)
-        .select("sessionId text sessionTitle sessionSource sessionIntent sessionOutcome embedding userId createdAt")
-        .lean();
 
       let scoredChunks: any[];
       if (queryEmbedding) {
-        scoredChunks = chunks
-          .filter(c => Array.isArray(c.embedding) && c.embedding.length > 0)
-          .map(c => ({ ...c, _sim: cosine(queryEmbedding, c.embedding!) }))
-          .filter(c => c._sim > 0.6)
-          .sort((a, b) => b._sim - a._sim)
-          .slice(0, limit * 2);
+        scoredChunks = await findSimilarChunks(CoworkChunk, queryEmbedding, { k: limit * 2, minSim: 0.6 });
       } else {
         // Fallback: text search
         const textResults = await CoworkChunk.find({
@@ -431,7 +687,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             const meta = sessionMap.get(s._id.toString())!;
             const hintBoost =
               (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
-              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0);
+              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0) +
+              (repoKeys.length && (s.repos ?? []).some((r: any) => repoKeys.includes(r.repoKey)) ? 0.08 : 0) +
+              fileHintBoost(hints.files, s.filesTouched);
             const score = compositeScore({
               relevance: (meta.sim || 0.5) + hintBoost,
               createdAt: s.createdAt,
@@ -486,6 +744,102 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // recall_error — "has a teammate hit this exact bug?"
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "recall_error",
+    "Check whether you or a teammate already hit a specific error. Paste the raw error/stack trace — volatile parts (line numbers, addresses, timestamps) " +
+    "are stripped before matching, and sessions with intent bug-fix / outcome fixed rank first. Call this BEFORE debugging any non-obvious error.",
+    {
+      errorText: z.string().min(1).describe("The raw error message or stack trace, pasted as-is"),
+      repos:     z.array(z.string()).optional().describe(
+        "Git remote URLs you're working in — sessions touching them rank higher (soft boost)"),
+      limit:     z.number().int().min(1).max(10).default(5),
+    },
+    async ({ errorText, repos, limit }) => {
+      const { CoworkChunk, CoworkSession } = await db();
+      const uid = ctx.userId;
+      const repoKeys = toRepoKeys(repos);
+      const sig = errorSignature(errorText);
+      const normalized = normalizeErrorText(errorText);
+
+      const chunkFilter: any = { $or: [{ userId: uid }, sharedScope] };
+
+      // Pass 1 — literal text search on the distilled signature (error codes
+      // and identifiers match textually far better than semantically)
+      const textHits: any[] = await CoworkChunk.find(
+        { ...chunkFilter, $text: { $search: sig } },
+        { score: { $meta: "textScore" } },
+      )
+        .sort({ score: { $meta: "textScore" } })
+        .limit(limit * 3)
+        .select("sessionId text sessionTitle sessionIntent sessionOutcome userId createdAt")
+        .lean()
+        .catch(() => []);
+
+      // Pass 2 — embedding search on the normalized error (catches paraphrased
+      // summaries: "fixed the undefined map crash in history service")
+      const queryEmbedding = await embedText(normalized.slice(0, 2000));
+      const semanticHits: any[] = queryEmbedding
+        ? await findSimilarChunks(CoworkChunk, queryEmbedding, { k: limit * 3, minSim: 0.55 })
+        : [];
+
+      // Merge, keeping the best evidence per session
+      const bySession = new Map<string, { chunk: any; score: number }>();
+      for (const c of textHits) {
+        const sid = c.sessionId.toString();
+        const score = 0.7; // literal match on error text is strong evidence
+        if (!bySession.has(sid) || bySession.get(sid)!.score < score) bySession.set(sid, { chunk: c, score });
+      }
+      for (const c of semanticHits) {
+        const sid = c.sessionId.toString();
+        const score = c._sim * 0.8;
+        if (!bySession.has(sid) || bySession.get(sid)!.score < score) bySession.set(sid, { chunk: c, score });
+      }
+
+      if (bySession.size === 0) {
+        return { content: [{ type: "text" as const, text: `No one has recorded this error yet. If you fix it, save_chat with intent "bug-fix" so the next person finds it.` }] };
+      }
+
+      const sessions = await CoworkSession.find({ _id: { $in: [...bySession.keys()] } })
+        .populate("userId", "name").lean();
+
+      const scored = sessions.map((s: any) => {
+        const meta = bySession.get(s._id.toString())!;
+        // Hard boosts: bug-fix sessions and resolved outcomes are what the
+        // caller wants; repo match is a soft nudge
+        const boost =
+          (s.intent === "bug-fix" ? 0.15 : 0) +
+          (s.outcome === "fixed" ? 0.12 : s.outcome === "blocked" ? 0.06 : 0) +
+          (repoKeys.length && (s.repos ?? []).some((r: any) => repoKeys.includes(r.repoKey)) ? 0.08 : 0);
+        return { s, meta, score: meta.score + boost };
+      }).sort((a, b) => b.score - a.score).slice(0, limit);
+
+      const fixedCount   = scored.filter(x => x.s.outcome === "fixed" || x.s.outcome === "implemented").length;
+      const blockedCount = scored.filter(x => x.s.outcome === "blocked").length;
+
+      const header =
+        `## Prior Encounters (${scored.length})` +
+        (fixedCount ? ` · ✅ ${fixedCount} fixed` : "") +
+        (blockedCount ? ` · 🚫 ${blockedCount} still blocked` : "");
+
+      const text = scored.map(({ s, meta }, i) => {
+        const who = (s.userId as any)?.name ?? "Unknown";
+        const own = ((s.userId as any)?._id ?? s.userId)?.toString() === uid;
+        return `### ${i + 1}. ${s.title}\n` +
+          `👤 ${own ? "you" : who} · 📅 ${timeAgo(s.createdAt)}` +
+          (s.intent ? ` · 🎯 ${s.intent}` : "") +
+          (s.outcome ? ` · ${s.outcome === "fixed" || s.outcome === "implemented" ? "✅" : s.outcome === "blocked" ? "🚫" : "◽"} ${s.outcome}` : " · not finalized") +
+          (s.repos?.length ? ` · 📦 ${describeRepos(s.repos)}` : "") + "\n" +
+          `💬 ${snippet(meta.chunk.text, 300)}\n` +
+          `→ get_cowork("${s._id}")`;
+      }).join("\n\n---\n\n");
+
+      return { content: [{ type: "text" as const, text: `${header}\n\n${text}` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // search (full semantic search)
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
@@ -520,18 +874,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         if (intent)  chunkFilter.sessionIntent  = intent;
         if (outcome) chunkFilter.sessionOutcome = outcome;
 
-        const chunks = await CoworkChunk.find(chunkFilter)
-          .sort({ createdAt: -1 }).limit(500)
-          .select("sessionId text sessionTitle embedding userId createdAt sessionIntent sessionOutcome")
-          .lean();
-
         let ranked: any[];
         if (queryEmbedding) {
-          ranked = chunks
-            .filter(c => Array.isArray(c.embedding) && c.embedding.length > 0)
-            .map(c => ({ ...c, _sim: cosine(queryEmbedding, c.embedding!) }))
-            .filter(c => c._sim > 0.55)
-            .sort((a, b) => b._sim - a._sim);
+          ranked = await findSimilarChunks(CoworkChunk, queryEmbedding, { k: limit * 3, minSim: 0.55, intent, outcome });
         } else {
           ranked = await CoworkChunk.find({ ...chunkFilter, $text: { $search: query } }, { score: { $meta: "textScore" } })
             .sort({ score: { $meta: "textScore" } }).limit(limit * 3).lean().catch(() => []);
@@ -555,7 +900,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             const meta = sessionMap.get(s._id.toString()) ?? { sim: 0.5, text: "" };
             const hintBoost =
               (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
-              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0);
+              (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0) +
+              fileHintBoost(hints.files, s.filesTouched);
             return {
               s, meta,
               score: compositeScore({
@@ -584,14 +930,30 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       }
 
       // ── Notes ─────────────────────────────────────────────
-      // NoteBlock has no embeddings, so this is always a text search.
+      // Semantic pass first (blocks embedded by the background worker),
+      // text/regex fallback for unembedded content.
       if (scope === "all" || scope === "notes") {
-        let topBlocks: any[] = await NoteBlock.find(
-          { userId: uid, $text: { $search: query } },
-          { score: { $meta: "textScore" } }
-        )
-          .sort({ score: { $meta: "textScore" } }).limit(10)
-          .select("noteId content").lean().catch(() => []);
+        let topBlocks: any[] = [];
+
+        if (queryEmbedding) {
+          const embedded = await NoteBlock.find({ userId: uid, embedding: { $exists: true, $ne: [] } })
+            .sort({ createdAt: -1 }).limit(500)
+            .select("noteId content embedding").lean();
+          topBlocks = embedded
+            .map((b: any) => ({ ...b, _sim: cosine(queryEmbedding, b.embedding) }))
+            .filter((b: any) => b._sim > 0.55)
+            .sort((a: any, b: any) => b._sim - a._sim)
+            .slice(0, 10);
+        }
+
+        if (topBlocks.length === 0) {
+          topBlocks = await NoteBlock.find(
+            { userId: uid, $text: { $search: query } },
+            { score: { $meta: "textScore" } }
+          )
+            .sort({ score: { $meta: "textScore" } }).limit(10)
+            .select("noteId content").lean().catch(() => []);
+        }
 
         if (topBlocks.length === 0) {
           const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -729,13 +1091,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       tags:         z.array(z.string()).default([]),
       sessionId:    z.string().optional().describe("Pass previous sessionId to append chunks to that session"),
       filesTouched: z.array(z.string()).default([]),
-      branch:       z.string().optional(),
-      commitSha:    z.string().optional(),
-      repoUrl:      z.string().optional(),
+      repos:        z.array(z.object(repoRefShape)).optional().describe(
+        "Every git repo this work touches — one entry per repo (or per worktree branch). " +
+        "Work spanning multiple repos MUST list them all; pass the same repos on every checkpoint."),
+      branch:       z.string().optional().describe("DEPRECATED — use repos[]"),
+      commitSha:    z.string().optional().describe("DEPRECATED — use repos[]"),
+      repoUrl:      z.string().optional().describe("DEPRECATED — use repos[]"),
     },
-    async ({ source, title, finding, intent, outcome, tags, sessionId, filesTouched, branch, commitSha, repoUrl }) => {
+    async ({ source, title, finding, intent, outcome, tags, sessionId, filesTouched, repos, branch, commitSha, repoUrl }) => {
       const { CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
+
+      const incomingRepos = collectRepoRefs(repos, { repoUrl, branch, commitSha });
 
       let session: any;
       if (sessionId) {
@@ -752,18 +1119,27 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           tags,
           isShared: true,
           intent, outcome,
-          filesTouched, branch, commitSha, repoUrl,
+          filesTouched,
+          repos: incomingRepos,
+          ...legacyRepoFields(incomingRepos),
         });
       } else {
         // Update metadata if new info
         const upd: any = { updatedAt: new Date() };
         if (intent && !session.intent)    upd.intent    = intent;
         if (outcome && !session.outcome)  upd.outcome   = outcome;
+        if (incomingRepos.length) {
+          const merged = mergeRepoLists(session.repos ?? [], incomingRepos);
+          upd.repos = merged;
+          Object.assign(upd, legacyRepoFields(merged));
+        }
         if (filesTouched.length) upd.$addToSet = { filesTouched: { $each: filesTouched }, tags: { $each: tags } };
         await CoworkSession.updateOne({ _id: session._id }, upd);
+        session = await CoworkSession.findById(session._id);
       }
 
       // Chunk the finding (markdown-aware: never splits inside a code fence)
+      const sessionRepoKeys = repoKeysOf(session.repos);
       const chunks = splitMarkdownChunks(finding);
       const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
       const chunkDocs = chunks.map((text, i) => ({
@@ -778,10 +1154,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         sessionSource: source,
         sessionIntent:  intent ?? session.intent,
         sessionOutcome: outcome ?? session.outcome,
+        repoKeys:       sessionRepoKeys,
         embeddingDirty: true,
       }));
 
       await CoworkChunk.insertMany(chunkDocs);
+      // A repo added mid-session must reach earlier chunks too
+      if (sessionRepoKeys) {
+        await CoworkChunk.updateMany(
+          { sessionId: session._id },
+          { $set: { repoKeys: sessionRepoKeys } },
+        );
+      }
       embedDirtyChunks(session._id, title, source);
 
       const nudge = markdownQualityNudge(finding);
@@ -790,6 +1174,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           type: "text" as const,
           text:
             `✅ Checkpoint saved (${chunks.length} chunk${chunks.length > 1 ? "s" : ""}) — session ${session._id}.\n` +
+            (session.repos?.length ? `📦 Repos: ${describeRepos(session.repos)}\n` : "") +
             (nudge ? `\n${nudge}\n` : "") +
             `\nKeep going — checkpoint again after your next significant finding.\n` +
             `When the session ends, finalize with:\n` +
@@ -818,22 +1203,36 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       tags:         z.array(z.string()).default([]),
       sessionId:    z.string().optional().describe("Pass sessionId from checkpoint_cowork to finalize that session"),
       filesTouched: z.array(z.string()).default([]),
-      branch:       z.string().optional(),
-      repoUrl:      z.string().optional(),
+      repos:        z.array(z.object(repoRefShape)).optional().describe(
+        "Every git repo this work touched — one entry per repo (or per worktree branch), " +
+        "with its final branch/commitSha/prUrl."),
+      branch:       z.string().optional().describe("DEPRECATED — use repos[]"),
+      repoUrl:      z.string().optional().describe("DEPRECATED — use repos[]"),
     },
-    async ({ title, summary, source, intent, outcome, tags, sessionId, filesTouched, branch, repoUrl }) => {
+    async ({ title, summary, source, intent, outcome, tags, sessionId, filesTouched, repos, branch, repoUrl }) => {
       const { CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
+
+      const incomingRepos = collectRepoRefs(repos, { repoUrl, branch });
 
       let session: any;
       let finalized = false;
       if (sessionId) {
-        session = await CoworkSession.findOneAndUpdate(
-          { _id: sessionId, userId: uid },
-          { title, summary, intent, outcome, $addToSet: { tags: { $each: tags }, filesTouched: { $each: filesTouched } }, branch, repoUrl },
-          { new: true },
-        );
-        finalized = !!session;
+        const existing = await CoworkSession.findOne({ _id: sessionId, userId: uid }).lean();
+        if (existing) {
+          const merged = mergeRepoLists((existing.repos ?? []) as NormalizedRepoRef[], incomingRepos);
+          session = await CoworkSession.findOneAndUpdate(
+            { _id: sessionId, userId: uid },
+            {
+              title, summary, intent, outcome,
+              $addToSet: { tags: { $each: tags }, filesTouched: { $each: filesTouched } },
+              repos: merged,
+              ...legacyRepoFields(merged),
+            },
+            { new: true },
+          );
+          finalized = !!session;
+        }
       }
 
       if (!session) {
@@ -842,7 +1241,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           orgId: ctx.orgId ?? undefined,
           source: source as any,
           title, summary, tags, isShared: true,
-          intent, outcome, filesTouched, branch, repoUrl,
+          intent, outcome, filesTouched,
+          repos: incomingRepos,
+          ...legacyRepoFields(incomingRepos),
         });
       }
 
@@ -852,14 +1253,23 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       await CoworkChunk.deleteMany({ sessionId: session._id, kind: "summary" });
       const startOrder = await CoworkChunk.countDocuments({ sessionId: session._id });
       const summaryChunks = splitMarkdownChunks(summary);
+      const sessionRepoKeys = repoKeysOf(session.repos);
       await CoworkChunk.insertMany(summaryChunks.map((text, i) => ({
         sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: true,
         kind: "summary" as const,
         order: startOrder + i, text,
         sessionTitle: title, sessionSource: session.source,
         sessionIntent: intent ?? session.intent, sessionOutcome: outcome ?? session.outcome,
+        repoKeys: sessionRepoKeys,
         embeddingDirty: true,
       })));
+      // Keep checkpoint chunks' repo tags in sync with the final repo list
+      if (sessionRepoKeys) {
+        await CoworkChunk.updateMany(
+          { sessionId: session._id },
+          { $set: { repoKeys: sessionRepoKeys } },
+        );
+      }
       embedDirtyChunks(session._id, title, session.source);
 
       const nudge = markdownQualityNudge(summary);
@@ -868,6 +1278,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           type: "text" as const,
           text:
             `✅ Session ${finalized ? "finalized" : "saved"}: "${title}" (${session._id})\n` +
+            (session.repos?.length ? `📦 Repos: ${describeRepos(session.repos)}\n` : "") +
             `${summaryChunks.length} summary chunk${summaryChunks.length !== 1 ? "s" : ""} indexed for team search.` +
             `${intent ? `\n🎯 Intent: ${intent}` : ""}${outcome ? `\n✅ Outcome: ${outcome}` : ""}${tags.length ? `\n🏷️ Tags: ${tags.join(", ")}` : ""}` +
             (nudge ? `\n\n${nudge}` : "") +
@@ -887,10 +1298,11 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       scope:   z.enum(["all","personal","team"]).default("all"),
       intent:  z.string().optional(),
       tag:     z.string().optional(),
+      repo:    z.string().optional().describe("Only sessions touching this repo (remote URL or host/owner/name)"),
       days:    z.number().int().optional(),
       limit:   z.number().int().min(1).max(50).default(15),
     },
-    async ({ scope, intent, tag, days, limit }) => {
+    async ({ scope, intent, tag, repo, days, limit }) => {
       const { CoworkSession } = await db();
       const uid = ctx.userId;
 
@@ -901,11 +1313,16 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       if (intent) filter.intent = intent;
       if (tag)    filter.tags   = { $in: [tag] };
+      if (repo) {
+        const key = normalizeRepoKey(repo);
+        if (!key) return { content: [{ type: "text" as const, text: `Could not parse repo reference: ${repo}` }] };
+        filter["repos.repoKey"] = key;
+      }
       if (days)   filter.createdAt = { $gte: new Date(Date.now() - days * 86_400_000) };
 
       const sessions = await CoworkSession.find(filter)
         .sort({ createdAt: -1 }).limit(limit)
-        .select("title summary tags intent outcome source isShared createdAt helpfulCount useCount")
+        .select("title summary tags intent outcome source isShared createdAt helpfulCount useCount repos")
         .lean();
 
       if (sessions.length === 0) {
@@ -916,6 +1333,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         `${i + 1}. **${s.title}** [${s.source}] · ${timeAgo(s.createdAt)}` +
         (s.intent ? ` · 🎯 ${s.intent}` : "") +
         (s.outcome ? ` · ✅ ${s.outcome}` : "") + "\n" +
+        (s.repos?.length ? `   📦 ${describeRepos(s.repos)}\n` : "") +
         (s.tags?.length ? `   🏷️ ${s.tags.join(", ")}\n` : "") +
         `   ${s.summary?.slice(0, 120) ?? ""}...\n   ID: ${s._id}`
       ).join("\n\n");
@@ -956,6 +1374,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         `🛠️ ${session.source} · 📅 ${timeAgo(session.createdAt)}` +
         (session.intent ? ` · 🎯 ${session.intent}` : "") +
         (session.outcome ? ` · ✅ ${session.outcome}` : "") + "\n" +
+        (session.repos?.length
+          ? `📦 ${session.repos.map(r =>
+              `\`${r.repoKey}\`${r.branch ? ` @ ${r.branch}` : ""}${r.prUrl ? ` · PR: ${r.prUrl}` : ""}`
+            ).join(" · ")}\n` : "") +
         (session.tags?.length ? `🏷️ ${session.tags.join(", ")}\n\n` : "\n") +
         `## Summary\n\n${session.summary}\n\n` +
         (session.filesTouched?.length ? `## Files Touched\n\n${session.filesTouched.map(f => `- ${f}`).join("\n")}\n\n` : "") +
@@ -1301,31 +1723,54 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "save_rule",
-    "Save a coding convention, architectural decision, or workflow preference. Rules are loaded at startup and guide every session.",
+    "Save a coding convention, architectural decision, or workflow preference. Rules are loaded at startup and guide every session. " +
+    "Pass `repos` when the convention only applies to specific repositories (e.g. 'this repo uses npm') — repo-scoped rules load only when working in those repos. " +
+    "Pass scope='team' to share the rule with every member of your org (their agents load it at startup too).",
     {
       title:    z.string().min(1).max(200),
       rule:     z.string().min(1).describe(
         "The convention as ONE imperative sentence (e.g. 'Always use pnpm, never npm'), optionally followed by a short Markdown example — a ```lang fenced before/after snippet. Keep it directly actionable; it is injected into every future session."),
       category: z.enum(["coding","communication","workflow","architecture","testing","general"]).default("general"),
+      scope:    z.enum(["personal","team"]).default("personal").describe(
+        "'personal' = only you. 'team' = every org member's agent loads this rule at startup — use for shared conventions like 'we use pnpm'."),
       tags:     z.array(z.string()).default([]),
+      repos:    z.array(z.string()).optional().describe(
+        "Git remote URLs the rule is scoped to. Omit for global rules that apply everywhere."),
     },
-    async ({ title, rule, category, tags }) => {
+    async ({ title, rule, category, scope, tags, repos }) => {
       const { ContextRule } = await db();
+      if (scope === "team" && !ctx.orgId) {
+        return { content: [{ type: "text" as const, text: "⚠️ Cannot save a team rule: you are not a member of an organisation. Saved nothing — retry with scope='personal' or join an org first." }] };
+      }
+      const repoKeys = toRepoKeys(repos);
+      const scoped = repoKeys.length > 0;
       const existing = await ContextRule.findOne({ userId: ctx.userId, title });
 
       if (existing) {
-        await ContextRule.updateOne({ _id: existing._id }, { rule, category, tags, isActive: true });
+        await ContextRule.updateOne(
+          { _id: existing._id },
+          {
+            rule, category, tags, isActive: true, scope,
+            ...(scope === "team" ? { orgId: ctx.orgId! } : {}),
+            ...(repos !== undefined ? { repoKeys: scoped ? repoKeys : undefined } : {}),
+          },
+        );
         const tip = rule.includes("`") ? "" : "\n\nTip: rules render as Markdown — a fenced before/after example makes them easier to apply.";
-        return { content: [{ type: "text" as const, text: `✅ Rule updated: "${title}"${tip}` }] };
+        return { content: [{ type: "text" as const, text: `✅ Rule updated: "${title}"${scope === "team" ? " (shared with your team)" : ""}${scoped ? ` (scoped to ${repoKeys.join(", ")})` : ""}${tip}` }] };
       }
 
       const saved = await ContextRule.create({
-        userId: ctx.userId, title, rule, category, tags, source: "manual",
+        userId: ctx.userId, title, rule, category, tags, source: "manual", scope,
+        ...(scope === "team" ? { orgId: ctx.orgId! } : {}),
+        ...(scoped ? { repoKeys } : {}),
       });
       return {
         content: [{
           type: "text" as const,
-          text: `✅ Rule saved.\n\nID: ${saved._id}\nTitle: ${title}\nCategory: ${category}\n\nThis rule will be loaded in all future sessions.`,
+          text: `✅ Rule saved.\n\nID: ${saved._id}\nTitle: ${title}\nCategory: ${category}` +
+            `\nSharing: ${scope === "team" ? "team — every org member's agent loads it" : "personal"}` +
+            (scoped ? `\nScope: ${repoKeys.join(", ")}` : "\nScope: global") +
+            `\n\nThis rule will be loaded in ${scoped ? "sessions working in those repos" : "all future sessions"}.`,
         }],
       };
     },
@@ -1336,26 +1781,37 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "list_rules",
-    "List your saved rules and conventions.",
+    "List your saved rules and conventions, plus team rules shared by org members.",
     {
       category: z.string().optional(),
       activeOnly: z.boolean().default(true),
+      scope: z.enum(["personal","team","all"]).default("all").describe(
+        "'personal' = only your rules; 'team' = only org-shared rules; 'all' = both."),
     },
-    async ({ category, activeOnly }) => {
+    async ({ category, activeOnly, scope }) => {
       const { ContextRule } = await db();
-      const filter: any = { userId: ctx.userId };
+      const filter: any = {};
+      if (scope === "personal")      filter.userId = ctx.userId;
+      else if (scope === "team")     Object.assign(filter, ctx.orgId ? { orgId: ctx.orgId, scope: "team" } : { userId: ctx.userId, scope: "team" });
+      else filter.$or = [{ userId: ctx.userId }, ...(ctx.orgId ? [{ orgId: ctx.orgId, scope: "team" }] : [])];
       if (activeOnly) filter.isActive = true;
       if (category)   filter.category = category;
 
-      const rules = await ContextRule.find(filter).sort({ timesApplied: -1, createdAt: -1 }).lean();
+      const rules = await ContextRule.find(filter).sort({ timesApplied: -1, createdAt: -1 })
+        .populate("userId", "name").lean();
       if (rules.length === 0) {
         return { content: [{ type: "text" as const, text: "No rules saved yet." }] };
       }
-      const text = rules.map(r =>
-        `### [${r.category}] ${r.title}\n${r.rule}` +
-        (r.tags?.length ? `\n🏷️ ${r.tags.join(", ")}` : "") +
-        `\nID: ${r._id}`
-      ).join("\n\n---\n\n");
+      const text = rules.map((r: any) => {
+        const ruleUid = (r.userId?._id ?? r.userId)?.toString();
+        const byline = r.scope === "team"
+          ? (ruleUid === ctx.userId ? "\n👥 Team rule (yours)" : `\n👥 Team rule by ${r.userId?.name ?? "a teammate"}`)
+          : "";
+        return `### [${r.category}] ${r.title}\n${r.rule}` + byline +
+          (r.repoKeys?.length ? `\n📦 Scoped to: ${r.repoKeys.join(", ")}` : "") +
+          (r.tags?.length ? `\n🏷️ ${r.tags.join(", ")}` : "") +
+          `\nID: ${r._id}`;
+      }).join("\n\n---\n\n");
       return { content: [{ type: "text" as const, text: `## Your Rules (${rules.length})\n\n${text}` }] };
     },
   );
@@ -1365,22 +1821,40 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "learn_correction",
-    "Save a correction as a rule so the same mistake isn't repeated. Call when the user corrects your behavior.",
+    "Save a correction as a rule so the same mistake isn't repeated. Call when the user corrects your behavior. " +
+    "Pass `repos` when the correction only applies to specific repositories. Pass scope='team' if the correction applies to everyone in the org.",
     {
       title:      z.string().min(1).max(200),
       correction: z.string().min(1).describe("What to do differently in the future"),
       category:   z.enum(["coding","communication","workflow","architecture","testing","general"]).default("general"),
+      scope:      z.enum(["personal","team"]).default("personal").describe(
+        "'personal' = only you. 'team' = every org member's agent loads this correction."),
+      repos:      z.array(z.string()).optional().describe(
+        "Git remote URLs the correction is scoped to. Omit for corrections that apply everywhere."),
     },
-    async ({ title, correction, category }) => {
+    async ({ title, correction, category, scope, repos }) => {
       const { ContextRule } = await db();
+      if (scope === "team" && !ctx.orgId) {
+        return { content: [{ type: "text" as const, text: "⚠️ Cannot save a team correction: you are not a member of an organisation. Saved nothing — retry with scope='personal'." }] };
+      }
+      const repoKeys = toRepoKeys(repos);
       const rule = `Correction: ${correction}`;
       const existing = await ContextRule.findOne({ userId: ctx.userId, title });
 
       if (existing) {
-        await ContextRule.updateOne({ _id: existing._id }, { rule, isActive: true });
+        await ContextRule.updateOne(
+          { _id: existing._id },
+          {
+            rule, isActive: true, scope,
+            ...(scope === "team" ? { orgId: ctx.orgId! } : {}),
+            ...(repos !== undefined ? { repoKeys: repoKeys.length ? repoKeys : undefined } : {}),
+          },
+        );
       } else {
         await ContextRule.create({
-          userId: ctx.userId, title, rule, category, source: "learned",
+          userId: ctx.userId, title, rule, category, source: "learned", scope,
+          ...(scope === "team" ? { orgId: ctx.orgId! } : {}),
+          ...(repoKeys.length ? { repoKeys } : {}),
         });
       }
 
@@ -1441,6 +1915,456 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         }).join("\n\n");
 
       return { content: [{ type: "text" as const, text: `## Experts in "${topic}"\n\n${text}` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // repo_context — repo/file briefing: sessions, experts, rules, recent git activity
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "repo_context",
+    "Briefing for a repository (optionally a specific file): who worked on it and when, relevant past sessions, repo-scoped rules, and recent commits/PRs. " +
+    "Call before diving into an unfamiliar repo or file — it answers 'who touched this before and what did they learn?'",
+    {
+      repo:  z.string().min(1).describe("Git remote URL or repoKey, any spelling"),
+      file:  z.string().optional().describe("A file path to focus on — sessions touching it rank first"),
+      topic: z.string().optional().describe("Optional topic/area to focus the session ranking (e.g. 'auth', 'billing')"),
+      limit: z.number().int().min(1).max(15).default(6),
+    },
+    async ({ repo, file, topic, limit }) => {
+      const { CoworkSession, ContextRule, WorkHistory } = await db();
+      const uid = ctx.userId;
+      const repoKey = normalizeRepoKey(repo);
+      if (!repoKey) {
+        return { content: [{ type: "text" as const, text: `Could not parse "${repo}" as a repository URL.` }] };
+      }
+      const repoName = repoKey.split("/").pop()!;
+
+      const topicTags = topic ? parseQueryHints(topic, {}).tags : [];
+
+      const [sessions, rules, gitActivity] = await Promise.all([
+        CoworkSession.find({
+          $or: [{ userId: uid }, sharedScope],
+          "repos.repoKey": repoKey,
+        } as any)
+          .sort({ createdAt: -1 }).limit(60)
+          .populate("userId", "name").lean(),
+        // Repo-scoped rules: own + team, matching this repoKey
+        ContextRule.find({
+          isActive: true,
+          repoKeys: repoKey,
+          $or: [{ userId: uid }, ...(ctx.orgId ? [{ orgId: ctx.orgId, scope: "team" }] : [])],
+        } as any).sort({ timesApplied: -1 }).limit(10).lean(),
+        // Recent synced commits/PRs mentioning this repo (own history only —
+        // teammates' WorkHistory is not shared)
+        WorkHistory.find({
+          userId: uid,
+          $or: [{ "metadata.repo": repoName }, { "metadata.repo": { $regex: `^${repoName}$`, $options: "i" } }],
+        })
+          .sort({ createdAt: -1 }).limit(8).lean(),
+      ]);
+
+      if (sessions.length === 0 && rules.length === 0 && gitActivity.length === 0) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `No Operium data for \`${repoKey}\` yet.\n\nPass this repo in \`repos\` to get_startup_context / checkpoint_cowork / save_chat so future sessions build its history.`,
+          }],
+        };
+      }
+
+      // Rank sessions: file match > topic tag match > recency (via compositeScore)
+      const base = (p: string) => p.split("/").pop()!.toLowerCase();
+      const fileBase = file ? base(file) : null;
+      const rankedSessions = sessions.map((s: any) => {
+        const touchesFile = fileBase && (s.filesTouched ?? []).some((p: string) => base(p) === fileBase);
+        const tagMatch = topicTags.length && (s.tags ?? []).some((t: string) => topicTags.includes(t));
+        const score = compositeScore({
+          relevance: 0.5 + (touchesFile ? 0.3 : 0) + (tagMatch ? 0.1 : 0),
+          createdAt: s.createdAt,
+          helpfulCount: s.helpfulCount,
+          notHelpfulCount: s.notHelpfulCount,
+          useCount: s.useCount,
+        });
+        return { s, score, touchesFile };
+      }).sort((a, b) => b.score - a.score);
+
+      const sections: string[] = [];
+      const webUrl = repoWebUrl(repoKey);
+      sections.push(`# Repo Briefing: \`${repoKey}\`${webUrl ? `\n${webUrl}` : ""}${file ? `\nFocus file: \`${file}\`` : ""}`);
+
+      // ── Experts: who has real session history here ──
+      const expertise = new Map<string, { name: string; count: number; latest: Date; fileCount: number }>();
+      for (const { s, touchesFile } of rankedSessions) {
+        const author = s.userId as any;
+        const key = (author?._id ?? s.userId).toString();
+        if (!expertise.has(key)) {
+          expertise.set(key, { name: author?.name ?? "Unknown", count: 0, latest: s.createdAt, fileCount: 0 });
+        }
+        const e = expertise.get(key)!;
+        e.count++;
+        if (touchesFile) e.fileCount++;
+        if (s.createdAt > e.latest) e.latest = s.createdAt;
+      }
+      const experts = [...expertise.entries()]
+        .sort((a, b) => (b[1].fileCount - a[1].fileCount) || (b[1].count - a[1].count))
+        .slice(0, 5);
+      if (experts.length) {
+        sections.push(`## Who Knows This ${file ? "File" : "Repo"}\n\n` + experts.map(([id, e], i) =>
+          `${i + 1}. **${id === uid ? "You" : e.name}** — ${e.count} session${e.count !== 1 ? "s" : ""}` +
+          (fileBase ? ` (${e.fileCount} touching \`${fileBase}\`)` : "") +
+          ` · last ${timeAgo(e.latest)}`
+        ).join("\n"));
+      }
+
+      // ── Rules scoped to this repo ──
+      if (rules.length) {
+        sections.push(`## Rules For This Repo (${rules.length})\n\n` +
+          rules.map((r: any) => `• [${r.category}] **${r.title}**: ${r.rule}${r.scope === "team" ? " _(team)_" : ""}`).join("\n"));
+      }
+
+      // ── Top sessions ──
+      if (rankedSessions.length) {
+        const top = rankedSessions.slice(0, limit);
+        sections.push(`## Relevant Sessions (${top.length} of ${sessions.length})\n\n` +
+          top.map(({ s, touchesFile }, i) => {
+            const author = (s.userId as any);
+            const own = (author?._id ?? s.userId).toString() === uid;
+            const branchRef = (s.repos ?? []).find((r: any) => r.repoKey === repoKey);
+            const link = branchRef?.branch ? branchWebUrl(repoKey, branchRef.branch) : null;
+            return `### ${i + 1}. ${s.title}${touchesFile ? " 📌" : ""}\n` +
+              `👤 ${own ? "you" : author?.name ?? "Unknown"} · 📅 ${timeAgo(s.createdAt)}` +
+              (s.intent ? ` · 🎯 ${s.intent}` : "") +
+              (s.outcome ? ` · ${s.outcome}` : "") +
+              (branchRef?.branch ? ` · 🌿 ${branchRef.branch}` : "") + "\n" +
+              (s.tags?.length ? `🏷️ ${s.tags.slice(0, 8).join(", ")}\n` : "") +
+              (link ? `${link}\n` : "") +
+              `→ get_cowork("${s._id}")`;
+          }).join("\n\n---\n\n"));
+      }
+
+      // ── Recent git activity (from synced history) ──
+      if (gitActivity.length) {
+        sections.push(`## Your Recent Git Activity Here (${gitActivity.length})\n\n` +
+          gitActivity.map((h: any) => {
+            const pr = h.metadata?.prLink ? ` · [PR](${h.metadata.prLink})${h.metadata.prStatus ? ` (${h.metadata.prStatus})` : ""}` : "";
+            return `• [${timeAgo(h.createdAt)}] **${h.title}**${pr}${h.description ? `\n  ${snippet(h.description, 120)}` : ""}`;
+          }).join("\n"));
+      }
+
+      return { content: [{ type: "text" as const, text: sections.join("\n\n") }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // sync_git — pull fresh GitHub/Azure activity into work history
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "sync_git",
+    "Pull fresh commit/PR activity from the user's connected GitHub and Azure DevOps accounts into their Operium work history. " +
+    "Call before generate_standup or pr_context when the history might be stale. Respects a per-provider cooldown.",
+    {
+      full: z.boolean().default(false).describe("true = deep sync (90 days); false = incremental (last few days)"),
+    },
+    async ({ full }) => {
+      if (!ctx.syncGitFn) {
+        return { content: [{ type: "text" as const, text: "Git sync is not available on this transport — sync from the Operium web app instead (History → Integrations)." }] };
+      }
+      const results = await ctx.syncGitFn(full);
+      const lines: string[] = [];
+      for (const [provider, r] of Object.entries(results)) {
+        if (r?.error) lines.push(`• **${provider}**: ⚠️ ${r.error}`);
+        else if (r?.synced !== undefined) {
+          lines.push(`• **${provider}**: ✅ ${r.synced} item${r.synced !== 1 ? "s" : ""} synced${r.cleaned ? `, ${r.cleaned} stale removed` : ""}${r.login ? ` (as ${r.login})` : ""}`);
+        } else {
+          lines.push(`• **${provider}**: ${JSON.stringify(r)}`);
+        }
+      }
+      return { content: [{ type: "text" as const, text: `## Git Sync ${full ? "(full)" : "(incremental)"}\n\n${lines.join("\n")}` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // generate_standup — Yesterday / Today / Blockers from all four data sources
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "generate_standup",
+    "Generate a standup digest (Yesterday / Today / Blockers) from your work history (incl. synced commits & PRs), cowork sessions, open tasks, " +
+    "and current-sprint Azure Boards items assigned to you. Optionally save it as a history entry. Tip: call sync_git first for fresh git data.",
+    {
+      days: z.number().int().min(1).max(7).default(1).describe("How many days back counts as 'yesterday' (use 3 after a weekend)"),
+      save: z.boolean().default(false).describe("Save the digest as a WorkHistory entry (category 'Daily Standup')"),
+    },
+    async ({ days, save }) => {
+      const { WorkHistory, CoworkSession, Task } = await db();
+      const uid = ctx.userId;
+      const since = new Date(Date.now() - days * 86_400_000);
+
+      const [history, sessions, openTasks] = await Promise.all([
+        WorkHistory.find({ userId: uid, createdAt: { $gte: since }, category: { $ne: "Daily Standup" } })
+          .sort({ createdAt: -1 }).limit(30).lean(),
+        CoworkSession.find({ userId: uid, updatedAt: { $gte: since } })
+          .sort({ updatedAt: -1 }).limit(10).lean(),
+        Task.find({ $or: [{ userId: uid }, { assigneeId: uid }], status: { $in: ["todo", "in_progress"] } })
+          .sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
+      ]);
+
+      // Current-sprint board items assigned to me (best-effort — skip silently
+      // when Azure is not connected or identity doesn't resolve)
+      let sprintItems: BoardItem[] = [];
+      let sprintName = "";
+      try {
+        const bc = await boardsClient();
+        if (bc) {
+          const { client, org, pat } = bc;
+          const projectRes = await resolveProject(client);
+          if (typeof projectRes === "string") {
+            const teamRes = await resolveTeam(client, projectRes);
+            if (typeof teamRes === "string") {
+              const iterations = await client.listIterations(projectRes, teamRes);
+              const current = iterations.find(it => it.timeFrame === "current");
+              const identity = await resolveMyAzureIdentity(org, pat);
+              if (current && identity) {
+                sprintName = current.name;
+                sprintItems = await client.queryWorkItems({
+                  project: projectRes,
+                  iterationPath: current.path,
+                  assignedTo: identity,
+                  includeCompleted: false,
+                });
+              }
+            }
+          }
+        }
+      } catch { /* boards unavailable — standup still works from the other sources */ }
+
+      // ── Yesterday ──
+      const yesterday: string[] = [];
+      for (const s of sessions) {
+        yesterday.push(`- ${s.title}${s.outcome ? ` (${s.outcome})` : " (in progress)"}${s.repos?.length ? ` — ${describeRepos(s.repos)}` : ""}`);
+      }
+      const sessionTitles = new Set(sessions.map((s: any) => s.title.toLowerCase()));
+      for (const h of history) {
+        // Skip history entries that duplicate a session already listed
+        if (sessionTitles.has(h.title.toLowerCase())) continue;
+        const pr = (h.metadata as any)?.prStatus ? ` [PR ${(h.metadata as any).prStatus}]` : "";
+        yesterday.push(`- ${h.title}${pr}`);
+      }
+
+      // ── Today ──
+      const today: string[] = [];
+      for (const it of sprintItems.slice(0, 8)) {
+        today.push(`- #${it.id} [${it.type}] ${it.title} — ${it.state}${sprintName ? ` {${sprintName}}` : ""}`);
+      }
+      for (const t of openTasks.slice(0, 8 - Math.min(today.length, 6))) {
+        today.push(`- ${t.title} (${t.status}, ${t.priority})`);
+      }
+
+      // ── Blockers ──
+      const blockers: string[] = [];
+      for (const s of sessions.filter((s: any) => s.outcome === "blocked")) {
+        blockers.push(`- ${s.title} — see get_cowork("${s._id}")`);
+      }
+      for (const h of history.filter((h: any) => h.isBlocker)) {
+        blockers.push(`- ${h.title}`);
+      }
+
+      const md =
+        `# Standup — ${new Date().toLocaleDateString("en-GB")}\n\n` +
+        `## Yesterday\n${yesterday.length ? yesterday.join("\n") : "- (nothing recorded — try sync_git for fresh git activity)"}\n\n` +
+        `## Today\n${today.length ? today.join("\n") : "- (no open tasks or sprint items found)"}\n\n` +
+        `## Blockers\n${blockers.length ? blockers.join("\n") : "- None"}`;
+
+      let savedNote = "";
+      if (save) {
+        const mongoose = (await import("mongoose")).default;
+        await WorkHistory.create({
+          userId: new mongoose.Types.ObjectId(uid),
+          title: `Standup — ${new Date().toLocaleDateString("en-GB")}`,
+          description: md,
+          category: "Daily Standup",
+          type: "simple",
+          source: "manual",
+          isMilestone: false, isBlocker: false, isImportant: false, isOngoing: false,
+        });
+        savedNote = "\n\n✅ Saved to work history (category: Daily Standup).";
+      }
+
+      return { content: [{ type: "text" as const, text: md + savedNote }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // pr_context — the "why" behind a pull request
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "pr_context",
+    "Find the cowork session(s) and work-history entries behind a pull request or branch — the decisions and gotchas the diff can't show. " +
+    "Use when reviewing a teammate's PR or revisiting an old one. Pass a PR URL, or a branch name (+ repo).",
+    {
+      prUrl:  z.string().optional().describe("Full PR URL (GitHub or Azure DevOps)"),
+      branch: z.string().optional().describe("Branch name — used when no prUrl, or to find sibling sessions"),
+      repo:   z.string().optional().describe("Git remote URL or repoKey to scope branch matching"),
+      limit:  z.number().int().min(1).max(10).default(5),
+    },
+    async ({ prUrl, branch, repo, limit }) => {
+      if (!prUrl && !branch) {
+        return { content: [{ type: "text" as const, text: "Pass prUrl or branch (+ repo)." }] };
+      }
+      const { CoworkSession, WorkHistory } = await db();
+      const uid = ctx.userId;
+      const repoKey = repo ? normalizeRepoKey(repo) : null;
+      const visibility = { $or: [{ userId: uid }, sharedScope] };
+
+      // Sessions producing this PR — match repos[].prUrl and legacy prUrl
+      const prMatch: any[] = [];
+      if (prUrl) {
+        const escaped = prUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\/+$/, "");
+        prMatch.push(
+          { "repos.prUrl": { $regex: `^${escaped}/?$`, $options: "i" } },
+          { prUrl: { $regex: `^${escaped}/?$`, $options: "i" } },
+        );
+      }
+      if (branch) {
+        prMatch.push(
+          repoKey
+            ? { repos: { $elemMatch: { repoKey, branch } } }
+            : { $or: [{ "repos.branch": branch }, { branch }] },
+        );
+      }
+
+      const sessions = await CoworkSession.find({ $and: [visibility, { $or: prMatch }] } as any)
+        .sort({ updatedAt: -1 }).limit(limit)
+        .populate("userId", "name").lean();
+
+      // Work-history PR entry (own history)
+      const histOr: any[] = [];
+      if (prUrl)  histOr.push({ "metadata.prLink": prUrl });
+      if (branch) histOr.push({ "metadata.sourceBranch": branch });
+      const histEntries = histOr.length
+        ? await WorkHistory.find({ userId: uid, $or: histOr }).sort({ createdAt: -1 }).limit(3).lean()
+        : [];
+
+      if (sessions.length === 0 && histEntries.length === 0) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `No sessions or history found for ${prUrl ?? `branch \`${branch}\``}.` +
+              `\n\nSessions link to PRs when save_chat is called with \`repos\` including \`prUrl\` — encourage that at PR-open time.`,
+          }],
+        };
+      }
+
+      const sections: string[] = [`# PR Context: ${prUrl ?? `\`${branch}\``}`];
+
+      if (histEntries.length) {
+        sections.push(`## PR Status (from work history)\n\n` + histEntries.map((h: any) => {
+          const m = h.metadata ?? {};
+          return `• **${h.title}**${m.prStatus ? ` — ${m.prStatus}` : ""}` +
+            (m.sourceBranch ? ` · \`${m.sourceBranch}\`${m.targetBranch ? ` → \`${m.targetBranch}\`` : ""}` : "") +
+            (m.prLink ? `\n  ${m.prLink}` : "");
+        }).join("\n"));
+      }
+
+      if (sessions.length) {
+        sections.push(`## Sessions Behind This Work (${sessions.length})\n\n` + sessions.map((s: any, i: number) => {
+          const author = s.userId as any;
+          const own = (author?._id ?? s.userId).toString() === uid;
+          return `### ${i + 1}. ${s.title}\n` +
+            `👤 ${own ? "you" : author?.name ?? "Unknown"} · 📅 ${timeAgo(s.createdAt)}` +
+            (s.intent ? ` · 🎯 ${s.intent}` : "") + (s.outcome ? ` · ${s.outcome}` : "") + "\n" +
+            `💬 ${snippet(s.summary ?? "", 250)}\n` +
+            `→ get_cowork("${s._id}")`;
+        }).join("\n\n---\n\n"));
+      }
+
+      return { content: [{ type: "text" as const, text: sections.join("\n\n") }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // handoff_session — pass work to a teammate with full context
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "handoff_session",
+    "Hand an unfinished session to a teammate: appends a Handoff note to the session, creates a task assigned to them that links back to it, " +
+    "and marks the session as partial. The teammate's agent surfaces it automatically at their next session start.",
+    {
+      sessionId: z.string().min(1).describe("The cowork session to hand off (yours)"),
+      toEmail:   z.string().min(3).describe("Teammate's email — must be a member of your org"),
+      note:      z.string().min(1).describe(
+        "Handoff note in Markdown: current state, what remains, gotchas, where to start. Written for someone with zero context."),
+    },
+    async ({ sessionId, toEmail, note }) => {
+      const { CoworkSession, CoworkChunk, Task, User, Membership } = await db();
+      const uid = ctx.userId;
+
+      if (!ctx.orgId) {
+        return { content: [{ type: "text" as const, text: "You have no organization — handoff requires an org with teammates." }] };
+      }
+
+      const session: any = await CoworkSession.findOne({ _id: sessionId, userId: uid }).lean();
+      if (!session) {
+        return { content: [{ type: "text" as const, text: `Session not found (or not yours): ${sessionId}` }] };
+      }
+
+      const assignee: any = await User.findOne({ email: toEmail.toLowerCase().trim() }).select("name email").lean();
+      if (!assignee) return { content: [{ type: "text" as const, text: `No user found with email ${toEmail}.` }] };
+      const member = await Membership.findOne({ orgId: ctx.orgId, userId: assignee._id }).lean();
+      if (!member) return { content: [{ type: "text" as const, text: `${toEmail} is not a member of your organization.` }] };
+
+      // 1. Append the handoff as a session chunk (searchable, shows in get_cowork)
+      const handoffMd = `## Handoff → ${assignee.name ?? toEmail}\n\n${note.trim()}`;
+      const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
+      const chunks = splitMarkdownChunks(handoffMd);
+      await CoworkChunk.insertMany(chunks.map((text, i) => ({
+        sessionId:      session._id,
+        userId:         uid,
+        orgId:          ctx.orgId ?? undefined,
+        isShared:       true,
+        kind:           "checkpoint" as const,
+        order:          existingCount + i,
+        text,
+        sessionTitle:   session.title,
+        sessionSource:  session.source,
+        sessionIntent:  session.intent,
+        sessionOutcome: "partial",
+        repoKeys:       repoKeysOf(session.repos),
+        embeddingDirty: true,
+      })));
+      embedDirtyChunks(session._id, session.title, session.source);
+
+      // 2. Mark the session partial + shared so the receiver can read it
+      await CoworkSession.updateOne(
+        { _id: session._id },
+        { outcome: "partial", isShared: true, updatedAt: new Date() },
+      );
+
+      // 3. Task assigned to the teammate, linking back to the session
+      const task = await Task.create({
+        userId: uid,
+        orgId: ctx.orgId,
+        assigneeId: assignee._id,
+        title: `Take over: ${session.title}`,
+        description:
+          `Handoff from a teammate.\n\n${note.trim()}\n\n---\n` +
+          `Full session context: \`get_cowork("${session._id}")\`` +
+          (session.repos?.length ? `\nRepos: ${describeRepos(session.repos)}` : ""),
+        priority: "high",
+        status: "todo",
+        tags: ["handoff"],
+      });
+
+      return {
+        content: [{
+          type: "text" as const,
+          text:
+            `✅ Handed off to **${assignee.name ?? toEmail}**.\n\n` +
+            `• Handoff note appended to session ${session._id}\n` +
+            `• Session marked \`partial\` (their startup context will surface it)\n` +
+            `• Task created and assigned: "Take over: ${session.title}" (ID: ${task._id})`,
+        }],
+      };
     },
   );
 
@@ -1725,7 +2649,16 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     async ({ title }) => {
       const { ContextRule } = await db();
       const doc = await ContextRule.findOneAndUpdate({ userId: ctx.userId, title }, { isActive: false });
-      if (!doc) return { content: [{ type: "text" as const, text: `Rule not found: "${title}" — check list_rules for exact titles.` }] };
+      if (!doc) {
+        // Distinguish "doesn't exist" from "exists but a teammate owns it"
+        const teamRule = ctx.orgId
+          ? await ContextRule.findOne({ orgId: ctx.orgId, scope: "team", title }).populate("userId", "name").lean()
+          : null;
+        if (teamRule) {
+          return { content: [{ type: "text" as const, text: `⛔ "${title}" is a team rule owned by ${(teamRule as any).userId?.name ?? "a teammate"} — only its author can deactivate it.` }] };
+        }
+        return { content: [{ type: "text" as const, text: `Rule not found: "${title}" — check list_rules for exact titles.` }] };
+      }
       return { content: [{ type: "text" as const, text: `🗑️ Rule deactivated: "${title}". It will no longer load at session start.` }] };
     },
   );
