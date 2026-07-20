@@ -5,7 +5,7 @@ import {
   buildPatchOps,
   stripHtml,
   type BoardItem,
-} from "./azureBoards.js";
+} from "./azureBoards";
 
 // ─── test helpers ───────────────────────────────────────────────────────────────
 

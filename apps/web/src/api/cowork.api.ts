@@ -6,6 +6,16 @@ export type CoworkSource  = "antigravity" | "claude-code" | "cursor" | "system";
 export type CoworkIntent  = "bug-fix" | "feature" | "refactor" | "investigation" | "planning" | "review" | "docs";
 export type CoworkOutcome = "fixed" | "implemented" | "explored" | "blocked" | "abandoned" | "partial";
 
+export interface CoworkRepo {
+  repoKey:       string;
+  repoUrl:       string;
+  repoName:      string;
+  branch?:       string;
+  commitSha?:    string;
+  prUrl?:        string;
+  filesTouched?: string[];
+}
+
 export interface CoworkSession {
   _id:            string;
   id:             string;
@@ -19,6 +29,8 @@ export interface CoworkSession {
   outcome?:       CoworkOutcome;
   filesTouched?:  string[];
   languages?:     string[];
+  repos?:         CoworkRepo[];
+  /** Legacy single-repo fields — mirror of repos[0] */
   branch?:        string;
   commitSha?:     string;
   repoUrl?:       string;

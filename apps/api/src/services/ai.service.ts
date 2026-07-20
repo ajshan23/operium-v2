@@ -1,10 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Verified against the live API (Jul 2026): 3.5-flash is the newest stable
+// flash, flash-latest is Google's auto-tracking alias, 2.5-flash still serves,
+// gemma is the free-tier last resort. Preview model ids rot fast — prefer
+// stable ids + the alias so a retired model never takes the cascade down.
 const MODEL_CASCADE = [
-  "gemini-2.5-flash-preview-05-20",
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
   "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
+  "gemma-4-31b-it",
 ] as const;
 
 function isRateLimit(err: any): boolean {
@@ -15,6 +19,22 @@ function isRateLimit(err: any): boolean {
     msg.toLowerCase().includes("quota") ||
     msg.toLowerCase().includes("rate limit") ||
     msg.toLowerCase().includes("resource has been exhausted")
+  );
+}
+
+/** Errors that should advance the cascade instead of failing the request —
+ *  crucially including 404s from retired model ids. */
+function shouldTryNextModel(err: any): boolean {
+  const msg = (err?.message || "").toLowerCase();
+  return (
+    isRateLimit(err) ||
+    err?.status === 404 ||
+    msg.includes("not found") ||
+    msg.includes("404") ||
+    msg.includes("unavailable") ||
+    msg.includes("deprecated") ||
+    msg.includes("not supported") ||
+    msg.includes("invalid argument")
   );
 }
 
@@ -47,7 +67,8 @@ export class AIService {
         const result = await ai.models.generateContent({
           model:    modelName,
           contents: prompt,
-          config:   { thinkingConfig: { thinkingBudget } },
+          // Gemma models reject thinkingConfig
+          ...(modelName.startsWith("gemini") ? { config: { thinkingConfig: { thinkingBudget } } } : {}),
         });
 
         const parts: any[] = result.candidates?.[0]?.content?.parts ?? [];
@@ -60,9 +81,7 @@ export class AIService {
         return stripThinkingBlocks(raw);
       } catch (err: any) {
         lastError = err;
-        if (isRateLimit(err) || err?.message?.includes("unavailable") || err?.message?.includes("deprecated")) {
-          continue;
-        }
+        if (shouldTryNextModel(err)) continue;
         throw err;
       }
     }
@@ -84,10 +103,16 @@ export class AIService {
         const lastMsg = messages[messages.length - 1];
         if (!lastMsg) throw new Error("No messages provided");
 
+        // Gemma rejects systemInstruction — fold the prompt into the history
+        const isGemini = modelName.startsWith("gemini");
         const chat = ai.chats.create({
           model:   modelName,
-          config:  { systemInstruction: systemPrompt },
-          history,
+          ...(isGemini ? { config: { systemInstruction: systemPrompt } } : {}),
+          history: isGemini ? history : [
+            { role: "user",  parts: [{ text: systemPrompt }] },
+            { role: "model", parts: [{ text: "Understood." }] },
+            ...history,
+          ],
         });
         const result = await chat.sendMessage({ message: lastMsg.content });
 
@@ -100,9 +125,7 @@ export class AIService {
         return stripThinkingBlocks(textOnly || result.text || "");
       } catch (err: any) {
         lastError = err;
-        if (isRateLimit(err) || err?.message?.includes("unavailable") || err?.message?.includes("deprecated")) {
-          continue;
-        }
+        if (shouldTryNextModel(err)) continue;
         throw err;
       }
     }

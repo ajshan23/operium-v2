@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk.js";
-import { parseQueryHints } from "./queryHints.js";
+import { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk";
+import { parseQueryHints } from "./queryHints";
 
 const fenceCount = (s: string) => (s.match(/```/g) ?? []).length;
 

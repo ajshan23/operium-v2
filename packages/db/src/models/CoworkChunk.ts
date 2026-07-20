@@ -14,6 +14,9 @@ export interface ICoworkChunk extends Document {
   sessionSource:  string;
   sessionIntent?: string;
   sessionOutcome?:string;
+  /** Denormalized from the session's repos[] so recall can boost/filter
+   *  by repo without a join. */
+  repoKeys?:      string[];
   embedding?:     number[];
   embeddingDirty: boolean;
   embeddingAttempts: number;
@@ -34,6 +37,7 @@ const CoworkChunkSchema = new Schema<ICoworkChunk>(
     sessionSource: { type: String, required: true },
     sessionIntent:  { type: String, index: true },
     sessionOutcome: { type: String, index: true },
+    repoKeys:       { type: [String], default: undefined, index: true },
     embedding:      { type: [Number], default: undefined },
     embeddingDirty: { type: Boolean, default: true },
     embeddingAttempts: { type: Number, default: 0 },

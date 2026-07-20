@@ -46,7 +46,6 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // Client-side greeting
   useEffect(() => {
     const hr = new Date().getHours();
     if (hr < 12) setGreeting("Good morning");
@@ -56,7 +55,6 @@ export default function DashboardPage() {
     if (u) setUserName(u.name || u.email?.split("@")[0] || "there");
   }, []);
 
-  // Load real stats
   useEffect(() => {
     apiClient<{ data: DashboardStats }>("/api/dashboard/stats")
       .then(r => setStats((r as any).data))
@@ -117,16 +115,16 @@ export default function DashboardPage() {
       status: "connected",
       value: `${stats.integrations.mcpToolCount ?? "—"} tools · ${stats.integrations.mcpCallsThisWeek ?? 0} calls this week`,
       icon: Cpu,
-      color: "text-[#22c55e]",
-      dot: "bg-[#22c55e]",
+      color: "text-[var(--success)]",
+      dot: "bg-[var(--success)]",
     },
     {
       name: "Gemini AI",
       status: stats.integrations.gemini ? "connected" : "not configured",
       value: stats.integrations.gemini ? "Embeddings + chat ready" : "Add API key in Settings",
       icon: Sparkles,
-      color: stats.integrations.gemini ? "text-[#22c55e]" : "text-[#f59e0b]",
-      dot: stats.integrations.gemini ? "bg-[#22c55e]" : "bg-[#f59e0b]",
+      color: stats.integrations.gemini ? "text-[var(--success)]" : "text-[var(--warning)]",
+      dot: stats.integrations.gemini ? "bg-[var(--success)]" : "bg-[var(--warning)]",
     },
     {
       name: "GitHub",
@@ -135,8 +133,8 @@ export default function DashboardPage() {
         ? (stats.integrations.githubLastSync ? `Last sync ${timeAgo(stats.integrations.githubLastSync)}` : "Connected")
         : "Link token in Settings",
       icon: Github,
-      color: stats.integrations.github ? "text-[#22c55e]" : "text-[#ef4444]",
-      dot: stats.integrations.github ? "bg-[#22c55e]" : "bg-[#ef4444]",
+      color: stats.integrations.github ? "text-[var(--success)]" : "text-[var(--error)]",
+      dot: stats.integrations.github ? "bg-[var(--success)]" : "bg-[var(--error)]",
     },
     {
       name: "Azure DevOps",
@@ -145,43 +143,43 @@ export default function DashboardPage() {
         ? (stats.integrations.azureLastSync ? `Last sync ${timeAgo(stats.integrations.azureLastSync)}` : "Connected")
         : "Link token in Settings",
       icon: Database,
-      color: stats.integrations.azure ? "text-[#22c55e]" : "text-[#ef4444]",
-      dot: stats.integrations.azure ? "bg-[#22c55e]" : "bg-[#ef4444]",
+      color: stats.integrations.azure ? "text-[var(--success)]" : "text-[var(--error)]",
+      dot: stats.integrations.azure ? "bg-[var(--success)]" : "bg-[var(--error)]",
     },
   ] : [];
 
   const categoryIcon: Record<string, React.ReactNode> = {
-    standup:    <Clock size={14} className="text-[#8b5cf6]" />,
+    standup:    <Clock size={14} className="text-[var(--accent)]" />,
     commit:     <GitBranch size={14} className="text-[#a855f7]" />,
     pr:         <GitBranch size={14} className="text-[#ec4899]" />,
-    deploy:     <CheckSquare size={14} className="text-[#22c55e]" />,
+    deploy:     <CheckSquare size={14} className="text-[var(--success)]" />,
     meeting:    <Activity size={14} className="text-[#3b82f6]" />,
-    incident:   <Bell size={14} className="text-[#ef4444]" />,
-    note:       <FileText size={14} className="text-[#f59e0b]" />,
+    incident:   <Bell size={14} className="text-[var(--error)]" />,
+    note:       <FileText size={14} className="text-[var(--warning)]" />,
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-[#050505] relative select-none">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-[var(--s0)] relative select-none">
 
       {/* ── BACKGROUND GLOWS ── */}
-      <div className="absolute top-[-10%] left-[10%] w-[700px] h-[700px] bg-[radial-gradient(circle,rgba(139,92,246,0.06),transparent_65%)] rounded-full pointer-events-none blur-3xl" />
-      <div className="absolute bottom-[5%] right-[5%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(236,72,153,0.04),transparent_65%)] rounded-full pointer-events-none blur-3xl" />
+      <div className="dash-glow-purple absolute top-[-10%] left-[10%] w-[700px] h-[700px] rounded-full pointer-events-none blur-3xl" />
+      <div className="dash-glow-pink absolute bottom-[5%] right-[5%] w-[600px] h-[600px] rounded-full pointer-events-none blur-3xl" />
 
       {/* ── HEADER ── */}
-      <header className="h-[76px] border-b border-[#1a1a22] flex items-center justify-between px-8 bg-[#050505]/80 backdrop-blur-md shrink-0 z-20 sticky top-0">
+      <header className="h-[76px] border-b border-[var(--border-subtle)] flex items-center justify-between px-8 bg-[var(--s0)] backdrop-blur-md shrink-0 z-20 sticky top-0">
         <div className="flex-1 max-w-[420px]">
           <div className="relative group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#55556a] group-focus-within:text-[#8b5cf6] transition-colors" size={15} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors" size={15} />
             <input
               type="text"
               placeholder="Search across all memory... ⌘K"
-              className="w-full h-[38px] bg-[#0c0c0f]/80 border border-[#23232c] focus:border-[#8b5cf6]/50 rounded-xl pl-10 pr-10 text-[13px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none focus:shadow-[0_0_15px_rgba(139,92,246,0.15)] transition-all"
+              className="w-full h-[38px] bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl pl-10 pr-10 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:shadow-[0_0_15px_rgba(139,92,246,0.15)] transition-all"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-6">
-          <Link href="/notification" className="text-[#63637a] hover:text-[#fafafa] relative p-1.5 rounded-lg hover:bg-[#141418] transition-colors">
+          <Link href="/notification" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] relative p-1.5 rounded-lg hover:bg-[var(--s2)] transition-colors">
             <Bell size={18} />
           </Link>
           <UserMenu />
@@ -192,22 +190,22 @@ export default function DashboardPage() {
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-8 py-8 flex flex-col gap-10 relative z-10">
 
         {/* ── HERO ── */}
-        <section className="relative rounded-3xl border border-[#1a1a22] bg-gradient-to-b from-[#0c0c0f] to-[#070709]/50 p-8 overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f1f2e_1px,transparent_1px),linear-gradient(to_bottom,#1f1f2e_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-[0.07]" />
+        <section className="dash-hero relative rounded-3xl border p-8 overflow-hidden">
+          <div className="dash-hero-grid absolute inset-0 bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
 
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <div className="flex items-center gap-2.5 mb-2">
-                <span className="text-[11px] font-bold text-[#8b5cf6] uppercase tracking-widest bg-[#8b5cf6]/10 px-2.5 py-1 rounded-full border border-[#8b5cf6]/20">MEMORY HUB</span>
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#22c55e]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                <span className="dash-hero-badge text-[11px] font-bold uppercase tracking-widest bg-[rgba(var(--accent-rgb),0.1)] px-2.5 py-1 rounded-full border border-[rgba(var(--accent-rgb),0.2)] text-[var(--accent)]">MEMORY HUB</span>
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--success)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse" />
                   Operium Active
                 </span>
               </div>
-              <h1 className="text-[28px] md:text-[34px] font-extrabold text-[#fafafa] tracking-tight leading-tight">
+              <h1 className="text-[28px] md:text-[34px] font-extrabold text-[var(--text-primary)] tracking-tight leading-tight">
                 {greeting}, {userName}.
               </h1>
-              <p className="text-[14px] text-[#a1a1aa] mt-2 max-w-[600px] leading-relaxed">
+              <p className="text-[14px] text-[var(--text-secondary)] mt-2 max-w-[600px] leading-relaxed">
                 Your persistent AI memory layer. Every decision, fix, and pattern your AI assistants learn — stored, searchable, and always ready.
               </p>
             </div>
@@ -222,9 +220,9 @@ export default function DashboardPage() {
               </Link>
               <Link
                 href="/settings"
-                className="h-[42px] px-5 rounded-xl border border-[#2a2a35] bg-[#0c0c0f]/80 hover:bg-[#141418] text-[13px] font-semibold text-[#fafafa] hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2"
+                className="dash-mcp-btn h-[42px] px-5 rounded-xl border border-[var(--border-default)] bg-[var(--s1)] hover:bg-[var(--s2)] text-[13px] font-semibold text-[var(--text-primary)] hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2"
               >
-                <Cpu size={15} className="text-[#8b5cf6]" />
+                <Cpu size={15} className="text-[var(--accent)]" />
                 <span>MCP Setup</span>
               </Link>
             </div>
@@ -233,7 +231,7 @@ export default function DashboardPage() {
 
         {/* ── QUICK ACTIONS ── */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-[14px] font-bold text-[#63637a] tracking-wider uppercase">Quick Actions</h2>
+          <h2 className="text-[14px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Quick Actions</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {quickLaunch.map((item, idx) => {
               const Icon = item.icon;
@@ -241,18 +239,18 @@ export default function DashboardPage() {
                 <Link
                   key={idx}
                   href={item.href}
-                  className="group bg-[#0c0c0f]/60 hover:bg-[#120e20]/30 border border-[#1e1e24] hover:border-[#8b5cf6]/40 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(139,92,246,0.06)]"
+                  className="group bg-[var(--s1)] hover:bg-[var(--s2)] border border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(139,92,246,0.06)]"
                 >
                   <div className="w-full h-full p-5 flex flex-col items-start justify-between min-h-[120px]">
                     <div className={`p-2.5 rounded-xl bg-gradient-to-br ${item.color} shadow-lg ${item.shadow} text-white transition-transform duration-300 group-hover:scale-110`}>
                       <Icon size={18} />
                     </div>
                     <div className="mt-4 w-full">
-                      <h3 className="text-[14px] font-semibold text-[#fafafa] flex items-center gap-1.5 group-hover:text-[#8b5cf6] transition-colors">
+                      <h3 className="text-[14px] font-semibold text-[var(--text-primary)] flex items-center gap-1.5 group-hover:text-[var(--accent)] transition-colors">
                         {item.title}
-                        <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300 text-[#8b5cf6]" />
+                        <ArrowRight size={12} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300 text-[var(--accent)]" />
                       </h3>
-                      <p className="text-[11px] text-[#63637a] mt-1 line-clamp-1 leading-snug">{item.description}</p>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-1 line-clamp-1 leading-snug">{item.description}</p>
                     </div>
                   </div>
                 </Link>
@@ -264,18 +262,18 @@ export default function DashboardPage() {
         {/* ── WORKSPACE METRICS ── */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {workspaceStats.map((stat, idx) => (
-            <Link key={idx} href={stat.href} className="block bg-[#0c0c0f]/40 border border-[#1a1a22] rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:border-[#2a2a35] transition-all duration-300 hover:-translate-y-0.5">
+            <Link key={idx} href={stat.href} className="block bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl p-5 flex items-start gap-4 shadow-sm hover:border-[var(--border-default)] transition-all duration-300 hover:-translate-y-0.5">
               <div className="flex flex-col flex-1">
-                <span className="text-[11px] font-bold text-[#63637a] tracking-wider uppercase">{stat.label}</span>
+                <span className="text-[11px] font-bold text-[var(--text-muted)] tracking-wider uppercase">{stat.label}</span>
                 <div className="flex items-baseline gap-2 mt-2">
                   {statsLoading ? (
-                    <Loader2 size={16} className="animate-spin text-[#55556a] mt-1" />
+                    <Loader2 size={16} className="animate-spin text-[var(--text-muted)] mt-1" />
                   ) : (
-                    <span className="text-[20px] font-extrabold text-[#fafafa] tracking-tight">{stat.value}</span>
+                    <span className="text-[20px] font-extrabold text-[var(--text-primary)] tracking-tight">{stat.value}</span>
                   )}
                   <span className={`w-2 h-2 rounded-full ${stat.glowColor} animate-pulse`} />
                 </div>
-                <span className="text-[11px] text-[#55556a] mt-1 leading-snug">{stat.sub}</span>
+                <span className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">{stat.sub}</span>
               </div>
             </Link>
           ))}
@@ -287,42 +285,42 @@ export default function DashboardPage() {
           {/* Recent Activity */}
           <div className="lg:col-span-2 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-[14px] font-bold text-[#63637a] tracking-wider uppercase">Recent Activity</h2>
-              <Link href="/history" className="text-[12px] font-semibold text-[#8b5cf6] hover:text-[#fafafa] flex items-center gap-1.5 group transition-colors">
+              <h2 className="text-[14px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Recent Activity</h2>
+              <Link href="/history" className="text-[12px] font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] flex items-center gap-1.5 group transition-colors">
                 <span>View all history</span>
                 <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
 
-            <div className="bg-[#0c0c0f]/40 border border-[#1a1a22] rounded-2xl p-6 relative">
+            <div className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl p-6 relative">
               {statsLoading ? (
-                <div className="flex items-center justify-center gap-2 text-[#55556a] py-10">
-                  <Loader2 size={16} className="animate-spin text-[#8b5cf6]" />
+                <div className="flex items-center justify-center gap-2 text-[var(--text-muted)] py-10">
+                  <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
                   <span className="text-[12px] font-mono">Loading activity…</span>
                 </div>
               ) : stats?.recentHistory && stats.recentHistory.length > 0 ? (
                 <>
-                  <div className="absolute left-[37px] top-8 bottom-8 w-[1.5px] bg-[#1a1a22]" />
+                  <div className="absolute left-[37px] top-8 bottom-8 w-[1.5px] bg-[var(--border-subtle)]" />
                   <div className="flex flex-col gap-6 relative">
                     {stats.recentHistory.map((entry) => (
                       <div key={entry._id} className="flex items-start gap-4 relative z-10 group">
-                        <div className="w-8 h-8 rounded-full bg-[#0c0c0f] border border-[#8b5cf6]/40 text-[#8b5cf6] bg-[#120e20] flex items-center justify-center shrink-0">
-                          {categoryIcon[entry.category] ?? <Activity size={13} className="text-[#8b5cf6]" />}
+                        <div className="w-8 h-8 rounded-full bg-[var(--s1)] border border-[rgba(var(--accent-rgb),0.4)] text-[var(--accent)] flex items-center justify-center shrink-0">
+                          {categoryIcon[entry.category] ?? <Activity size={13} className="text-[var(--accent)]" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-4">
-                            <h4 className="text-[13px] font-bold text-[#fafafa] truncate">{entry.title}</h4>
-                            <span className="text-[10px] text-[#63637a] shrink-0 font-medium">{timeAgo(entry.createdAt)}</span>
+                            <h4 className="text-[13px] font-bold text-[var(--text-primary)] truncate">{entry.title}</h4>
+                            <span className="text-[10px] text-[var(--text-muted)] shrink-0 font-medium">{timeAgo(entry.createdAt)}</span>
                           </div>
                           {entry.summary && (
-                            <p className="text-[12px] text-[#a1a1aa] mt-1 line-clamp-1">{entry.summary}</p>
+                            <p className="text-[12px] text-[var(--text-secondary)] mt-1 line-clamp-1">{entry.summary}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#1e1e24] bg-[#141418]/60 text-[#63637a] font-mono capitalize">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--s2)] text-[var(--text-muted)] font-mono capitalize">
                               {entry.category}
                             </span>
                             {entry.isMilestone && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#8b5cf6]/30 bg-[#8b5cf6]/10 text-[#a78bfa] font-mono">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded border border-[rgba(var(--accent-rgb),0.3)] bg-[rgba(var(--accent-rgb),0.1)] text-[#a78bfa] font-mono">
                                 milestone
                               </span>
                             )}
@@ -334,11 +332,11 @@ export default function DashboardPage() {
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
-                  <Activity className="w-10 h-10 text-[#2a2a35] mb-3" />
-                  <p className="text-[13px] font-bold text-[#fafafa] mb-1">No activity yet</p>
-                  <p className="text-[11px] text-[#63637a] max-w-xs">
+                  <Activity className="w-10 h-10 text-[var(--border-default)] mb-3" />
+                  <p className="text-[13px] font-bold text-[var(--text-primary)] mb-1">No activity yet</p>
+                  <p className="text-[11px] text-[var(--text-muted)] max-w-xs">
                     Sync GitHub or Azure DevOps in{" "}
-                    <Link href="/history" className="text-[#8b5cf6] hover:underline">History</Link>{" "}
+                    <Link href="/history" className="text-[var(--accent)] hover:underline">History</Link>{" "}
                     to see your work timeline here.
                   </p>
                 </div>
@@ -349,28 +347,28 @@ export default function DashboardPage() {
           {/* Integration Health */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-[14px] font-bold text-[#63637a] tracking-wider uppercase">Integrations</h2>
-              <Link href="/settings" className="text-[#63637a] hover:text-[#fafafa] transition-colors p-1 hover:bg-[#141418] rounded-lg">
+              <h2 className="text-[14px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Integrations</h2>
+              <Link href="/settings" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors p-1 hover:bg-[var(--s2)] rounded-lg">
                 <RefreshCw size={14} />
               </Link>
             </div>
 
-            <div className="bg-[#0c0c0f]/40 border border-[#1a1a22] rounded-2xl p-6 flex flex-col gap-5">
+            <div className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl p-6 flex flex-col gap-5">
               {statsLoading ? (
-                <div className="flex items-center justify-center gap-2 text-[#55556a] py-4">
-                  <Loader2 size={14} className="animate-spin text-[#8b5cf6]" />
+                <div className="flex items-center justify-center gap-2 text-[var(--text-muted)] py-4">
+                  <Loader2 size={14} className="animate-spin text-[var(--accent)]" />
                 </div>
               ) : integrationHealth.map((api, idx) => {
                 const Icon = api.icon;
                 return (
-                  <div key={idx} className="flex items-center justify-between gap-4 border-b border-[#1a1a22]/40 last:border-0 pb-3.5 last:pb-0">
+                  <div key={idx} className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] last:border-0 pb-3.5 last:pb-0">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-[#141418] border border-[#2a2a35] flex items-center justify-center text-[#a1a1aa] shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-[var(--s2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-secondary)] shrink-0">
                         <Icon size={15} />
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-[13px] font-semibold text-[#fafafa] truncate">{api.name}</h4>
-                        <span className="text-[11px] text-[#63637a] truncate block">{api.value}</span>
+                        <h4 className="text-[13px] font-semibold text-[var(--text-primary)] truncate">{api.name}</h4>
+                        <span className="text-[11px] text-[var(--text-muted)] truncate block">{api.value}</span>
                       </div>
                     </div>
                     <div className={`flex items-center gap-1.5 text-[11px] font-semibold ${api.color} shrink-0`}>
@@ -383,9 +381,9 @@ export default function DashboardPage() {
 
               <Link
                 href="/settings"
-                className="mt-1 w-full h-[34px] rounded-xl border border-[#2a2a35] hover:border-[#8b5cf6]/40 bg-[#120e20]/10 hover:bg-[#120e20]/30 text-[11px] font-semibold text-[#63637a] hover:text-[#fafafa] flex items-center justify-center gap-1.5 transition-all"
+                className="mt-1 w-full h-[34px] rounded-xl border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.4)] bg-[var(--s2)] hover:bg-[var(--s2)] text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] flex items-center justify-center gap-1.5 transition-all"
               >
-                <Cpu size={12} className="text-[#8b5cf6]" />
+                <Cpu size={12} className="text-[var(--accent)]" />
                 Manage Integrations
               </Link>
             </div>

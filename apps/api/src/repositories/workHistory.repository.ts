@@ -36,11 +36,32 @@ export class WorkHistoryRepository {
   }
 
   async upsertByExternalId(userId: string, externalId: string, insertData: object, setData?: object) {
+    // MongoDB rejects an update where the same path (or an ancestor of a
+    // dotted path, e.g. `metadata` vs `metadata.prStatus`) appears in both
+    // $setOnInsert and $set. Resolve overlaps in favour of $set — it applies
+    // on insert too — expanding conflicting object roots one level so the
+    // non-conflicting subfields still land on first insert.
+    const setPaths = new Set(Object.keys(setData ?? {}));
+    const setRoots = new Set([...setPaths].map(p => p.split(".")[0]));
+
+    const setOnInsert: Record<string, any> = {};
+    for (const [key, value] of Object.entries(insertData)) {
+      if (!setRoots.has(key)) { setOnInsert[key] = value; continue; }
+      if (setPaths.has(key)) continue; // exact overlap — $set wins
+      if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+        for (const [sub, subValue] of Object.entries(value)) {
+          const path = `${key}.${sub}`;
+          if (!setPaths.has(path)) setOnInsert[path] = subValue;
+        }
+      }
+      // conflicting non-object values are covered by $set — nothing to keep
+    }
+
     return WorkHistory.updateOne(
       { userId: new mongoose.Types.ObjectId(userId), externalId },
       {
-        $setOnInsert: insertData,
-        ...(setData ? { $set: setData } : {}),
+        ...(Object.keys(setOnInsert).length ? { $setOnInsert: setOnInsert } : {}),
+        ...(setData && setPaths.size ? { $set: setData } : {}),
       },
       { upsert: true }
     );

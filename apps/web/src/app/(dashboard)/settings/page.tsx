@@ -8,6 +8,15 @@ import {
 } from "lucide-react";
 import { historyApi } from "@/api/history.api";
 import { getUser } from "@/lib/auth";
+import { MCP_TOOL_NAMES, MCP_TOOL_COUNT, MCP_TOOL_GROUPS } from "@operium/shared";
+
+// Grouped tool list for display; anything not in a group renders under "Other"
+// so newly added tools never silently disappear from this screen.
+const mcpToolGroups = (() => {
+  const grouped = new Set(MCP_TOOL_GROUPS.flatMap(g => g.tools as readonly string[]));
+  const other = MCP_TOOL_NAMES.filter(t => !grouped.has(t));
+  return other.length ? [...MCP_TOOL_GROUPS, { label: "Other", tools: other }] : MCP_TOOL_GROUPS;
+})();
 
 const GithubIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -451,12 +460,27 @@ export default function SettingsPage() {
               <p className="text-[10px] text-[#63637a]">Authentication uses your session token automatically. Make sure Operium API is running on port 4000.</p>
             </div>
             <div className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4">
-              <p className="text-[12px] font-semibold text-[#fafafa] mb-2">Available MCP Tools</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {["get_startup_context", "recall_context", "search", "checkpoint_cowork", "save_chat", "create_history", "list_history", "save_rule", "list_rules", "learn_correction", "list_cowork", "get_cowork", "related_cowork", "cowork_digest", "list_spaces", "list_notes", "get_note", "create_note", "save_plan", "search_notes", "get_experts"].map(tool => (
-                  <span key={tool} className="text-[10px] font-mono text-[#8b5cf6] bg-[#8b5cf6]/5 px-2 py-0.5 rounded border border-[#8b5cf6]/10">{tool}</span>
+              <p className="text-[12px] font-semibold text-[#fafafa] mb-3">
+                Available MCP Tools
+                <span className="ml-2 text-[10px] font-mono text-[#63637a] bg-[#1a1a22] px-1.5 py-0.5 rounded">{MCP_TOOL_COUNT}</span>
+              </p>
+              <div className="space-y-3">
+                {mcpToolGroups.map(group => (
+                  <div key={group.label}>
+                    <p className="text-[10px] font-bold text-[#63637a] uppercase tracking-wider mb-1.5">{group.label}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {group.tools.map(tool => (
+                        <span key={tool} className="text-[10px] font-mono text-[#8b5cf6] bg-[#8b5cf6]/5 px-2 py-0.5 rounded border border-[#8b5cf6]/10">{tool}</span>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
+              <p className="text-[10px] text-[#63637a] mt-3">
+                Sessions are repo-aware: agents register every git repo in the workspace at startup, and saved
+                sessions, rules, and recall are scoped/boosted by repo. Azure Boards tools read and write live
+                work items when a DevOps token is configured below.
+              </p>
             </div>
           </div>
         </div>

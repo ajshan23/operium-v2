@@ -11,6 +11,27 @@ export interface QueryHints {
   outcome?: string;
   days?: number;
   tags: string[];
+  /** File paths/names mentioned in the query ("client.ts", "src/api/client.ts") */
+  files: string[];
+}
+
+// Extensions that make a dotted token read as a source file (avoids "3.14",
+// "e.g.", "node.js"-as-prose false hits staying cheapish — err on inclusion).
+const FILE_EXTENSIONS = new Set([
+  "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "java", "kt", "rb",
+  "php", "cs", "cpp", "cc", "c", "h", "hpp", "swift", "scala", "css", "scss",
+  "less", "html", "vue", "svelte", "json", "yml", "yaml", "toml", "md", "sql",
+  "sh", "bash", "zsh", "env", "tf", "proto", "graphql", "prisma",
+]);
+
+/** Extract file-looking tokens from a query, case preserved. */
+export function extractFileHints(query: string): string[] {
+  const out = new Set<string>();
+  for (const m of query.matchAll(/[\w@.-]+(?:\/[\w@.-]+)*\.([A-Za-z]{1,8})\b/g)) {
+    const ext = m[1]!.toLowerCase();
+    if (FILE_EXTENSIONS.has(ext)) out.add(m[0]!);
+  }
+  return [...out];
 }
 
 export interface ExplicitFilters {
@@ -22,7 +43,7 @@ export interface ExplicitFilters {
 
 export function parseQueryHints(query: string, explicit: ExplicitFilters = {}): QueryHints {
   const q = query.toLowerCase();
-  const hints: QueryHints = { tags: [] };
+  const hints: QueryHints = { tags: [], files: extractFileHints(query) };
 
   if (!explicit.intent) {
     if (/\b(fix|fixed|bug|broke|crash|error|issue|debug)\b/.test(q)) hints.intent = "bug-fix";

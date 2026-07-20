@@ -6,11 +6,12 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   ArrowLeft, Bot, Code2, TerminalSquare, ShieldCheck, User, Calendar,
-  Trash2, Loader2, ChevronDown, ChevronRight, GitBranch, GitCommit,
-  ThumbsUp, ThumbsDown, Link2, AlertTriangle, X, Send, Sparkles, MessageSquare,
+  Trash2, Loader2, ChevronDown, ChevronRight, GitBranch, GitCommit, GitPullRequest,
+  ThumbsUp, ThumbsDown, AlertTriangle, X, Send, Sparkles, MessageSquare,
 } from "lucide-react";
 import { coworkApi } from "@/api/cowork.api";
 import type { CoworkSession, CoworkChunk } from "@/api/cowork.api";
+import { repoWebUrl, branchWebUrl, commitWebUrl } from "@operium/core/repoLinks";
 
 const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ssr: false });
 
@@ -32,7 +33,6 @@ export default function CoworkDetailPage() {
 
   const [session,         setSession]         = useState<CoworkSession | null>(null);
   const [chunks,          setChunks]          = useState<CoworkChunk[]>([]);
-  const [related,         setRelated]         = useState<CoworkSession[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState<string | null>(null);
   const [showChunks,      setShowChunks]      = useState(true);
@@ -66,11 +66,6 @@ export default function CoworkDetailPage() {
         setChunks(c);
         setHelpfulCount(s.helpfulCount);
         setNotHelpfulCount(s.notHelpfulCount);
-
-        // Load related in background
-        coworkApi.related(id, 4).then(r => {
-          setRelated(((r as any).data?.related ?? []) as CoworkSession[]);
-        }).catch(() => {});
       } catch (err: any) {
         setError(err.message || "Failed to load session");
       }
@@ -220,22 +215,70 @@ export default function CoworkDetailPage() {
               </span>
               <span>•</span>
               <span className={`capitalize ${sourceData.textClass}`}>{sourceData.label}</span>
-              {session.branch && (
+              {session.repos?.length ? (
+                session.repos.map(r => {
+                  const branchHref = r.branch ? branchWebUrl(r.repoKey, r.branch) : repoWebUrl(r.repoKey);
+                  const commitHref = r.commitSha ? commitWebUrl(r.repoKey, r.commitSha) : null;
+                  const label = r.branch ? `${r.repoName}@${r.branch}` : r.repoName;
+                  return (
+                    <React.Fragment key={`${r.repoKey}-${r.branch ?? ""}`}>
+                      <span>•</span>
+                      {branchHref ? (
+                        <a href={branchHref} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 font-mono text-[#a855f7] hover:text-[#c4b5fd] hover:underline transition-colors" title={r.repoKey}>
+                          <GitBranch size={11} />
+                          <span>{label}</span>
+                        </a>
+                      ) : (
+                        <span className="flex items-center gap-1 font-mono text-[#a855f7]" title={r.repoKey}>
+                          <GitBranch size={11} />
+                          <span>{label}</span>
+                        </span>
+                      )}
+                      {r.commitSha && (
+                        commitHref ? (
+                          <a href={commitHref} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 font-mono text-slate-400 hover:text-slate-200 hover:underline transition-colors">
+                            <GitCommit size={11} />
+                            <span>{r.commitSha.substring(0, 7)}</span>
+                          </a>
+                        ) : (
+                          <span className="flex items-center gap-1 font-mono text-slate-400">
+                            <GitCommit size={11} />
+                            <span>{r.commitSha.substring(0, 7)}</span>
+                          </span>
+                        )
+                      )}
+                      {r.prUrl && (
+                        <a href={r.prUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 font-mono text-[#22c55e] hover:text-[#4ade80] hover:underline transition-colors">
+                          <GitPullRequest size={11} />
+                          <span>PR</span>
+                        </a>
+                      )}
+                    </React.Fragment>
+                  );
+                })
+              ) : (
                 <>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 font-mono text-[#a855f7]">
-                    <GitBranch size={11} />
-                    <span>{session.branch}</span>
-                  </span>
-                </>
-              )}
-              {session.commitSha && (
-                <>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 font-mono text-slate-400">
-                    <GitCommit size={11} />
-                    <span>{session.commitSha.substring(0, 7)}</span>
-                  </span>
+                  {session.branch && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 font-mono text-[#a855f7]">
+                        <GitBranch size={11} />
+                        <span>{session.branch}</span>
+                      </span>
+                    </>
+                  )}
+                  {session.commitSha && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 font-mono text-slate-400">
+                        <GitCommit size={11} />
+                        <span>{session.commitSha.substring(0, 7)}</span>
+                      </span>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -319,36 +362,6 @@ export default function CoworkDetailPage() {
           </div>
         </div>
 
-        {/* Related Sessions */}
-        {related.length > 0 && (
-          <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-6">
-            <h2 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#55556a] mb-4">
-              <Link2 size={12} className="text-[#8b5cf6]" />
-              <span>Related Sessions</span>
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {related.slice(0, 4).map(r => (
-                <Link
-                  key={r._id || r.id}
-                  href={`/cowork/${r._id || r.id}`}
-                  className="bg-[#0c0c0f]/50 border border-[#1e1e24] rounded-xl p-4 hover:border-[#8b5cf6]/40 transition-colors group cursor-pointer"
-                >
-                  <span className="text-[13px] font-bold text-[#fafafa] group-hover:text-[#8b5cf6] transition-colors line-clamp-2 block">
-                    {r.title}
-                  </span>
-                  <div className="flex items-center justify-between mt-2.5 text-[10px] text-[#55556a]">
-                    <span>{r.author?.name ?? "Unknown"}</span>
-                    <span className="capitalize text-[#8b5cf6] font-semibold">{r.source}</span>
-                  </div>
-                  {r.reasons && r.reasons.length > 0 && (
-                    <p className="text-[9px] text-[#55556a] mt-1.5 font-mono">{r.reasons.join(" · ")}</p>
-                  )}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* AI Chat Panel */}
         <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl overflow-hidden">
           <button
@@ -395,13 +408,19 @@ export default function CoworkDetailPage() {
                           : "bg-[#111115] border border-[#1a1a22] text-[#c4c4d4]"
                       }`}
                     >
-                      {msg.role === "model" && (
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <Sparkles size={10} className="text-[#8b5cf6]" />
-                          <span className="text-[10px] text-[#8b5cf6] font-medium">Operium AI</span>
-                        </div>
+                      {msg.role === "model" ? (
+                        <>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <Sparkles size={10} className="text-[#8b5cf6]" />
+                            <span className="text-[10px] text-[#8b5cf6] font-medium">Operium AI</span>
+                          </div>
+                          <div className="select-text">
+                            <MarkdownViewer content={msg.content} />
+                          </div>
+                        </>
+                      ) : (
+                        <p className="whitespace-pre-wrap text-xs">{msg.content}</p>
                       )}
-                      <p className="whitespace-pre-wrap text-xs">{msg.content}</p>
                     </div>
                   </div>
                 ))}

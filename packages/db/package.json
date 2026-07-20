@@ -10,7 +10,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "migrate:v1": "tsx scripts/migrate-v1-to-v2.ts"
+    "migrate:v1": "tsx scripts/migrate-v1-to-v2.ts",
+    "backfill:cowork-repos": "tsx scripts/backfill-cowork-repos.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.21",
@@ -18,6 +19,7 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@operium/core": "workspace:*",
     "mongoose": "^9.7.2"
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { contentHash } from "./hash.js";
-import { compositeScore, recencyDecay } from "./ranking.js";
-import { sanitize } from "./sanitize.js";
+import { contentHash } from "./hash";
+import { compositeScore, recencyDecay } from "./ranking";
+import { sanitize } from "./sanitize";
 
 describe("sanitize", () => {
   it("strips private blocks", () => {

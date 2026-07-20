@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
+    "@operium/core": "workspace:*",
     "@operium/shared": "workspace:*",
     "@tiptap/extension-code-block-lowlight": "^3.28.0",
     "@tiptap/extension-link": "^3.27.1",

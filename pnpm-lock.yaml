@@ -93,6 +93,9 @@ importers:
       '@excalidraw/excalidraw':
         specifier: ^0.18.1
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@operium/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@operium/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -206,6 +209,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@operium/core':
+        specifier: workspace:*
+        version: link:../core
       mongoose:
         specifier: ^9.7.2
         version: 9.7.2
