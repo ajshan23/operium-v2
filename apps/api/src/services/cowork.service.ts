@@ -36,8 +36,13 @@ export interface CreateData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // "Shared" visibility is bounded to the caller's active org — never global.
+// Guard against a falsy orgId: mongoose silently DROPS undefined values from
+// filters, so { isShared: true, orgId: undefined } would match every org's
+// shared docs. A route missing requireTenantAccess must fail loudly here,
+// not leak globally.
 function buildScopeFilter(userId: string, orgId: string, scope?: string) {
   if (scope === "personal") return { userId };
+  if (!orgId) throw new ApiError(400, "Organisation context required for shared scope");
   if (scope === "team")     return { isShared: true, orgId };
   // default: everything the user can see (own + shared within the org)
   return { $or: [{ userId }, { isShared: true, orgId }] };

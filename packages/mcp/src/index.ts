@@ -1499,7 +1499,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const upd: any = { $inc: { useCount: 1 }, lastUsedAt: new Date() };
       if (helpful === true)  upd.$inc.helpfulCount    = 1;
       if (helpful === false) upd.$inc.notHelpfulCount = 1;
-      await CoworkSession.updateOne({ _id: sessionId }, upd);
+      // Only sessions the caller can actually see — never another org's
+      const res = await CoworkSession.updateOne(
+        { _id: sessionId, $or: [{ userId: ctx.userId }, sharedScope] },
+        upd,
+      );
+      if (res.matchedCount === 0) {
+        return { content: [{ type: "text" as const, text: `Session not found (or not visible to you): ${sessionId}` }] };
+      }
       return { content: [{ type: "text" as const, text: "Recorded." }] };
     },
   );
@@ -1648,9 +1655,15 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { Space, Note, NoteBlock } = await db();
       const uid = ctx.userId;
 
-      // Resolve or auto-create a space
+      // Resolve or auto-create a space — a caller-supplied spaceId must be
+      // the caller's own space (mirrors create_note)
       let resolvedSpaceId = spaceId;
-      if (!resolvedSpaceId) {
+      if (resolvedSpaceId) {
+        const owned = await Space.findOne({ _id: resolvedSpaceId, userId: uid }).lean();
+        if (!owned) {
+          return { content: [{ type: "text" as const, text: `Space not found (or not yours): ${resolvedSpaceId}. Omit spaceId to use your Plans space.` }] };
+        }
+      } else {
         let plansSpace = await Space.findOne({ userId: uid, name: "Plans" }).lean();
         if (!plansSpace) {
           plansSpace = await Space.create({ userId: uid, name: "Plans", icon: "📋", description: "Implementation plans saved by AI" }) as any;
@@ -2770,12 +2783,15 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         else upd.dueDate = new Date(dueDate);
       }
       if (assigneeEmail) {
+        // Same rule as create_task: assignment requires an org, and the
+        // assignee must be a member of it — never an arbitrary user
+        if (!ctx.orgId) {
+          return { content: [{ type: "text" as const, text: "You have no organization — tasks can only stay assigned to yourself." }] };
+        }
         const assignee: any = await User.findOne({ email: assigneeEmail.toLowerCase().trim() }).select("_id").lean();
         if (!assignee) return { content: [{ type: "text" as const, text: `No user found with email ${assigneeEmail}.` }] };
-        if (ctx.orgId) {
-          const member = await Membership.findOne({ orgId: ctx.orgId, userId: assignee._id }).lean();
-          if (!member) return { content: [{ type: "text" as const, text: `${assigneeEmail} is not a member of your organization.` }] };
-        }
+        const member = await Membership.findOne({ orgId: ctx.orgId, userId: assignee._id }).lean();
+        if (!member) return { content: [{ type: "text" as const, text: `${assigneeEmail} is not a member of your organization.` }] };
         upd.assigneeId = assignee._id;
       }
       if (Object.keys(upd).length === 0) {

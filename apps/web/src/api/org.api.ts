@@ -28,4 +28,18 @@ export const orgApi = {
   getMembers: async () => {
     return apiClient("/api/orgs/members", { method: "GET" });
   },
+
+  // ── Management (owner/admin) ──
+  rotateInviteCode: async () => {
+    return apiClient("/api/orgs/invite-code/rotate", { method: "POST" });
+  },
+
+  removeMember: async (userId: string) => {
+    return apiClient(`/api/orgs/members/${userId}`, { method: "DELETE" });
+  },
+
+  // ── Self-service ──
+  leaveOrg: async () => {
+    return apiClient("/api/orgs/leave", { method: "POST" });
+  },
 };

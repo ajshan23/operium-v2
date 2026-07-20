@@ -76,6 +76,49 @@ export class OrgController {
       res.status(500).json(new ApiError(500, error.message));
     }
   }
+
+  async removeMember(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId!;
+      const actorRole = req.membership?.role as string;
+      const targetUserId = String(req.params["userId"]);
+
+      if (targetUserId === req.user?.userId) {
+        res.status(400).json(new ApiError(400, "Use leave to remove yourself"));
+        return;
+      }
+
+      await orgService.removeMember(orgId, actorRole, targetUserId);
+      res.status(200).json(new ApiResponse(200, null, "Member removed"));
+    } catch (error: any) {
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
+    }
+  }
+
+  async leaveOrg(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId!;
+      const userId = req.user?.userId;
+
+      await orgService.leaveOrg(orgId, userId);
+      res.status(200).json(new ApiResponse(200, null, "Left organization"));
+    } catch (error: any) {
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
+    }
+  }
+
+  async rotateInviteCode(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId!;
+      const inviteCode = await orgService.rotateInviteCode(orgId);
+      res.status(200).json(new ApiResponse(200, { inviteCode }, "Invite code rotated"));
+    } catch (error: any) {
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
+    }
+  }
 }
 
 export const orgController = new OrgController();

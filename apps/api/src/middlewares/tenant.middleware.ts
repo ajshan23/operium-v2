@@ -39,3 +39,18 @@ export const requireTenantAccess = async (req: Request, _res: Response, next: Ne
     next(error);
   }
 };
+
+/**
+ * Gate a route to specific org roles. Must run AFTER requireTenantAccess,
+ * which resolves req.membership. Example:
+ *   router.delete("/members/:id", requireTenantAccess, requireRole("owner", "admin"), handler)
+ */
+export const requireRole = (...roles: string[]) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    const role = req.membership?.role;
+    if (!role || !roles.includes(role)) {
+      next(new ApiError(403, "You do not have permission to perform this action"));
+      return;
+    }
+    next();
+  };

@@ -44,8 +44,10 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     const user = await User.findById(userId).select("isBlocked geminiApiKey").lean() as any;
     if (!user || user.isBlocked) return null;
 
-    // Resolve the user's org so shared-memory tools stay tenant-scoped
-    const membership = await Membership.findOne({ userId }).lean() as any;
+    // Resolve the user's org so shared-memory tools stay tenant-scoped.
+    // Users can hold multiple memberships — pick the oldest deterministically
+    // (their primary org) instead of whatever the index returns first.
+    const membership = await Membership.findOne({ userId }).sort({ createdAt: 1 }).lean() as any;
     const orgId = membership ? String(membership.orgId) : null;
 
     return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined };

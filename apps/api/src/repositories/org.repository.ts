@@ -16,6 +16,10 @@ export class OrgRepository {
   async findByInviteCode(inviteCode: string): Promise<IOrg | null> {
     return await Org.findOne({ inviteCode: inviteCode.toUpperCase() });
   }
+
+  async updateInviteCode(orgId: string, inviteCode: string): Promise<IOrg | null> {
+    return await Org.findByIdAndUpdate(orgId, { inviteCode }, { new: true });
+  }
 }
 
 export const orgRepository = new OrgRepository();

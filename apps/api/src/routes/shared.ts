@@ -8,13 +8,15 @@ router.get("/notes/:shareId", async (req: any, res: any) => {
   const shareId = String(req.params["shareId"]);
 
   try {
-    const note = await Note.findOne({ shareId, isShared: true }).lean();
+    // Public endpoint — expose only presentation fields, never owner ids
+    const note = await Note.findOne({ shareId, isShared: true })
+      .select("title tags type preview createdAt updatedAt").lean();
     if (!note) {
       res.status(404).json({ statusCode: 404, message: "Note not found or sharing disabled" });
       return;
     }
 
-    const blocks = await NoteBlock.find({ noteId: note._id }).sort({ order: 1 }).lean();
+    const blocks = await NoteBlock.find({ noteId: note._id }).sort({ order: 1 }).select("content").lean();
     const content = blocks.map(b => b.content).join("\n\n");
 
     res.json(new ApiResponse(200, { note, content }, "Shared note"));
