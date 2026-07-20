@@ -40,7 +40,7 @@ export interface IUser extends Document {
   // AI
   geminiApiKey?: string;
   // Preferences
-  preferences?: { editWindowHours: number };
+  preferences?: { editWindowHours: number; shareCoworkByDefault: boolean };
   customIntegrations?: ICustomIntegration[];
   createdAt: Date;
 }
@@ -80,6 +80,9 @@ const UserSchema: Schema = new Schema({
   // User preferences
   preferences: {
     editWindowHours: { type: Number, default: 48 },
+    // When true (default), cowork sessions this user saves are visible to
+    // their whole org. When false, saves default to private (owner-only).
+    shareCoworkByDefault: { type: Boolean, default: true },
   },
 
   // Custom webhook integrations

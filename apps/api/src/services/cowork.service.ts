@@ -160,6 +160,14 @@ export class CoworkService {
     const repos = normalizeRepoRefs(repoRefs);
     const first = repos[0];
 
+    // Sharing: explicit request wins; otherwise fall back to the user's
+    // Settings preference (defaults to shared when never set).
+    let isShared = data.isShared;
+    if (isShared === undefined) {
+      const u = await User.findById(userId).select("preferences").lean() as any;
+      isShared = u?.preferences?.shareCoworkByDefault !== false;
+    }
+
     const session = await CoworkSession.create({
       userId,
       orgId,
@@ -167,7 +175,7 @@ export class CoworkService {
       title:        data.title,
       summary:      data.summary,
       tags:         data.tags         ?? [],
-      isShared:     data.isShared     ?? true,
+      isShared,
       intent:       data.intent,
       outcome:      data.outcome,
       filesTouched: data.filesTouched ?? [],
@@ -187,7 +195,7 @@ export class CoworkService {
           sessionId:     session._id,
           userId,
           orgId,
-          isShared:      data.isShared ?? true,
+          isShared,
           order:         i,
           text,
           sessionTitle:  session.title,

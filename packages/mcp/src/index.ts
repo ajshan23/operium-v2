@@ -20,6 +20,9 @@ export interface McpContext {
   embedFn?: (text: string) => Promise<number[]>;
   /** Optional git-sync function injected by the transport layer (pulls GitHub/Azure activity into WorkHistory) */
   syncGitFn?: (full: boolean) => Promise<Record<string, any>>;
+  /** The user's default cowork sharing preference (true = share with org).
+   *  Resolved once at session start; changing it applies to the next session. */
+  shareByDefault?: boolean;
 }
 
 // ── Multi-repo session context ────────────────────────────────────────────────
@@ -160,6 +163,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   const sharedScope: any = ctx.orgId
     ? { isShared: true, orgId: ctx.orgId }
     : { isShared: true, userId: ctx.userId };
+
+  // The user's default cowork sharing preference (Settings). Applies to newly
+  // created sessions; existing sessions keep whatever they were saved with.
+  const shareByDefault = ctx.shareByDefault ?? true;
 
   // Lazy-load heavy deps at tool-call time so the module stays importable without DB.
   async function db() {
@@ -506,10 +513,12 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           ...(repoKeys.length ? { "repos.repoKey": { $in: repoKeys } } : {}),
         } as any).sort({ updatedAt: -1 }).lean(),
         // Teammates working in the same repos right now (active = touched
-        // within the last 8h and not finalized with an outcome)
-        repoKeys.length
+        // within the last 8h and not finalized with an outcome). Only meaningful
+        // inside an org — filter explicitly by orgId so the userId:$ne clause
+        // can't collapse a no-org sharedScope's userId bound (cross-tenant leak).
+        repoKeys.length && ctx.orgId
           ? CoworkSession.find({
-              ...sharedScope, userId: { $ne: uid },
+              isShared: true, orgId: ctx.orgId, userId: { $ne: uid },
               "repos.repoKey": { $in: repoKeys },
               updatedAt: { $gte: activeSince },
               outcome: { $exists: false },
@@ -1117,7 +1126,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           title,
           summary: finding.slice(0, 500),
           tags,
-          isShared: true,
+          isShared: shareByDefault,
           intent, outcome,
           filesTouched,
           repos: incomingRepos,
@@ -1146,7 +1155,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         sessionId:     session._id,
         userId:        uid,
         orgId:         ctx.orgId ?? undefined,
-        isShared:      true,
+        isShared:      session.isShared,   // inherit the session's sharing
         kind:          "checkpoint" as const,
         order:         existingCount + i,
         text,
@@ -1240,7 +1249,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           userId: uid,
           orgId: ctx.orgId ?? undefined,
           source: source as any,
-          title, summary, tags, isShared: true,
+          title, summary, tags, isShared: shareByDefault,
           intent, outcome, filesTouched,
           repos: incomingRepos,
           ...legacyRepoFields(incomingRepos),
@@ -1255,7 +1264,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const summaryChunks = splitMarkdownChunks(summary);
       const sessionRepoKeys = repoKeysOf(session.repos);
       await CoworkChunk.insertMany(summaryChunks.map((text, i) => ({
-        sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: true,
+        sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: session.isShared,
         kind: "summary" as const,
         order: startOrder + i, text,
         sessionTitle: title, sessionSource: session.source,
@@ -1295,7 +1304,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     "list_cowork",
     "List recent cowork sessions with optional filters.",
     {
-      scope:   z.enum(["all","personal","team"]).default("all"),
+      scope:   z.enum(["all","personal","team"]).default("all").describe(
+        "'personal' = sessions you authored (shared or private); 'team' = your org's shared sessions; 'all' = both"),
       intent:  z.string().optional(),
       tag:     z.string().optional(),
       repo:    z.string().optional().describe("Only sessions touching this repo (remote URL or host/owner/name)"),
@@ -1307,7 +1317,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const uid = ctx.userId;
 
       let filter: any;
-      if (scope === "personal") filter = { userId: uid, isShared: false };
+      // "personal" = everything you authored, regardless of sharing (matches
+      // the web app's personal tab). "team" = your org's shared pool.
+      if (scope === "personal") filter = { userId: uid };
       else if (scope === "team") filter = { ...sharedScope };
       else filter = { $or: [{ userId: uid }, sharedScope] };
 
@@ -2347,10 +2359,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       })));
       embedDirtyChunks(session._id, session.title, session.source);
 
-      // 2. Mark the session partial + shared so the receiver can read it
+      // 2. Mark the session partial + shared so the receiver can read it.
+      //    If it was private, its existing chunks are still isShared:false —
+      //    share them too, or the recipient's recall/search would surface only
+      //    the handoff note, not the detail it refers to.
       await CoworkSession.updateOne(
         { _id: session._id },
         { outcome: "partial", isShared: true, updatedAt: new Date() },
+      );
+      await CoworkChunk.updateMany(
+        { sessionId: session._id },
+        { $set: { isShared: true, orgId: ctx.orgId ?? undefined } },
       );
 
       // 3. Task assigned to the teammate, linking back to the session

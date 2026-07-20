@@ -12,10 +12,11 @@ import { JWT_SECRET } from "../utils/jwtSecret.js";
 const router: IRouter = Router();
 
 interface SessionEntry {
-  transport: StreamableHTTPServerTransport;
-  userId:    string;
-  orgId:     string | null;
-  geminiKey: string | undefined;
+  transport:      StreamableHTTPServerTransport;
+  userId:         string;
+  orgId:          string | null;
+  geminiKey:      string | undefined;
+  shareByDefault: boolean;
 }
 
 // In-memory session store (good for single-instance deployments)
@@ -23,7 +24,7 @@ const sessions = new Map<string, SessionEntry>();
 
 // ── Auth resolution ───────────────────────────────────────────────────────────
 
-async function resolveUser(req: any): Promise<{ userId: string; orgId: string | null; geminiKey?: string } | null> {
+async function resolveUser(req: any): Promise<{ userId: string; orgId: string | null; geminiKey?: string; shareByDefault: boolean } | null> {
   let token: string | undefined;
 
   // 1. Cookie
@@ -40,8 +41,8 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     const userId  = decoded.userId as string;
 
-    // Fetch user to get gemini key and block status
-    const user = await User.findById(userId).select("isBlocked geminiApiKey").lean() as any;
+    // Fetch user to get gemini key, block status, and sharing preference
+    const user = await User.findById(userId).select("isBlocked geminiApiKey preferences").lean() as any;
     if (!user || user.isBlocked) return null;
 
     // Resolve the user's org so shared-memory tools stay tenant-scoped.
@@ -50,7 +51,10 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     const membership = await Membership.findOne({ userId }).sort({ createdAt: 1 }).lean() as any;
     const orgId = membership ? String(membership.orgId) : null;
 
-    return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined };
+    // Default to shared when the preference has never been set (legacy users).
+    const shareByDefault = user.preferences?.shareCoworkByDefault !== false;
+
+    return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined, shareByDefault };
   } catch {
     return null;
   }
@@ -109,9 +113,10 @@ router.post("/", async (req: any, res: any) => {
     onsessioninitialized: (id) => {
       sessions.set(id, {
         transport,
-        userId:    resolved.userId,
-        orgId:     resolved.orgId,
-        geminiKey: resolved.geminiKey,
+        userId:         resolved.userId,
+        orgId:          resolved.orgId,
+        geminiKey:      resolved.geminiKey,
+        shareByDefault: resolved.shareByDefault,
       });
     },
   });
@@ -122,11 +127,12 @@ router.post("/", async (req: any, res: any) => {
   };
 
   const mcpServer = buildMcpServer({
-    userId:    resolved.userId,
-    orgId:     resolved.orgId,
-    geminiKey: resolved.geminiKey,
+    userId:         resolved.userId,
+    orgId:          resolved.orgId,
+    geminiKey:      resolved.geminiKey,
     embedFn,
-    syncGitFn: (full: boolean) => gitService.sync(resolved.userId, full),
+    syncGitFn:      (full: boolean) => gitService.sync(resolved.userId, full),
+    shareByDefault: resolved.shareByDefault,
   });
 
   await mcpServer.connect(transport);

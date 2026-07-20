@@ -205,11 +205,14 @@ export const getMe = [requireAuth, handle(async (req, res) => {
 
 export const updateMe = [requireAuth, handle(async (req, res) => {
   const uid = (req as any).user.userId as string;
-  const { name, avatar, geminiApiKey } = req.body as Record<string, string | undefined>;
+  const { name, avatar, geminiApiKey, shareCoworkByDefault } = req.body as Record<string, any>;
 
   const upd: any = {};
   if (name         !== undefined) upd.name         = name;
   if (avatar       !== undefined) upd.avatar       = avatar;
+  if (typeof shareCoworkByDefault === "boolean") {
+    upd["preferences.shareCoworkByDefault"] = shareCoworkByDefault;
+  }
   if (geminiApiKey !== undefined) {
     if (geminiApiKey === "") {
       upd.$unset = { geminiApiKey: "" };
