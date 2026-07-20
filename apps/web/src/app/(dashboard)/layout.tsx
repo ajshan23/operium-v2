@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutGrid, History, FolderGit2, GitBranch, FileText, Settings, Bot, CheckSquare, Loader2
+  LayoutGrid, History, GitBranch, FileText, Settings, Bot, CheckSquare, Loader2
 } from "lucide-react";
 import { UserMenu } from "@/components/UserMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -57,7 +57,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/cowork",      icon: Bot,         label: "Cowork" },
     { href: "/tasks",       icon: CheckSquare, label: "Tasks" },
     { href: "/spaces",      icon: FileText,    label: "Spaces" },
-    { href: "/projects",    icon: FolderGit2,  label: "Projects" },
+    // Hidden for now — not ready to show. Re-enable to restore the sidebar link.
+    // { href: "/projects",    icon: FolderGit2,  label: "Projects" },
     { href: "/git",         icon: GitBranch,   label: "Git" },
   ];
 
@@ -79,12 +80,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Logo */}
         <Link href="/" className="relative group cursor-pointer">
-          <div className="absolute inset-0 bg-[#8b5cf6] rounded-full blur-md opacity-35 group-hover:opacity-60 transition-opacity duration-500" />
-          <div className="w-[46px] h-[46px] rounded-full bg-gradient-to-tr from-[#7c3aed] via-[#8b5cf6] to-[#ec4899] border border-white/15 shadow-[0_4px_20px_rgba(139,92,246,0.45),inset_0_1px_1px_rgba(255,255,255,0.25)] flex items-center justify-center relative z-10">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white fill-current">
-              <path d="M12 2C12 2 17 8.5 17 12.5C17 15.26 14.76 17.5 12 17.5C9.24 17.5 7 15.26 7 12.5C7 8.5 12 2 12 2Z" />
-            </svg>
-          </div>
+          <div className="absolute inset-0 bg-[#8b5cf6] rounded-xl blur-md opacity-35 group-hover:opacity-60 transition-opacity duration-500" />
+          <img
+            src="/image.png"
+            alt="Operium"
+            width={46}
+            height={46}
+            className="rounded-xl relative z-10 shadow-[0_4px_20px_rgba(139,92,246,0.45)] border border-white/15 transition-transform duration-300 group-hover:scale-105"
+          />
         </Link>
 
         {/* Nav */}

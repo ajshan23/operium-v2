@@ -4,10 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   Settings, Database, PenTool, Webhook,
   Sparkles, Clock, Plus, Trash2, Key, Check, Copy, Eye, EyeOff,
-  Loader2, AlertTriangle, User, RefreshCw
+  Loader2, AlertTriangle, User, RefreshCw, Bot,
+  Users, Mail, LogOut, X, Shield
 } from "lucide-react";
 import { historyApi } from "@/api/history.api";
+import { orgApi } from "@/api/org.api";
 import { getUser } from "@/lib/auth";
+import { getActiveOrgId } from "@/lib/org";
 import { MCP_TOOL_NAMES, MCP_TOOL_COUNT, MCP_TOOL_GROUPS } from "@operium/shared";
 
 // Grouped tool list for display; anything not in a group renders under "Other"
@@ -69,6 +72,8 @@ export default function SettingsPage() {
           if (d.data?.geminiApiKey) {
             setGeminiKeys([{ id: "saved", name: "Gemini Key", keyPreview: d.data.geminiApiKey as string, isActive: true }]);
           }
+          // Preference is shared unless explicitly set to false
+          setShareCowork(d.data?.preferences?.shareCoworkByDefault !== false);
         })
         .catch(() => {});
     }
@@ -116,6 +121,24 @@ export default function SettingsPage() {
 
   const [gridSnapping,  setGridSnapping]  = useState(true);
   const [defaultStroke, setDefaultStroke] = useState("#8b5cf6");
+
+  // Cowork sharing preference (default: shared with org)
+  const [shareCowork,   setShareCowork]   = useState(true);
+  const [shareSaving,   setShareSaving]   = useState(false);
+
+  // ── Team / organization management ──
+  const [members,     setMembers]     = useState<any[]>([]);
+  const [invites,     setInvites]     = useState<any[]>([]);
+  const [myRole,      setMyRole]      = useState<string>("member");
+  const [teamLoading, setTeamLoading] = useState(true);
+  const [teamError,   setTeamError]   = useState<string | null>(null);
+  // Set only after mount so reading localStorage can't cause a hydration mismatch.
+  const [hasOrg,      setHasOrg]      = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole,  setInviteRole]  = useState<"member" | "admin">("member");
+  const [inviteBusy,  setInviteBusy]  = useState(false);
+  const [inviteMsg,   setInviteMsg]   = useState<string | null>(null);
+  const canManage = myRole === "owner" || myRole === "admin";
   const [exportQuality, setExportQuality] = useState("high");
   const [canvasSaveSuccess, setCanvasSaveSuccess] = useState(false);
 
@@ -317,6 +340,87 @@ export default function SettingsPage() {
       setWebhookMsg({ type: "err", text: err.message || "Sync failed" });
     }
     setWebhookSyncing(false);
+  };
+
+  // Persist the cowork sharing preference. Optimistic: flip immediately,
+  // revert if the request fails.
+  const toggleShareCowork = async () => {
+    const next = !shareCowork;
+    setShareCowork(next);
+    setShareSaving(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("operium_token") : null;
+      const res = await fetch("/api/auth/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ shareCoworkByDefault: next }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch {
+      setShareCowork(!next); // revert
+    } finally {
+      setShareSaving(false);
+    }
+  };
+
+  // ── Team management ───────────────────────────────────────────────────
+  const loadTeam = useCallback(async () => {
+    if (!getActiveOrgId()) { setHasOrg(false); setTeamLoading(false); return; }
+    setHasOrg(true);
+    setTeamLoading(true);
+    setTeamError(null);
+    try {
+      const res: any = await orgApi.getMembers();
+      const list = res?.data ?? [];
+      setMembers(list);
+      const me = getUser();
+      const mine = list.find((m: any) => String(m.userId?._id) === String(me?.userId));
+      const role = mine?.role ?? "member";
+      setMyRole(role);
+      if (role === "owner" || role === "admin") {
+        try { const ir: any = await orgApi.listInvites(); setInvites(ir?.data ?? []); } catch { /* non-fatal */ }
+      }
+    } catch (err: any) {
+      setTeamError(err.message || "Failed to load team");
+    }
+    setTeamLoading(false);
+  }, []);
+
+  useEffect(() => { void loadTeam(); }, [loadTeam]);
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setInviteBusy(true); setInviteMsg(null); setTeamError(null);
+    try {
+      await orgApi.createInvite(inviteEmail.trim(), inviteRole);
+      setInviteEmail("");
+      setInviteMsg(`Invite sent to ${inviteEmail.trim()}.`);
+      await loadTeam();
+    } catch (err: any) {
+      setTeamError(err.message || "Failed to send invite");
+    }
+    setInviteBusy(false);
+  };
+
+  const handleRevokeInvite = async (id: string) => {
+    setTeamError(null);
+    try { await orgApi.revokeInvite(id); await loadTeam(); }
+    catch (err: any) { setTeamError(err.message || "Failed to revoke invite"); }
+  };
+
+  const handleRemoveMember = async (userId: string, label: string) => {
+    if (!window.confirm(`Remove ${label} from the organization? They lose access to shared memory. Their own sessions stay intact.`)) return;
+    setTeamError(null);
+    try { await orgApi.removeMember(userId); await loadTeam(); }
+    catch (err: any) { setTeamError(err.message || "Failed to remove member"); }
+  };
+
+  const handleLeaveOrg = async () => {
+    if (!window.confirm("Leave this organization? You'll lose access to its shared memory until re-invited.")) return;
+    setTeamError(null);
+    try { await orgApi.leaveOrg(); window.location.href = "/public-onboarding"; }
+    catch (err: any) { setTeamError(err.message || "Failed to leave organization"); }
   };
 
   // ── Shared UI helpers ─────────────────────────────────────────────────
@@ -530,6 +634,159 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+
+        {/* ── COWORK PRIVACY ── */}
+        <div className={cardCls}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl border border-[rgba(var(--accent-rgb),0.25)] bg-[rgba(var(--accent-rgb),0.1)] text-[var(--accent)] flex items-center justify-center shrink-0">
+              <Bot size={16} />
+            </div>
+            <div>
+              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">Cowork Sharing</h2>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Control whether the AI sessions you save are visible to your team.</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--s2)]">
+            <div className="pr-4">
+              <span className="text-[12px] font-bold text-[var(--text-primary)]">Share new sessions with my team</span>
+              <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                {shareCowork
+                  ? "On — new cowork sessions are added to your organization's shared knowledge base."
+                  : "Off — new cowork sessions stay private to you. Existing sessions are unchanged."}
+              </p>
+            </div>
+            <div className={shareSaving ? "opacity-50 pointer-events-none" : ""}>
+              <Toggle value={shareCowork} onChange={toggleShareCowork} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── TEAM / ORGANIZATION ── */}
+        {hasOrg && (
+        <div className={cardCls}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl border border-blue-500/25 bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+              <Users size={16} />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">Team</h2>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                {canManage ? "Invite teammates and manage who has access to your organization." : "Members of your organization. Contact an owner or admin to invite others."}
+              </p>
+            </div>
+            <button onClick={() => void loadTeam()} disabled={teamLoading}
+              className="p-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] transition-colors disabled:opacity-40">
+              <RefreshCw size={13} className={teamLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
+
+          {teamError && (
+            <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+              <AlertTriangle size={13} className="shrink-0" /><span>{teamError}</span>
+            </div>
+          )}
+
+          {/* Invite form (owner/admin) */}
+          {canManage && (
+            <form onSubmit={handleInvite} className="flex flex-col gap-2">
+              {inviteMsg && <p className="text-[11px] text-emerald-400">{inviteMsg}</p>}
+              <div className="flex gap-2">
+                <input
+                  type="email" value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteMsg(null); }}
+                  placeholder="teammate@company.com" className={`flex-1 ${inputCls}`} disabled={inviteBusy}
+                />
+                {myRole === "owner" && (
+                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "member" | "admin")}
+                    className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-xl px-3 text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer">
+                    <option value="member">Member</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                )}
+                <button type="submit" disabled={inviteBusy || !inviteEmail.trim()}
+                  className="px-4 rounded-xl bg-[var(--accent)] text-white text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-opacity">
+                  {inviteBusy ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
+                  <span>Invite</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Member list */}
+          <div className="flex flex-col gap-2">
+            {teamLoading && members.length === 0 ? (
+              <div className="flex items-center gap-2 text-[var(--text-muted)] text-[12px] py-4 justify-center">
+                <Loader2 size={14} className="animate-spin" /> Loading team…
+              </div>
+            ) : members.map(m => {
+              const me = getUser();
+              const isSelf = String(m.userId?._id) === String(me?.userId);
+              const label = m.userId?.name || m.userId?.email || "Member";
+              // Owner removes anyone (except last owner, server-enforced); admin removes only members
+              const canRemove = !isSelf && (myRole === "owner" ? true : (myRole === "admin" && m.role === "member"));
+              return (
+                <div key={m._id} className="flex items-center justify-between p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--s2)]">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-[var(--s3)] flex items-center justify-center text-[var(--text-secondary)] shrink-0">
+                      <User size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-semibold text-[var(--text-primary)] truncate">
+                        {label}{isSelf && <span className="text-[var(--text-muted)] font-normal"> (you)</span>}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] truncate">{m.userId?.email}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full flex items-center gap-1 ${
+                      m.role === "owner" ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                      : m.role === "admin" ? "bg-[rgba(var(--accent-rgb),0.1)] text-[var(--accent)] border border-[rgba(var(--accent-rgb),0.2)]"
+                      : "bg-[var(--s3)] text-[var(--text-muted)] border border-[var(--border-subtle)]"}`}>
+                      {(m.role === "owner" || m.role === "admin") && <Shield size={9} />}{m.role}
+                    </span>
+                    {canRemove && (
+                      <button onClick={() => handleRemoveMember(String(m.userId?._id), label)}
+                        title="Remove member"
+                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Pending invites (owner/admin) */}
+          {canManage && invites.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Pending Invites ({invites.length})</span>
+              {invites.map(inv => (
+                <div key={inv._id} className="flex items-center justify-between p-3 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--s1)]">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Mail size={13} className="text-[var(--text-muted)] shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[12px] text-[var(--text-primary)] truncate">{inv.email}</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => handleRevokeInvite(inv._id)} title="Revoke invite"
+                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Leave org */}
+          <div className="pt-1">
+            <button onClick={handleLeaveOrg}
+              className="text-[11px] font-semibold text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-colors">
+              <LogOut size={13} /> Leave this organization
+            </button>
+          </div>
+        </div>
+        )}
 
         {/* ── 3. CANVAS PREFERENCES ── */}
         <div className={cardCls}>
