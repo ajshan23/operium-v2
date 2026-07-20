@@ -26,6 +26,7 @@ export * from "./models/User.js";
 export * from "./models/Org.js";
 export * from "./models/Team.js";
 export * from "./models/Membership.js";
+export * from "./models/Invite.js";
 export * from "./models/OTP.js";
 export * from "./models/WorkHistory.js";
 export * from "./models/Space.js";

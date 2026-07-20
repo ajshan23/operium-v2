@@ -55,12 +55,18 @@ function SpinnerIcon() {
 export default function PublicOnboardingPage() {
   const [view, setView] = useState<"choice" | "create" | "join">("choice");
   const [orgName, setOrgName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => { setIsLoaded(true); }, []);
+  useEffect(() => {
+    setIsLoaded(true);
+    // Deep-link from an invite email: /public-onboarding?invite=<token>
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("invite");
+    if (t) { setInviteToken(t); setView("join"); }
+  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -80,16 +86,16 @@ export default function PublicOnboardingPage() {
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteCode.trim()) return;
+    if (!inviteToken.trim()) return;
     setIsLoading(true);
     setError("");
     try {
-      const res: any = await orgApi.joinOrg(inviteCode.trim());
+      const res: any = await orgApi.acceptInvite(inviteToken.trim());
       const orgId = res?.data?._id ?? res?.data?.id;
       if (orgId) setActiveOrgId(String(orgId));
       window.location.href = "/";
     } catch (err: any) {
-      setError(err.message || "Invalid invite code");
+      setError(err.message || "This invite is invalid or has expired");
       setIsLoading(false);
     }
   }
@@ -239,7 +245,7 @@ export default function PublicOnboardingPage() {
 
                   <h2 className="text-3xl font-bold tracking-tight mb-3">Join a workspace</h2>
                   <p className="text-gray-400 mb-10 text-lg leading-relaxed">
-                    Enter the invite code provided by your organization admin.
+                    Paste the invite link (or token) sent to your email. Invites are tied to your address and expire after 7 days.
                   </p>
 
                   {error && (
@@ -248,21 +254,26 @@ export default function PublicOnboardingPage() {
 
                   <form className="space-y-6" onSubmit={handleJoin}>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-300 pl-1">Invite Code</label>
+                      <label className="text-sm font-medium text-gray-300 pl-1">Invite token</label>
                       <input
                         type="text"
-                        value={inviteCode}
-                        onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                        placeholder="OP-XXXX-XXXX"
+                        value={inviteToken}
+                        onChange={(e) => {
+                          // Accept a pasted full link too — pull the token out of it
+                          const v = e.target.value.trim();
+                          const m = v.match(/[?&]invite=([^&\s]+)/);
+                          setInviteToken(m ? m[1]! : v);
+                        }}
+                        placeholder="Paste your invite link or token"
                         disabled={isLoading}
-                        className="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-lg font-mono tracking-widest uppercase shadow-inner disabled:opacity-50"
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all text-base font-mono shadow-inner disabled:opacity-50"
                         autoFocus
                       />
                     </div>
 
                     <button
                       type="submit"
-                      disabled={!inviteCode.trim() || isLoading}
+                      disabled={!inviteToken.trim() || isLoading}
                       className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed font-semibold text-white rounded-2xl px-5 py-4 transition-all flex justify-center items-center gap-2 text-lg shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_30px_rgba(147,51,234,0.5)] disabled:shadow-none"
                     >
                       {isLoading ? <><SpinnerIcon /><span>Joining…</span></> : <><span>Join Organization</span><ArrowRightIcon /></>}

@@ -12,13 +12,18 @@ export interface OrgMember {
   };
 }
 
+export interface OrgInvite {
+  _id: string;
+  email: string;
+  role: "owner" | "admin" | "member";
+  status: "pending" | "accepted" | "revoked";
+  expiresAt: string;
+  createdAt?: string;
+}
+
 export const orgApi = {
   createOrg: async (name: string) => {
     return apiClient("/api/orgs", { data: { name } });
-  },
-
-  joinOrg: async (inviteCode: string) => {
-    return apiClient("/api/orgs/join", { data: { inviteCode } });
   },
 
   getOrgs: async () => {
@@ -29,11 +34,26 @@ export const orgApi = {
     return apiClient("/api/orgs/members", { method: "GET" });
   },
 
-  // ── Management (owner/admin) ──
-  rotateInviteCode: async () => {
-    return apiClient("/api/orgs/invite-code/rotate", { method: "POST" });
+  // ── Invites (per-email, tokenized) ──
+  // Accept an invite you received by email (token from the link).
+  acceptInvite: async (token: string) => {
+    return apiClient("/api/orgs/invites/accept", { data: { token } });
   },
 
+  // Owner/admin: invite a person by email.
+  createInvite: async (email: string, role: "admin" | "member" = "member") => {
+    return apiClient("/api/orgs/invites", { data: { email, role } });
+  },
+
+  listInvites: async () => {
+    return apiClient("/api/orgs/invites", { method: "GET" });
+  },
+
+  revokeInvite: async (inviteId: string) => {
+    return apiClient(`/api/orgs/invites/${inviteId}`, { method: "DELETE" });
+  },
+
+  // ── Member management (owner/admin) ──
   removeMember: async (userId: string) => {
     return apiClient(`/api/orgs/members/${userId}`, { method: "DELETE" });
   },

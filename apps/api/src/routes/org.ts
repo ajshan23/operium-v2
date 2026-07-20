@@ -6,25 +6,30 @@ import { requireTenantAccess, requireRole } from "../middlewares/tenant.middlewa
 
 export const orgRouter: Router = Router();
 
-// Invite codes gate an org's shared memory — throttle guessing hard
-const joinLimiter = rateLimit({
+// Accepting an invite consumes a 256-bit token — throttle to blunt any
+// brute-force attempt regardless.
+const acceptLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { statusCode: 429, message: "Too many join attempts, try again later", success: false, data: null, errors: [] },
+  message: { statusCode: 429, message: "Too many attempts, try again later", success: false, data: null, errors: [] },
 });
 
 // All org routes require authentication
 orgRouter.use(requireAuth);
 
 orgRouter.post("/", orgController.createOrg.bind(orgController));
-orgRouter.post("/join", joinLimiter, orgController.joinOrg.bind(orgController));
 orgRouter.get("/me", orgController.getMyOrgs.bind(orgController));
 orgRouter.get("/members", requireTenantAccess, orgController.getMembers.bind(orgController));
 
-// ── Org management (owner/admin) ──
-orgRouter.post("/invite-code/rotate", requireTenantAccess, requireRole("owner", "admin"), orgController.rotateInviteCode.bind(orgController));
+// ── Invites (per-email, tokenized) ──
+orgRouter.post("/invites/accept", acceptLimiter, orgController.acceptInvite.bind(orgController));
+orgRouter.post("/invites", requireTenantAccess, requireRole("owner", "admin"), orgController.createInvite.bind(orgController));
+orgRouter.get("/invites", requireTenantAccess, requireRole("owner", "admin"), orgController.listInvites.bind(orgController));
+orgRouter.delete("/invites/:inviteId", requireTenantAccess, requireRole("owner", "admin"), orgController.revokeInvite.bind(orgController));
+
+// ── Member management (owner/admin) ──
 orgRouter.delete("/members/:userId", requireTenantAccess, requireRole("owner", "admin"), orgController.removeMember.bind(orgController));
 
 // ── Self-service ──

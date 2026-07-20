@@ -21,17 +21,18 @@ export class OrgController {
       const org = await orgService.createOrg(userId, name);
       res.status(201).json(new ApiResponse(201, org, "Organization created successfully"));
     } catch (error: any) {
-      res.status(500).json(new ApiError(500, error.message));
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
     }
   }
 
-  async joinOrg(req: Request, res: Response): Promise<void> {
+  async acceptInvite(req: Request, res: Response): Promise<void> {
     try {
-      const { inviteCode } = req.body;
+      const { token } = req.body;
       const userId = req.user?.userId;
 
-      if (!inviteCode) {
-        res.status(400).json(new ApiError(400, "Invite code is required"));
+      if (!token) {
+        res.status(400).json(new ApiError(400, "Invite token is required"));
         return;
       }
       if (!userId) {
@@ -39,10 +40,10 @@ export class OrgController {
         return;
       }
 
-      const org = await orgService.joinOrg(userId, inviteCode);
+      const org = await orgService.acceptInvite(userId, String(token));
       res.status(200).json(new ApiResponse(200, org, "Joined organization successfully"));
     } catch (error: any) {
-      const status = error.message === "Invalid invite code" ? 404 : 400;
+      const status = error instanceof ApiError ? error.statusCode : 500;
       res.status(status).json(new ApiError(status, error.message));
     }
   }
@@ -109,11 +110,51 @@ export class OrgController {
     }
   }
 
-  async rotateInviteCode(req: Request, res: Response): Promise<void> {
+  async createInvite(req: Request, res: Response): Promise<void> {
     try {
       const orgId = req.orgId!;
-      const inviteCode = await orgService.rotateInviteCode(orgId);
-      res.status(200).json(new ApiResponse(200, { inviteCode }, "Invite code rotated"));
+      const inviterUserId = req.user?.userId;
+      const actorRole = req.membership?.role as string;
+      const { email, role } = req.body;
+
+      if (!email) {
+        res.status(400).json(new ApiError(400, "Email is required"));
+        return;
+      }
+
+      const invite = await orgService.createInvite(orgId, inviterUserId, actorRole, String(email), role === "admin" ? "admin" : "member");
+      // Never return the token in the list/create response — it goes only to
+      // the recipient's inbox.
+      res.status(201).json(new ApiResponse(201, {
+        _id: invite._id, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt,
+      }, "Invite sent"));
+    } catch (error: any) {
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
+    }
+  }
+
+  async listInvites(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId!;
+      const invites = await orgService.listInvites(orgId);
+      const safe = invites.map((i: any) => ({
+        _id: i._id, email: i.email, role: i.role, status: i.status,
+        expiresAt: i.expiresAt, invitedBy: i.invitedBy, createdAt: i.createdAt,
+      }));
+      res.status(200).json(new ApiResponse(200, safe, "Invites fetched"));
+    } catch (error: any) {
+      const status = error instanceof ApiError ? error.statusCode : 500;
+      res.status(status).json(new ApiError(status, error.message));
+    }
+  }
+
+  async revokeInvite(req: Request, res: Response): Promise<void> {
+    try {
+      const orgId = req.orgId!;
+      const inviteId = String(req.params["inviteId"]);
+      await orgService.revokeInvite(orgId, inviteId);
+      res.status(200).json(new ApiResponse(200, null, "Invite revoked"));
     } catch (error: any) {
       const status = error instanceof ApiError ? error.statusCode : 500;
       res.status(status).json(new ApiError(status, error.message));

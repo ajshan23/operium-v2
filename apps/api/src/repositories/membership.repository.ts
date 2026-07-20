@@ -25,6 +25,14 @@ export class MembershipRepository {
   async countByOrgAndRole(orgId: string, role: Role): Promise<number> {
     return await Membership.countDocuments({ orgId, role });
   }
+
+  async countByUser(userId: string): Promise<number> {
+    return await Membership.countDocuments({ userId });
+  }
+
+  async updateRole(orgId: string, userId: string, role: Role): Promise<void> {
+    await Membership.updateOne({ orgId, userId }, { role });
+  }
 }
 
 export const membershipRepository = new MembershipRepository();
