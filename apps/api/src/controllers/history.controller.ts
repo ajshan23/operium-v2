@@ -109,6 +109,16 @@ export class HistoryController {
     }
   };
 
+  resetGithub = async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user.userId;
+      const result = await historyService.resetGithub(userId);
+      res.json(new ApiResponse(200, result, "GitHub history reset"));
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({ message: err.message });
+    }
+  };
+
   getIntegrations = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.userId;

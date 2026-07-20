@@ -257,14 +257,22 @@ export class HistoryService {
     }
 
     let upserted = 0;
+    const seenIds = new Set<string>();
+
     for (const ev of events) {
       if (ev.type === "PushEvent") {
         const commits: any[] = ev.payload?.commits || [];
-        const msg    = commits.map((c: any) => c.message).join("; ");
-        const repo   = ev.repo?.name || "";
-        await workHistoryRepository.upsertByExternalId(userId, `github-${ev.id}`, {
+        // Only include commits the user authored (merges pull in others' work)
+        const own = commits.filter(
+          (c: any) => c.author?.name === login || c.author?.email?.split("@")[0] === login
+        );
+        const msg  = (own.length ? own : commits.slice(0, 1)).map((c: any) => c.message).join("; ");
+        const repo = ev.repo?.name || "";
+        const eid  = `github-${ev.id}`;
+        seenIds.add(eid);
+        await workHistoryRepository.upsertByExternalId(userId, eid, {
           userId:   new mongoose.Types.ObjectId(userId),
-          externalId: `github-${ev.id}`,
+          externalId: eid,
           title:    `Pushed to ${repo}`,
           description: msg || undefined,
           category: "Coding",
@@ -283,15 +291,21 @@ export class HistoryService {
         const action = ev.payload?.action;
         if (!pr || !["opened", "closed", "reopened"].includes(action)) continue;
 
+        // Only sync PRs the user authored — skip PRs the user merely
+        // merged or closed for someone else
+        if (pr.user?.login && pr.user.login !== login) continue;
+
         const isMerged  = action === "closed" && pr.merged;
         const prStatus  = isMerged ? "completed" : action === "closed" ? "abandoned" : "active";
         const category  = isMerged ? "PR Review" : "Coding";
         const source    = isMerged ? "pr" : "git";
 
-        await workHistoryRepository.upsertByExternalId(userId, `github-${ev.id}`,
+        const eid = `github-${ev.id}`;
+        seenIds.add(eid);
+        await workHistoryRepository.upsertByExternalId(userId, eid,
           {
             userId:     new mongoose.Types.ObjectId(userId),
-            externalId: `github-${ev.id}`,
+            externalId: eid,
             title:      pr.title || `Pull Request #${pr.number}`,
             description: pr.body?.slice(0, 500) || undefined,
             category,
@@ -309,7 +323,6 @@ export class HistoryService {
             },
             createdAt: new Date(ev.created_at),
           },
-          // On re-encountering an existing PR event, refresh its status
           {
             isOngoing: prStatus === "active",
             "metadata.prStatus": prStatus,
@@ -319,8 +332,17 @@ export class HistoryService {
       }
     }
 
+    // Reconcile: purge GitHub entries from earlier syncs that are within the
+    // synced window but were NOT returned this time (foreign PRs the user
+    // merged, or events from a different token).
+    const ghCleanup = await WorkHistory.deleteMany({
+      userId,
+      externalId: { $regex: "^github-", $nin: [...seenIds] },
+      createdAt: { $gte: new Date(cutoff) },
+    });
+
     await User.updateOne({ _id: userId }, { githubLastSync: new Date() });
-    return { synced: upserted, login };
+    return { synced: upserted, cleaned: ghCleanup.deletedCount ?? 0, login };
   }
 
   // ── Azure DevOps sync ─────────────────────────────────────────────────────
@@ -360,6 +382,9 @@ export class HistoryService {
     const projects: any[] = projectsData.value || [];
 
     let upserted = 0;
+    // Every az-* externalId this (identity-scoped) run returned — used below to
+    // purge foreign entries an earlier unscoped sync wrote into this history.
+    const seenIds = new Set<string>();
 
     for (const project of projects) {
       const pName = project.name as string;
@@ -378,7 +403,7 @@ export class HistoryService {
         // Pushes
         try {
           const pushesData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pushes?searchCriteria.fromDate=${cutoff}&searchCriteria.pusherId=${myId}&$top=50&${API_VER}`,
+            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pushes?searchCriteria.fromDate=${cutoff}&searchCriteria.pusherId=${myId}&$top=100&${API_VER}`,
             token
           );
           for (const push of (pushesData.value || [])) {
@@ -402,6 +427,7 @@ export class HistoryService {
               },
               createdAt: new Date(push.date),
             });
+            seenIds.add(`az-push-${push.pushId}`);
             upserted++;
           }
         } catch { /* skip repos the token can't access */ }
@@ -409,7 +435,7 @@ export class HistoryService {
         // Pull Requests
         try {
           const prsData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests?searchCriteria.status=all&searchCriteria.creatorId=${myId}&$top=50&${API_VER}`,
+            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests?searchCriteria.status=all&searchCriteria.creatorId=${myId}&$top=100&${API_VER}`,
             token
           );
           for (const pr of (prsData.value || [])) {
@@ -450,6 +476,7 @@ export class HistoryService {
               },
               { isOngoing: prStatus === "active", "metadata.prStatus": prStatus, "metadata.reviewers": reviewers }
             );
+            seenIds.add(`az-pr-${pr.pullRequestId}`);
             upserted++;
           }
         } catch { /* skip */ }
@@ -459,7 +486,7 @@ export class HistoryService {
       try {
         const requestedForParam = myUniqueName ? `&requestedFor=${encodeURIComponent(myUniqueName)}` : "";
         const buildsData = await azFetch(
-          `https://dev.azure.com/${org}/${pName}/_apis/build/builds?minTime=${cutoff}${requestedForParam}&$top=50&${API_VER}`,
+          `https://dev.azure.com/${org}/${pName}/_apis/build/builds?minTime=${cutoff}${requestedForParam}&$top=100&${API_VER}`,
           token
         );
         for (const build of (buildsData.value || [])) {
@@ -488,10 +515,23 @@ export class HistoryService {
             },
             { isOngoing: build.status === "inProgress", "metadata.buildStatus": build.status, "metadata.result": result }
           );
+          seenIds.add(`az-build-${build.id}`);
           upserted++;
         }
       } catch { /* skip */ }
     }
+
+    // Reconcile: earlier syncs ran without the identity filters above and wrote
+    // the whole org's activity into this user's history. Every az-* entry in
+    // the synced window that this identity-scoped run did NOT return belongs to
+    // someone else — remove it. (Window-bounded by the same cutoff/$top as the
+    // fetches, so entries outside the window are never touched.)
+    const cleanupRes = await WorkHistory.deleteMany({
+      userId,
+      externalId: { $regex: "^az-", $nin: [...seenIds] },
+      createdAt: { $gte: new Date(cutoff) },
+    });
+    const cleaned = cleanupRes.deletedCount ?? 0;
 
     // Refresh stale active PRs (re-fetch individually to get latest status)
     const staleActive = await WorkHistory.find({
@@ -535,7 +575,7 @@ export class HistoryService {
       }
     );
 
-    return { synced: upserted, org, projects: projects.length };
+    return { synced: upserted, cleaned, org, projects: projects.length };
   }
 
   // ── Custom integrations ───────────────────────────────────────────────────
@@ -646,6 +686,14 @@ export class HistoryService {
     }
 
     return { synced: upserted, integrations: integrations.length };
+  }
+
+  // ── Reset GitHub ──────────────────────────────────────────────────────────
+
+  async resetGithub(userId: string) {
+    const result = await workHistoryRepository.deleteManyByExternalIdPrefix(userId, "github-");
+    await User.updateOne({ _id: userId }, { githubLastSync: null });
+    return { deleted: result.deletedCount };
   }
 
   // ── Reset Azure ───────────────────────────────────────────────────────────

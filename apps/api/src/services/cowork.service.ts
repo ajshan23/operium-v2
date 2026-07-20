@@ -1,5 +1,6 @@
 import { CoworkSession, CoworkChunk, User } from "@operium/db";
 import type { CoworkSource, CoworkIntent, CoworkOutcome } from "@operium/db";
+import { normalizeRepoRefs, type RepoRef } from "@operium/core";
 import { ApiError } from "../utils/ApiError.js";
 import { aiService } from "./ai.service.js";
 import { embeddingService, cosineSimilarity } from "./embedding.service.js";
@@ -24,7 +25,8 @@ export interface CreateData {
   outcome?:     CoworkOutcome;
   filesTouched?:string[];
   languages?:   string[];
-  branch?:      string;
+  repos?:       RepoRef[]; // every git repo the session touched
+  branch?:      string;    // legacy single-repo fields — folded into repos
   commitSha?:   string;
   repoUrl?:     string;
   prUrl?:       string;
@@ -35,7 +37,7 @@ export interface CreateData {
 
 // "Shared" visibility is bounded to the caller's active org — never global.
 function buildScopeFilter(userId: string, orgId: string, scope?: string) {
-  if (scope === "personal") return { userId, isShared: false };
+  if (scope === "personal") return { userId };
   if (scope === "team")     return { isShared: true, orgId };
   // default: everything the user can see (own + shared within the org)
   return { $or: [{ userId }, { isShared: true, orgId }] };
@@ -144,6 +146,15 @@ export class CoworkService {
     if (!data.title?.trim()) throw new ApiError(400, "title is required");
     if (!data.summary?.trim()) throw new ApiError(400, "summary is required");
 
+    // Fold repos[] + legacy scalar fields into one normalized list; mirror
+    // repos[0] back onto the legacy fields for old readers.
+    const repoRefs: RepoRef[] = [...(data.repos ?? [])];
+    if (data.repoUrl) {
+      repoRefs.push({ repoUrl: data.repoUrl, branch: data.branch, commitSha: data.commitSha, prUrl: data.prUrl });
+    }
+    const repos = normalizeRepoRefs(repoRefs);
+    const first = repos[0];
+
     const session = await CoworkSession.create({
       userId,
       orgId,
@@ -156,10 +167,11 @@ export class CoworkService {
       outcome:      data.outcome,
       filesTouched: data.filesTouched ?? [],
       languages:    data.languages    ?? [],
-      branch:       data.branch,
-      commitSha:    data.commitSha,
-      repoUrl:      data.repoUrl,
-      prUrl:        data.prUrl,
+      repos,
+      branch:       first?.branch    ?? data.branch,
+      commitSha:    first?.commitSha ?? data.commitSha,
+      repoUrl:      first?.repoUrl   ?? data.repoUrl,
+      prUrl:        first?.prUrl     ?? data.prUrl,
     });
 
     // Create chunks if provided
@@ -177,6 +189,7 @@ export class CoworkService {
           sessionSource: session.source,
           sessionIntent: session.intent,
           sessionOutcome:session.outcome,
+          repoKeys:      repos.length ? [...new Set(repos.map(r => r.repoKey))] : undefined,
         }))
       );
     }
@@ -213,43 +226,77 @@ export class CoworkService {
 
     const query = messages[messages.length - 1]?.content ?? "";
 
-    // Build context from relevant cowork sessions
     let context = "";
-    try {
-      const queryEmb = await embeddingService.embed(query, user.geminiApiKey).catch(() => null);
-      const chunkFilter: any = { $or: [{ userId }, { isShared: true, orgId }] };
-      if (sessionId) chunkFilter.sessionId = sessionId;
+    if (sessionId) {
+      // Session-scoped chat ("Ask AI about this session"): the session IS the
+      // context — inline its summary and checkpoints verbatim. Never gate this
+      // on embedding similarity: "summarize this" matches nothing semantically
+      // and would leave the model blind to the very session it's asked about.
+      const session = await CoworkSession.findOne({
+        _id: sessionId,
+        $or: [{ userId }, { isShared: true, orgId }],
+      }).lean();
+      if (!session) throw new ApiError(404, "Session not found");
 
-      const chunks = await CoworkChunk.find(chunkFilter)
-        .sort({ createdAt: -1 }).limit(150)
-        .select("text embedding sessionTitle sessionSource sessionIntent").lean();
+      // Summary chunks duplicate session.summary — include checkpoints only
+      const chunks = await CoworkChunk.find({ sessionId, kind: { $ne: "summary" } })
+        .sort({ order: 1 }).select("text").lean();
 
-      let topChunks: any[];
-      if (queryEmb) {
-        topChunks = chunks
-          .filter(c => Array.isArray(c.embedding) && c.embedding.length > 0)
-          .map(c => ({ ...c, _score: cosineSimilarity(queryEmb, c.embedding!) }))
-          .filter(c => c._score > 0.55)
-          .sort((a, b) => b._score - a._score)
-          .slice(0, 8);
-      } else {
-        topChunks = chunks.slice(0, 8);
+      const CONTEXT_CAP = 24_000; // chars — comfortably within flash context
+      let body =
+        `# Session: ${session.title}\n` +
+        [session.intent && `Intent: ${session.intent}`,
+         session.outcome && `Outcome: ${session.outcome}`,
+         session.repos?.length && `Repos: ${session.repos.map(r => `${r.repoName}${r.branch ? `@${r.branch}` : ""}`).join(", ")}`,
+        ].filter(Boolean).join(" · ") + "\n" +
+        (session.summary ? `\n## Summary\n${session.summary}\n` : "") +
+        (session.filesTouched?.length ? `\n**Files touched:** ${session.filesTouched.join(", ")}\n` : "");
+      for (const c of chunks) {
+        if (body.length > CONTEXT_CAP) break;
+        body += `\n## Checkpoint\n${c.text}\n`;
       }
+      context = body.slice(0, CONTEXT_CAP);
+    } else {
+      // Global chat: semantic search across all visible memory
+      try {
+        const queryEmb = await embeddingService.embed(query, user.geminiApiKey).catch(() => null);
+        const chunkFilter: any = { $or: [{ userId }, { isShared: true, orgId }] };
 
-      if (topChunks.length > 0) {
-        context = topChunks.map((c, i) =>
-          `[Memory ${i + 1} — ${c.sessionTitle}]\n${c.text.slice(0, 800)}`
-        ).join("\n\n---\n\n");
+        const chunks = await CoworkChunk.find(chunkFilter)
+          .sort({ createdAt: -1 }).limit(150)
+          .select("text embedding sessionTitle sessionSource sessionIntent").lean();
+
+        let topChunks: any[];
+        if (queryEmb) {
+          topChunks = chunks
+            .filter(c => Array.isArray(c.embedding) && c.embedding.length > 0)
+            .map(c => ({ ...c, _score: cosineSimilarity(queryEmb, c.embedding!) }))
+            .filter(c => c._score > 0.55)
+            .sort((a, b) => b._score - a._score)
+            .slice(0, 8);
+        } else {
+          topChunks = chunks.slice(0, 8);
+        }
+
+        if (topChunks.length > 0) {
+          context = topChunks.map((c, i) =>
+            `[Memory ${i + 1} — ${c.sessionTitle}]\n${c.text.slice(0, 800)}`
+          ).join("\n\n---\n\n");
+        }
+      } catch {
+        // Continue without context if embedding fails
       }
-    } catch {
-      // Continue without context if embedding fails
     }
 
-    const systemPrompt =
-      "You are Operium AI, an expert coding assistant with access to this team's persistent memory. " +
-      "Answer questions based on the memory context below. Be specific and cite sessions when relevant. " +
-      "If the memory context doesn't contain enough information, say so and answer from general knowledge.\n\n" +
-      (context ? `## Memory Context\n\n${context}` : "## Memory Context\n\nNo relevant sessions found.");
+    const systemPrompt = sessionId
+      ? "You are Operium AI, an expert coding assistant. The user is viewing the cowork session below and is asking about it. " +
+        "Answer from the session content; be specific — cite files, decisions, and code from it. " +
+        "If something isn't covered by the session, say so.\n\n" +
+        `## Session Content\n\n${context}`
+      : "You are Operium AI, an expert coding assistant with access to this team's persistent memory. " +
+        "Answer questions based on the memory context below. Be specific and cite sessions when relevant. " +
+        "If the memory context doesn't contain enough information, say so and answer from general knowledge.\n\n" +
+        (context ? `## Memory Context\n\n${context}` : "## Memory Context\n\nNo relevant sessions found.");
 
     const reply = await aiService.chat(messages, systemPrompt, user.geminiApiKey);
     return { reply };
