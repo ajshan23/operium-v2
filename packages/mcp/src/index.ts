@@ -1289,17 +1289,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         });
       }
 
-      // Index the polished summary as its own chunks (markdown-aware).
-      // On re-finalize, replace prior summary chunks so this stays idempotent;
-      // checkpoint chunks are kept — they hold detail the summary condenses away.
-      await CoworkChunk.deleteMany({ sessionId: session._id, kind: "summary" });
-      const startOrder = await CoworkChunk.countDocuments({ sessionId: session._id });
+      // Finalize like v1: replace ALL chunks (incremental checkpoints included)
+      // with the polished summary, split into pieces. The summary is the record;
+      // the checkpoints were scaffolding that survived crashes until this call.
+      // Idempotent on re-finalize (deletes everything, re-inserts from the summary).
+      await CoworkChunk.deleteMany({ sessionId: session._id });
       const summaryChunks = splitMarkdownChunks(summary);
       const sessionRepoKeys = repoKeysOf(session.repos);
       await CoworkChunk.insertMany(summaryChunks.map((text, i) => ({
         sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: session.isShared,
         kind: "summary" as const,
-        order: startOrder + i, text,
+        order: i, text,
         sessionTitle: title, sessionSource: session.source,
         sessionIntent: intent ?? session.intent, sessionOutcome: outcome ?? session.outcome,
         repoKeys: sessionRepoKeys,
