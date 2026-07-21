@@ -61,6 +61,9 @@ async function cycle(): Promise<void> {
         );
         await new Promise(r => setTimeout(r, RATE_SPACING_MS));
       } catch (err: any) {
+        // This owner's key is at its per-minute cap — leave the chunk dirty,
+        // don't count it as a failed attempt, and let other keys proceed.
+        if (err?.code === "KEY_RATE_LIMITED") continue;
         if (err?.code === "RATE_LIMIT") {
           backoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
           break;
@@ -123,6 +126,7 @@ async function noteCycle(): Promise<void> {
         );
         await new Promise(r => setTimeout(r, RATE_SPACING_MS));
       } catch (err: any) {
+        if (err?.code === "KEY_RATE_LIMITED") continue;
         if (err?.code === "RATE_LIMIT") {
           backoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
           break;
