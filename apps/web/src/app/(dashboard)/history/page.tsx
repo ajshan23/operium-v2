@@ -9,6 +9,7 @@ import {
   Clock, RotateCcw, RefreshCw, Loader2
 } from "lucide-react";
 import { historyApi, HistoryEntry } from "@/api/history.api";
+import MarkdownViewer from "@/components/MarkdownViewer";
 
 interface Memory {
   id: string;
@@ -532,9 +533,7 @@ export default function HistoryPage() {
                             </div>
 
                             {m.description && (
-                              <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap mt-2 mb-3">
-                                {m.description}
-                              </p>
+                              <MarkdownViewer content={m.description} className="text-[13px] text-[var(--text-secondary)] mt-2 mb-3" />
                             )}
 
                             {m.type === "code" && m.codeSnippet && (
