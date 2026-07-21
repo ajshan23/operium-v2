@@ -23,6 +23,48 @@ describe("sanitize", () => {
       "DATABASE_URL=[redacted]",
     );
   });
+
+  it("keeps benign env values readable", () => {
+    expect(sanitize("run with NODE_ENV=production")).toBe("run with NODE_ENV=production");
+    expect(sanitize("set PORT=4000")).toBe("set PORT=4000");
+  });
+
+  it("redacts a Google/Gemini API key", () => {
+    // Google keys are AIza + exactly 35 chars
+    const out = sanitize("key AIzaabcdefghijklmnopqrstuvwxyz012345678 end");
+    expect(out).toContain("[redacted:GOOGLE_API_KEY]");
+    expect(out).not.toContain("AIzaabc");
+  });
+
+  it("redacts a Slack token", () => {
+    expect(sanitize("xoxb-123456789012-abcdefGHIJKL")).toContain("[redacted:SLACK_TOKEN]");
+  });
+
+  it("redacts a Stripe secret key", () => {
+    expect(sanitize("sk_live_abcdef0123456789ABCDEF")).toContain("[redacted:STRIPE_KEY]");
+  });
+
+  it("redacts an OpenAI project key with hyphens", () => {
+    const out = sanitize("sk-proj-abcdefghij0123456789KLMNOP");
+    expect(out).toContain("[redacted:OPENAI_KEY]");
+    expect(out).not.toContain("sk-proj-abcdef");
+  });
+
+  it("redacts a PEM private key block", () => {
+    const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\nabc123\n-----END RSA PRIVATE KEY-----";
+    expect(sanitize(`here it is ${pem} done`)).toBe("here it is [redacted:PRIVATE_KEY] done");
+  });
+
+  it("redacts a Bearer token but keeps the scheme", () => {
+    const out = sanitize("Authorization: Bearer abcdef0123456789ghijkl");
+    expect(out).toContain("Bearer [redacted]");
+    expect(out).not.toContain("abcdef0123456789");
+  });
+
+  it("leaves ordinary prose and code untouched", () => {
+    const text = "We fixed the bug in `auth.middleware.ts` — see commit a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2.";
+    expect(sanitize(text)).toBe(text);
+  });
 });
 
 describe("contentHash", () => {

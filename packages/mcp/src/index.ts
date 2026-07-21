@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { McpToolName } from "@operium/shared";
 import {
-  compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints,
+  compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints, sanitize,
   normalizeRepoKey, normalizeRepoRefs, type RepoRef, type NormalizedRepoRef,
   normalizeErrorText, errorSignature,
   repoWebUrl, branchWebUrl,
@@ -422,6 +422,31 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     return `${Math.floor(days / 30)}mo ago`;
   }
 
+  /**
+   * Cap the assembled startup context so it can't blow the agent's context
+   * window. Sections arrive most- to least-important, so we keep whole sections
+   * until the budget runs out, truncate the one straddling the limit on a clean
+   * boundary, and note how many were dropped. The closing tip is appended by the
+   * caller and isn't counted here.
+   */
+  function fitToBudget(sections: string[], maxChars: number): string[] {
+    const out: string[] = [];
+    let used = 0;
+    for (let i = 0; i < sections.length; i++) {
+      const s = sections[i]!;
+      if (used + s.length <= maxChars) { out.push(s); used += s.length + 2; continue; }
+      const remaining = maxChars - used;
+      const kept = remaining > 500;
+      if (kept) out.push(snippet(s, remaining));
+      const dropped = sections.length - i - (kept ? 1 : 0);
+      if (dropped > 0) {
+        out.push(`_…${dropped} more section${dropped > 1 ? "s" : ""} omitted to save tokens — use recall_context, list_cowork, or list_history to pull the rest._`);
+      }
+      break;
+    }
+    return out;
+  }
+
   // ── Tool registration wrapper: usage logging + friendly error surface ──────
   type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
   function tool(
@@ -624,9 +649,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         sections.push(`## ${label}\n\n${otherCowork.map(fmtSession).join("\n")}\n\nUse search or list_cowork to explore further.`);
       }
 
-      sections.push("---\n**Tip**: Use recall_context(query) for semantic search across all your memory.");
+      // Bound the whole payload so a busy account can't hand the agent a
+      // context dump that crowds out the actual task. Sections above are ordered
+      // by importance; fitToBudget keeps the top ones and trims the tail.
+      const maxChars = Number(process.env.OPERIUM_STARTUP_MAX_CHARS) || 12_000;
+      const body = fitToBudget(sections, maxChars);
+      body.push("---\n**Tip**: Use recall_context(query) for semantic search across all your memory.");
 
-      return { content: [{ type: "text" as const, text: sections.join("\n\n") }] };
+      return { content: [{ type: "text" as const, text: body.join("\n\n") }] };
     },
   );
 
@@ -1030,6 +1060,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     },
     async ({ title, description, category, isMilestone, isBlocker, isImportant }) => {
       const { WorkHistory } = await db();
+      description = sanitize(description);
       const entry = await WorkHistory.create({
         userId: ctx.userId,
         title, description, category,
@@ -1111,6 +1142,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
 
+      finding = sanitize(finding);
       const incomingRepos = collectRepoRefs(repos, { repoUrl, branch, commitSha });
 
       let session: any;
@@ -1222,6 +1254,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
 
+      summary = sanitize(summary);
       const incomingRepos = collectRepoRefs(repos, { repoUrl, branch });
 
       let session: any;
@@ -1617,6 +1650,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { Space, Note, NoteBlock } = await db();
       const uid = ctx.userId;
 
+      content = sanitize(content);
       let resolvedSpaceId = spaceId;
       let spaceName = "Notes";
       if (!resolvedSpaceId) {
@@ -1666,6 +1700,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     async ({ title, goal, steps, spaceId, notes }) => {
       const { Space, Note, NoteBlock } = await db();
       const uid = ctx.userId;
+
+      goal  = sanitize(goal);
+      notes = sanitize(notes);
+      steps = steps.map((s: string) => sanitize(s));
 
       // Resolve or auto-create a space — a caller-supplied spaceId must be
       // the caller's own space (mirrors create_note)
@@ -1767,6 +1805,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (scope === "team" && !ctx.orgId) {
         return { content: [{ type: "text" as const, text: "⚠️ Cannot save a team rule: you are not a member of an organisation. Saved nothing — retry with scope='personal' or join an org first." }] };
       }
+      rule = sanitize(rule);
       const repoKeys = toRepoKeys(repos);
       const scoped = repoKeys.length > 0;
       const existing = await ContextRule.findOne({ userId: ctx.userId, title });
@@ -1863,7 +1902,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         return { content: [{ type: "text" as const, text: "⚠️ Cannot save a team correction: you are not a member of an organisation. Saved nothing — retry with scope='personal'." }] };
       }
       const repoKeys = toRepoKeys(repos);
-      const rule = `Correction: ${correction}`;
+      const rule = `Correction: ${sanitize(correction)}`;
       const existing = await ContextRule.findOne({ userId: ctx.userId, title });
 
       if (existing) {
@@ -2339,7 +2378,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (!member) return { content: [{ type: "text" as const, text: `${toEmail} is not a member of your organization.` }] };
 
       // 1. Append the handoff as a session chunk (searchable, shows in get_cowork)
-      const handoffMd = `## Handoff → ${assignee.name ?? toEmail}\n\n${note.trim()}`;
+      const handoffMd = `## Handoff → ${assignee.name ?? toEmail}\n\n${sanitize(note.trim())}`;
       const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
       const chunks = splitMarkdownChunks(handoffMd);
       await CoworkChunk.insertMany(chunks.map((text, i) => ({
@@ -2475,6 +2514,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     },
     async ({ historyId, ...fields }) => {
       const { WorkHistory } = await db();
+      if (typeof fields.description === "string") fields.description = sanitize(fields.description);
       const upd: any = {};
       for (const [k, v] of Object.entries(fields)) if (v !== undefined) upd[k] = v;
       if (Object.keys(upd).length === 0) {
@@ -2529,6 +2569,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
       if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
 
+      content = sanitize(content);
       const order = await NoteBlock.countDocuments({ noteId });
       const chunks = splitMarkdownChunks(content, 2000);
       await NoteBlock.insertMany(chunks.map((text, i) => ({
@@ -2558,6 +2599,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (title !== undefined) upd.title = title;
       if (tags  !== undefined) upd.tags  = tags;
       if (content !== undefined) {
+        content = sanitize(content);
         upd.preview = content.substring(0, 200);
         await NoteBlock.deleteMany({ noteId });
         const chunks = splitMarkdownChunks(content, 2000);
@@ -3179,7 +3221,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         const resolvedProject = await resolveProject(client, project);
         if (typeof resolvedProject !== "string") return resolvedProject;
 
-        const comment = await client.addWorkItemComment(resolvedProject, id, text);
+        const comment = await client.addWorkItemComment(resolvedProject, id, sanitize(text));
         const preview = comment.text.length > 120 ? `${comment.text.slice(0, 120)}…` : comment.text;
         return { content: [{ type: "text" as const, text: `💬 Comment added to #${id}: ${preview}` }] };
       } catch (err) {
