@@ -61,6 +61,13 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
 }
 
 function sendUnauthorized(res: any) {
+  // Point clients (Claude/Codex/Cursor) at the OAuth discovery doc so they can
+  // run the authorization flow. Per RFC 9728 / the MCP auth spec.
+  const base = process.env.SERVER_URL ?? "";
+  res.setHeader(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
+  );
   res.status(401).json({
     jsonrpc: "2.0",
     error: { code: -32600, message: "Unauthorized — provide a valid Bearer token." },

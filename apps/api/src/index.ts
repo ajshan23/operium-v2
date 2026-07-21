@@ -7,26 +7,33 @@ import { ApiError } from "./utils/ApiError.js";
 import { startEmbedWorker } from "./lib/embedWorker.js";
 
 const app = express();
+app.set("trust proxy", true); // behind nginx — needed for correct req.protocol (https)
 
-// ── Middleware ────────────────────────────────────────────────────────────────
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // In dev, allow common frontend ports. In prod, check against APP_URL strictly.
-      const allowedOrigins = [process.env.APP_URL];
-      if (process.env.NODE_ENV !== "production") {
-        allowedOrigins.push("http://localhost:5000", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002");
-      }
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  }),
-);
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// The web app is locked to APP_URL. The MCP + OAuth endpoints, however, must be
+// reachable by external clients (Claude/Codex/Cursor, localhost OAuth callbacks,
+// claude.ai) — they authenticate with Bearer tokens, not cookies, so open CORS
+// is safe there.
+const strictCors = cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = [process.env.APP_URL];
+    if (process.env.NODE_ENV !== "production") {
+      allowedOrigins.push("http://localhost:5000", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002");
+    }
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+});
+const openCors = cors({ origin: true });
+const PUBLIC_PREFIXES = ["/mcp", "/.well-known", "/authorize", "/token", "/register", "/oauth"];
+app.use((req, res, next) => {
+  const isPublic = PUBLIC_PREFIXES.some((p) => req.path === p || req.path.startsWith(p + "/"));
+  return (isPublic ? openCors : strictCors)(req, res, next);
+});
+
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false })); // OAuth form posts (/authorize, /token)
 app.use(cookieParser());
 
 // ── Health check ─────────────────────────────────────────────────────────────
@@ -51,6 +58,7 @@ import { gitRouter }     from "./routes/git.js";
 import { mcpRouter }     from "./routes/mcp.js";
 import { sharedRouter }  from "./routes/shared.js";
 import { boardsRouter }  from "./routes/boards.js";
+import { oauthRouter, wellKnownAuthServer, protectedResource } from "./routes/oauth.js";
 
 app.use("/api/auth",    authRouter);
 app.use("/api/orgs",    orgRouter);
@@ -64,6 +72,12 @@ app.use("/api/git",     gitRouter);
 app.use("/api/shared",  sharedRouter);
 app.use("/api/boards",  boardsRouter);
 app.use("/mcp",         mcpRouter);
+
+// ── MCP OAuth authorization server (Claude/Codex/Cursor sign-in) ──────────────
+app.get("/.well-known/oauth-authorization-server", wellKnownAuthServer);
+app.get("/.well-known/oauth-protected-resource",     protectedResource);
+app.get("/.well-known/oauth-protected-resource/mcp", protectedResource);
+app.use(oauthRouter); // /authorize, /token, /register, /oauth/github(/callback)
 
 // ── 404 + error handling ─────────────────────────────────────────────────────
 app.use((req: express.Request, res: express.Response) => {
