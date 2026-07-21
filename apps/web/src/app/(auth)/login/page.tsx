@@ -175,7 +175,14 @@ export default function LoginPage() {
           <div className="login-form-wrap">
 
             {/* Logo */}
-            <div className="login-logo-mark">O</div>
+            <Image
+              src="/image.png"
+              alt="Operium"
+              width={42}
+              height={42}
+              className="login-logo-mark"
+              priority
+            />
 
             {/* Heading */}
             <h1 className="login-heading">Welcome back</h1>

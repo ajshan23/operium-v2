@@ -1,20 +1,33 @@
 /**
  * Operium v1 → v2 data migration.
  *
- * Copy mode (default, safe): reads the old database and writes a fully
- * migrated copy into a NEW database. The source is never written to.
+ * The real v1 data lives in the `test` database on the shared Atlas cluster;
+ * the new v2 database is `operiumnew`. Those are the defaults, so the common
+ * case is just:
  *
- *   pnpm --filter @operium/db migrate:v1 -- --source old-db-name --target old-db-name-v2
+ *   pnpm --filter @operium/db migrate:v1 -- --dry-run        # preview
+ *   pnpm --filter @operium/db migrate:v1                     # test → operiumnew
  *
- * In-place mode (after the copy has been tested): applies the same
- * transforms directly inside the source database.
+ * Copy mode (default, safe): reads the source database and writes a fully
+ * migrated copy into a NEW database. The source is NEVER written to.
  *
- *   pnpm --filter @operium/db migrate:v1 -- --source old-db-name --in-place
+ *   pnpm --filter @operium/db migrate:v1 -- --source test --target operiumnew
+ *
+ * After a copy, run the repo backfill so multi-repo fields are populated:
+ *
+ *   MONGODB_URI="<cluster-uri>/operiumnew" pnpm --filter @operium/db backfill:cowork-repos
+ *
+ * In-place mode (destructive; only after the copy has been validated): applies
+ * the same transforms inside the source database. Requires an explicit
+ * --source — it never assumes the `test` default, so you can't nuke prod by
+ * forgetting a flag.
+ *
+ *   pnpm --filter @operium/db migrate:v1 -- --source test --in-place
  *
  * Flags:
  *   --uri <mongodb-uri>   defaults to MONGODB_URI env (or apps/api/.env)
- *   --source <db>         old database name (required)
- *   --target <db>         new database name (copy mode; default: <source>-v2)
+ *   --source <db>         old database name (default: test; required for --in-place)
+ *   --target <db>         new database name (copy mode; default: operiumnew)
  *   --in-place            transform inside the source database instead of copying
  *   --dry-run             report what would happen; write nothing
  *   --copy-orphans        copy v1-only collections (chat, channels, logs…) verbatim
@@ -29,7 +42,7 @@ import mongoose from "mongoose";
 import type { Db, Document as MongoDoc } from "mongodb";
 import {
   User, Org, Membership, Team, Space, Note, NoteBlock,
-  WorkHistory, CoworkSession, CoworkChunk, ContextRule, Task, OTP,
+  WorkHistory, CoworkSession, CoworkChunk, ContextRule, Task, OTP, Invite,
 } from "../src/index.js";
 
 // ─── CLI / env ────────────────────────────────────────────────────────────────
@@ -53,15 +66,20 @@ function resolveUri(): string {
   throw new Error("No MongoDB URI. Pass --uri or set MONGODB_URI.");
 }
 
-const SOURCE  = opt("source");
 const IN_PLACE = flag("in-place");
-const TARGET  = IN_PLACE ? SOURCE : (opt("target") ?? (SOURCE ? `${SOURCE}-v2` : undefined));
+// Copy mode is wired to this project's real databases (test → operiumnew) so
+// the common case just works. In-place is destructive, so it never assumes a
+// source — you must name it explicitly.
+const SOURCE  = opt("source") ?? (IN_PLACE ? undefined : "test");
+const TARGET  = IN_PLACE ? SOURCE : (opt("target") ?? "operiumnew");
 const DRY     = flag("dry-run");
 const ORPHANS = flag("copy-orphans");
 const FORCE   = flag("force");
 
 if (!SOURCE) {
-  console.error("Usage: migrate-v1-to-v2 --source <old-db> [--target <new-db>] [--in-place] [--dry-run]");
+  console.error(IN_PLACE
+    ? "--in-place is destructive: pass --source <db> explicitly (no default)."
+    : "Usage: migrate-v1-to-v2 [--source <old-db>] [--target <new-db>] [--in-place] [--dry-run]");
   process.exit(1);
 }
 if (IN_PLACE && opt("target")) {
@@ -119,12 +137,13 @@ function transformUser(doc: any): any {
         : ci.headers,
     }));
   }
-  if (out.preferences && typeof out.preferences === "object") {
-    out.preferences = out.preferences.editWindowHours !== undefined
-      ? { editWindowHours: out.preferences.editWindowHours }
-      : undefined;
-    if (out.preferences === undefined) delete out.preferences;
-  }
+  // v1 preferences carried canvas theming that v2 dropped; v2 adds
+  // shareCoworkByDefault. Keep editWindowHours, set the v2 default for sharing
+  // (raw inserts bypass Mongoose defaults, so write both fields explicitly).
+  out.preferences = {
+    editWindowHours: out.preferences?.editWindowHours ?? 48,
+    shareCoworkByDefault: true,
+  };
   delete out.apiKeys;
   delete out.orgId; // org membership now lives in the memberships collection
   return out;
@@ -144,7 +163,12 @@ function transformContextRule(doc: any): any {
   if (out.category && CONTEXT_CATEGORY_MAP[out.category]) out.category = CONTEXT_CATEGORY_MAP[out.category];
   if (out.source && CONTEXT_SOURCE_MAP[out.source]) out.source = CONTEXT_SOURCE_MAP[out.source];
   if (out.timesApplied === undefined) out.timesApplied = 0;
-  delete out.scope;
+  // v1 and v2 share the personal|team scope enum, so preserve team-sharing
+  // intent — but a "team" rule needs an org to be visible in v2; downgrade
+  // orphaned team rules to personal rather than hide them entirely.
+  if (out.scope !== "personal" && out.scope !== "team") out.scope = "personal";
+  if (out.scope === "team" && !out.orgId) out.scope = "personal";
+  if (!out.orgId) delete out.orgId;
   delete out.confidence;
   delete out.supersededBy;
   delete out.projectId;
@@ -169,7 +193,28 @@ function transformCoworkChunk(doc: any, userOrg: Map<string, any>): any {
     const orgId = userOrg.get(String(out.userId));
     if (orgId) out.orgId = orgId; else delete out.orgId;
   }
+  // v2 chunks carry a kind; everything v1 saved was an incremental checkpoint.
+  if (!out.kind) out.kind = "checkpoint";
+  // CRITICAL: the embed worker's CoworkChunk query is
+  //   { embeddingDirty: true, embeddingAttempts: { $lt: MAX } }
+  // A missing embeddingAttempts (v1 has no such field) fails the $lt clause, so
+  // a dirty v1 chunk would NEVER get embedded. Seed it to 0 so it's pickable.
+  // v1's embedding/embeddingDirty are preserved as-is (same 768-dim Gemini
+  // space), so already-embedded chunks stay done and searchable immediately.
+  if (out.embeddingAttempts === undefined) out.embeddingAttempts = 0;
   delete out.projectId;
+  return out;
+}
+
+// v1 stored NoteBlock embeddings in a separate `noteblockchunks` collection
+// (dropped in v2, which embeds the block directly). Migrated blocks therefore
+// have no embedding yet — seed the embed-worker fields so they get picked up
+// and re-embedded, and drop the dead orgId.
+function transformNoteBlock(doc: any): any {
+  const out = { ...doc };
+  delete out.orgId;
+  out.embeddingDirty = true;
+  if (out.embeddingAttempts === undefined) out.embeddingAttempts = 0;
   return out;
 }
 
@@ -296,7 +341,7 @@ async function main() {
   // 5. Compatible collections (strip dead v1 fields, otherwise verbatim)
   await migrateCollection(srcDb, dstDb, "spaces",     stripFields(["orgId"]), stats);
   await migrateCollection(srcDb, dstDb, "notes",      stripFields(["orgId", "checklist"]), stats);
-  await migrateCollection(srcDb, dstDb, "noteblocks", stripFields(["orgId"]), stats);
+  await migrateCollection(srcDb, dstDb, "noteblocks", transformNoteBlock, stats);
 
   // 6. v1-only collections
   for (const name of V1_ORPHANS) {
@@ -311,10 +356,23 @@ async function main() {
     }
   }
 
+  // 6b. No silent drops: warn about any source collection the plan neither
+  // migrates nor knows as an orphan (e.g. a stray `organizations`, `kgedges`).
+  const HANDLED = new Set<string>([
+    "orgs", "memberships", "users", "contextrules", "coworksessions",
+    "coworkchunks", "workhistories", "spaces", "notes", "noteblocks",
+    ...V1_ORPHANS,
+  ]);
+  for (const name of srcCollections) {
+    if (HANDLED.has(name) || name.startsWith("system.")) continue;
+    const count = await srcDb.collection(name).countDocuments();
+    warnings.push(`Unmapped source collection "${name}" (${count} docs) — NOT migrated. Add it to the plan if it holds data you need.`);
+  }
+
   // 7. Build v2 indexes on the target (drops stale ones, creates new ones)
   if (!DRY) {
     const targetConn = conn.useDb(TARGET!, { useCache: false });
-    const models = { User, Org, Membership, Team, Space, Note, NoteBlock, WorkHistory, CoworkSession, CoworkChunk, ContextRule, Task, OTP };
+    const models = { User, Org, Membership, Team, Space, Note, NoteBlock, WorkHistory, CoworkSession, CoworkChunk, ContextRule, Task, OTP, Invite };
     for (const [name, model] of Object.entries(models)) {
       const bound = targetConn.model(name, (model as any).schema);
       await bound.syncIndexes();
