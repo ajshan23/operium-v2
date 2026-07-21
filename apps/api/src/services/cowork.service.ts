@@ -100,7 +100,9 @@ export class CoworkService {
 
     if (!session) throw new ApiError(404, "Session not found");
 
-    const chunks = await CoworkChunk.find({ sessionId: id })
+    // Exclude summary-kind chunks — they duplicate session.summary (rendered as
+    // the detail header), so including them showed the summary twice in the UI.
+    const chunks = await CoworkChunk.find({ sessionId: id, kind: { $ne: "summary" } })
       .sort({ order: 1 })
       .lean();
 
