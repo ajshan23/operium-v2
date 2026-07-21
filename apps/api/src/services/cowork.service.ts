@@ -100,9 +100,10 @@ export class CoworkService {
 
     if (!session) throw new ApiError(404, "Session not found");
 
-    // Exclude summary-kind chunks — they duplicate session.summary (rendered as
-    // the detail header), so including them showed the summary twice in the UI.
-    const chunks = await CoworkChunk.find({ sessionId: id, kind: { $ne: "summary" } })
+    // Return every chunk (checkpoints + summary), like v1. The summary overlaps
+    // session.summary, but the web keeps the "Knowledge Chunks" list collapsed by
+    // default so it doesn't read as a duplicate.
+    const chunks = await CoworkChunk.find({ sessionId: id })
       .sort({ order: 1 })
       .lean();
 

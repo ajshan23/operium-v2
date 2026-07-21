@@ -35,7 +35,7 @@ export default function CoworkDetailPage() {
   const [chunks,          setChunks]          = useState<CoworkChunk[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState<string | null>(null);
-  const [showChunks,      setShowChunks]      = useState(true);
+  const [showChunks,      setShowChunks]      = useState(false); // collapsed by default (matches v1) — summary is the header
 
   const [helpfulVote,     setHelpfulVote]     = useState<"up" | "down" | null>(null);
   const [helpfulCount,    setHelpfulCount]    = useState(0);
