@@ -3,7 +3,7 @@ import { authService } from "../services/auth.service.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const APP_URL = process.env.APP_URL || "http://localhost:5000";
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 
 export class AuthController {

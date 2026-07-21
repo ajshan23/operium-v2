@@ -15,7 +15,7 @@ app.use(
       // In dev, allow common frontend ports. In prod, check against APP_URL strictly.
       const allowedOrigins = [process.env.APP_URL];
       if (process.env.NODE_ENV !== "production") {
-        allowedOrigins.push("http://localhost:3000", "http://localhost:3001", "http://localhost:3002");
+        allowedOrigins.push("http://localhost:5000", "http://localhost:3000", "http://localhost:3001", "http://localhost:3002");
       }
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);

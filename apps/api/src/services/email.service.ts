@@ -17,7 +17,7 @@ export class EmailService {
   }
 
   async sendInvite(email: string, orgName: string, token: string): Promise<void> {
-    const base = process.env["APP_URL"] || "http://localhost:3000";
+    const base = process.env["APP_URL"] || "http://localhost:5000";
     const link = `${base}/public-onboarding?invite=${token}`;
 
     console.log("==================================================");
