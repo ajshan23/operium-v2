@@ -19,6 +19,8 @@ export interface OrgInvite {
   status: "pending" | "accepted" | "revoked";
   expiresAt: string;
   createdAt?: string;
+  /** Present for owner/admin — used to build a shareable invite link. */
+  token?: string;
 }
 
 export const orgApi = {

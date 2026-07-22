@@ -123,10 +123,11 @@ export class OrgController {
       }
 
       const invite = await orgService.createInvite(orgId, inviterUserId, actorRole, String(email), role === "admin" ? "admin" : "member");
-      // Never return the token in the list/create response — it goes only to
-      // the recipient's inbox.
+      // Return the token to the owner/admin (route is role-gated) so they can
+      // copy the invite link and send it manually. Safe: invites are bound to
+      // the invitee's email, so a shared link can't be used by anyone else.
       res.status(201).json(new ApiResponse(201, {
-        _id: invite._id, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt,
+        _id: invite._id, email: invite.email, role: invite.role, status: invite.status, expiresAt: invite.expiresAt, token: invite.token,
       }, "Invite sent"));
     } catch (error: any) {
       const status = error instanceof ApiError ? error.statusCode : 500;
@@ -141,6 +142,7 @@ export class OrgController {
       const safe = invites.map((i: any) => ({
         _id: i._id, email: i.email, role: i.role, status: i.status,
         expiresAt: i.expiresAt, invitedBy: i.invitedBy, createdAt: i.createdAt,
+        token: i.token, // owner/admin only (role-gated route) — lets them copy the invite link
       }));
       res.status(200).json(new ApiResponse(200, safe, "Invites fetched"));
     } catch (error: any) {

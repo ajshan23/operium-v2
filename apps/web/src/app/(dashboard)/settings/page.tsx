@@ -437,8 +437,9 @@ export default function SettingsPage() {
     setInviteBusy(true); setInviteMsg(null); setTeamError(null);
     try {
       await orgApi.createInvite(inviteEmail.trim(), inviteRole);
+      const invited = inviteEmail.trim();
       setInviteEmail("");
-      setInviteMsg(`Invite sent to ${inviteEmail.trim()}.`);
+      setInviteMsg(`Invite created for ${invited} — use "Link" below to copy & send it, or they'll get an email.`);
       await loadTeam();
     } catch (err: any) {
       setTeamError(err.message || "Failed to send invite");
@@ -849,10 +850,20 @@ export default function SettingsPage() {
                       <div className="text-[10px] text-[var(--text-muted)]">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
                     </div>
                   </div>
-                  <button onClick={() => handleRevokeInvite(inv._id)} title="Revoke invite"
-                    className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
-                    <X size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {inv.token && (
+                      <button
+                        onClick={() => handleCopyKey(inv._id, `${window.location.origin}/public-onboarding?invite=${inv.token}`)}
+                        title="Copy invite link — send it to them manually"
+                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold">
+                        {copiedKeyId === inv._id ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Link</>}
+                      </button>
+                    )}
+                    <button onClick={() => handleRevokeInvite(inv._id)} title="Revoke invite"
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
