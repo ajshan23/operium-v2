@@ -1181,7 +1181,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       // Chunk the finding (markdown-aware: never splits inside a code fence)
       const sessionRepoKeys = repoKeysOf(session.repos);
-      const chunks = splitMarkdownChunks(finding);
+      const chunks = splitMarkdownChunks(finding, 2000, { breakOnHeadings: true });
       const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
       const chunkDocs = chunks.map((text, i) => ({
         sessionId:     session._id,
@@ -1294,7 +1294,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       // the checkpoints were scaffolding that survived crashes until this call.
       // Idempotent on re-finalize (deletes everything, re-inserts from the summary).
       await CoworkChunk.deleteMany({ sessionId: session._id });
-      const summaryChunks = splitMarkdownChunks(summary);
+      const summaryChunks = splitMarkdownChunks(summary, 2000, { breakOnHeadings: true });
       const sessionRepoKeys = repoKeysOf(session.repos);
       await CoworkChunk.insertMany(summaryChunks.map((text, i) => ({
         sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined, isShared: session.isShared,
@@ -2380,7 +2380,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       // 1. Append the handoff as a session chunk (searchable, shows in get_cowork)
       const handoffMd = `## Handoff → ${assignee.name ?? toEmail}\n\n${sanitize(note.trim())}`;
       const existingCount = await CoworkChunk.countDocuments({ sessionId: session._id });
-      const chunks = splitMarkdownChunks(handoffMd);
+      const chunks = splitMarkdownChunks(handoffMd, 2000, { breakOnHeadings: true });
       await CoworkChunk.insertMany(chunks.map((text, i) => ({
         sessionId:      session._id,
         userId:         uid,

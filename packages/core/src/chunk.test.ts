@@ -52,6 +52,29 @@ describe("splitMarkdownChunks", () => {
     }
   });
 
+  it("breakOnHeadings: one chunk per section (heading stays with its content)", () => {
+    const text =
+      "## Goal\n\nFix the end-flow bug.\n\n" +
+      "## What was done\n\nReverted the revert; added cooldown.\n\n" +
+      "## Next steps\n\nSmoke test in prod.";
+    const chunks = splitMarkdownChunks(text, 2000, { breakOnHeadings: true });
+    expect(chunks.length).toBe(3);
+    expect(chunks[0]!.startsWith("## Goal")).toBe(true);
+    expect(chunks[1]!.startsWith("## What was done")).toBe(true);
+    expect(chunks[2]!.startsWith("## Next steps")).toBe(true);
+    // content stays attached to its heading
+    expect(chunks[0]).toContain("Fix the end-flow bug");
+  });
+
+  it("breakOnHeadings still never splits a code fence", () => {
+    const code = "```ts\n" + Array.from({ length: 20 }, (_, i) => `const x${i} = ${i};`).join("\n") + "\n```";
+    const text = `## Root cause\n\nThe secret was wrong.\n\n${code}\n\n## Fix\n\nUse env var.`;
+    const chunks = splitMarkdownChunks(text, 2000, { breakOnHeadings: true });
+    for (const c of chunks) expect(fenceCount(c) % 2).toBe(0);
+    expect(chunks.some(c => c.startsWith("## Root cause"))).toBe(true);
+    expect(chunks.some(c => c.startsWith("## Fix"))).toBe(true);
+  });
+
   it("falls back to word-boundary windows for one giant paragraph", () => {
     const giant = "word ".repeat(800).trim();
     const chunks = splitMarkdownChunks(giant, 1200);

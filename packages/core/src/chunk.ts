@@ -73,22 +73,41 @@ function splitProse(text: string, maxLen: number, overlap = 150): string[] {
   return chunks.filter(Boolean);
 }
 
+const HEADING_RE = /^#{1,6}\s/;
+
+export interface ChunkOptions {
+  /**
+   * Start a new chunk at every Markdown heading, so each chunk is one topical
+   * section (heading + its content) rather than several unrelated paragraphs
+   * packed together. Sharper embeddings / better retrieval precision. Used for
+   * cowork sessions, whose findings/summaries are heading-structured.
+   */
+  breakOnHeadings?: boolean;
+}
+
 /**
  * Split Markdown into chunks of roughly `maxLen` characters without ever
- * breaking inside a code fence or mid-word. Paragraphs are greedily packed;
- * oversized fences are re-fenced per piece with their language tag preserved,
- * so every emitted chunk is independently valid Markdown.
+ * breaking inside a code fence or mid-word. Paragraphs are greedily packed
+ * (unless `breakOnHeadings` forces a break at each heading); oversized fences
+ * are re-fenced per piece with their language tag preserved, so every emitted
+ * chunk is independently valid Markdown.
  */
-export function splitMarkdownChunks(text: string, maxLen = 1200): string[] {
+export function splitMarkdownChunks(text: string, maxLen = 1200, opts: ChunkOptions = {}): string[] {
   const t = text.trim();
   if (!t) return [];
-  if (t.length <= maxLen) return [t];
+  // Small text is a single chunk — unless we're sectioning, where a short
+  // multi-heading doc should still split one-topic-per-chunk.
+  if (t.length <= maxLen && !opts.breakOnHeadings) return [t];
 
   const chunks: string[] = [];
   let cur = "";
   const flush = () => { if (cur) { chunks.push(cur); cur = ""; } };
 
   for (const block of toBlocks(t)) {
+    // A heading opens a new section — flush whatever preceded it so the heading
+    // stays attached to its own content in a single chunk.
+    if (opts.breakOnHeadings && !block.fence && HEADING_RE.test(block.text)) flush();
+
     const parts = block.text.length > maxLen
       ? (block.fence ? splitFence(block, maxLen) : splitProse(block.text, maxLen))
       : [block.text];
