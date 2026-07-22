@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { historyApi, HistoryEntry } from "@/api/history.api";
 import MarkdownViewer from "@/components/MarkdownViewer";
+import TipTapEditor from "@/app/(dashboard)/spaces/TipTapEditor";
 
 interface Memory {
   id: string;
@@ -226,6 +227,10 @@ export default function HistoryPage() {
 
   const handleSaveMemory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!description.trim()) {
+      alert("Please add a description.");
+      return;
+    }
     setIsSaving(true);
     try {
       await historyApi.createEntry({
@@ -724,8 +729,14 @@ export default function HistoryPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Memory Description / Details</label>
-                <textarea required placeholder="Describe details of the refactor, decision, or logic..." value={description} onChange={(e) => setDescription(e.target.value)} rows={2}
-                  className="w-full bg-[var(--s2)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl p-3.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all resize-none" />
+                <div className="h-[220px]">
+                  <TipTapEditor
+                    value={description}
+                    onChange={setDescription}
+                    placeholder="Describe details of the refactor, decision, or logic..."
+                    minHeight={130}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

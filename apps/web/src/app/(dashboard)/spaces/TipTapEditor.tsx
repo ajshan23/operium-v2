@@ -15,13 +15,16 @@ interface TipTapEditorProps {
   onChange: (val: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Minimum height (px) of the typing area. Defaults to the full-page notes size. */
+  minHeight?: number;
 }
 
 export default function TipTapEditor({
   value,
   onChange,
   placeholder = "Write something...",
-  autoFocus = false
+  autoFocus = false,
+  minHeight = 400
 }: TipTapEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
@@ -40,7 +43,8 @@ export default function TipTapEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: `${NOTE_PROSE_CLASS} focus:outline-none min-h-[400px] overflow-y-auto custom-scrollbar p-2`,
+        class: `${NOTE_PROSE_CLASS} focus:outline-none overflow-y-auto custom-scrollbar p-2`,
+        style: `min-height: ${minHeight}px`,
       }
     },
     onUpdate: ({ editor }) => {
