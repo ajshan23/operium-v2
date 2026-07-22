@@ -29,6 +29,7 @@ export default function CoworkPage() {
   // ── Data state ──
   const [sessions,     setSessions]     = useState<CoworkSession[]>([]);
   const [loading,      setLoading]      = useState(true);
+  const [loadingMore,  setLoadingMore]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
   const [pagination,   setPagination]   = useState({ total: 0, page: 1, pages: 1 });
 
@@ -75,6 +76,21 @@ export default function CoworkPage() {
     }
     setLoading(false);
   }, []);
+
+  // Fetch the next page and append (list mode only; search returns all matches).
+  const loadMore = useCallback(async () => {
+    if (loadingMore || searchQuery.trim()) return;
+    setLoadingMore(true);
+    try {
+      const res = await coworkApi.list({ scope: scopeFilter, source: sourceFilter || undefined, page: pagination.page + 1 });
+      const { sessions: list, pagination: pg } = (res as any).data;
+      setSessions(prev => [...prev, ...list]);
+      setPagination(pg);
+    } catch (err: any) {
+      setError(err.message || "Failed to load more");
+    }
+    setLoadingMore(false);
+  }, [loadingMore, searchQuery, scopeFilter, sourceFilter, pagination.page]);
 
   // Reload when filters change (debounce search input)
   useEffect(() => {
@@ -279,11 +295,21 @@ export default function CoworkPage() {
             ))
           )}
 
-          {/* Pagination indicator */}
+          {/* Pagination */}
           {!loading && pagination.total > 0 && (
-            <p className="text-center text-[10px] text-[var(--text-muted)] font-mono pt-2">
-              {visibleSessions.length} of {pagination.total} session{pagination.total !== 1 ? "s" : ""}
-            </p>
+            <div className="flex flex-col items-center gap-2 pt-2">
+              {!searchQuery && pagination.page < pagination.pages && (
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="px-4 py-2 rounded-lg border border-[var(--border-default)] text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] transition-colors disabled:opacity-50 flex items-center gap-2">
+                  {loadingMore ? <><Loader2 size={13} className="animate-spin" /> Loading…</> : "Load more"}
+                </button>
+              )}
+              <p className="text-center text-[10px] text-[var(--text-muted)] font-mono">
+                {searchQuery ? visibleSessions.length : `${sessions.length} of ${pagination.total}`} session{pagination.total !== 1 ? "s" : ""}
+              </p>
+            </div>
           )}
         </div>
       </div>
