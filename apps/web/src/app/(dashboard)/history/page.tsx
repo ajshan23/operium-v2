@@ -204,6 +204,19 @@ export default function HistoryPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleDeleteEntry = async (id: string) => {
+    if (!window.confirm("Delete this history entry? This can't be undone.")) return;
+    const prev = memories;
+    setMemories(m => m.filter(x => x.id !== id)); // optimistic
+    try {
+      await historyApi.deleteEntry(id);
+      void fetchStats(); // refresh heatmap + total count
+    } catch (err: any) {
+      setMemories(prev); // revert
+      setFetchError(err.message || "Failed to delete entry");
+    }
+  };
+
   const addChecklistItem    = () => setChecklistItems([...checklistItems, { text: "", completed: false }]);
   const removeChecklistItem = (i: number) => setChecklistItems(checklistItems.filter((_, idx) => idx !== i));
   const updateChecklistItemText = (i: number, text: string) => {
@@ -520,7 +533,7 @@ export default function HistoryPage() {
                             <Icon size={12} strokeWidth={2.2} />
                           </div>
 
-                          <div className={`bg-[var(--s1)] backdrop-blur-md border rounded-2xl p-5 hover:shadow-[0_4px_30px_rgba(139,92,246,0.06)] transition-all duration-300 ${glowBorderClass}`}>
+                          <div className={`group bg-[var(--s1)] backdrop-blur-md border rounded-2xl p-5 hover:shadow-[0_4px_30px_rgba(139,92,246,0.06)] transition-all duration-300 ${glowBorderClass}`}>
                             <div className="flex items-start justify-between gap-4 mb-2">
                               <div className="flex flex-col gap-1">
                                 <h4 className="text-[14px] font-semibold text-[var(--text-primary)] flex flex-wrap items-center gap-2">
@@ -532,9 +545,17 @@ export default function HistoryPage() {
                                   {m.repo && <><span>•</span><span>{m.repo}</span></>}
                                 </div>
                               </div>
-                              <span className="text-[11px] text-[var(--text-muted)] font-semibold shrink-0">
-                                {new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[11px] text-[var(--text-muted)] font-semibold">
+                                  {new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                                <button
+                                  onClick={() => handleDeleteEntry(m.id)}
+                                  title="Delete entry"
+                                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-all">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
 
                             {m.description && (
