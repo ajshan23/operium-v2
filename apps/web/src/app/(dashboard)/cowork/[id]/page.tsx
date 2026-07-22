@@ -10,7 +10,7 @@ import {
   ThumbsUp, ThumbsDown, AlertTriangle, X, Send, Sparkles, MessageSquare,
 } from "lucide-react";
 import { coworkApi } from "@/api/cowork.api";
-import type { CoworkSession, CoworkChunk } from "@/api/cowork.api";
+import type { CoworkSession } from "@/api/cowork.api";
 import { repoWebUrl, branchWebUrl, commitWebUrl } from "@operium/core/repoLinks";
 
 const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ssr: false });
@@ -32,10 +32,8 @@ export default function CoworkDetailPage() {
   const id = params.id as string;
 
   const [session,         setSession]         = useState<CoworkSession | null>(null);
-  const [chunks,          setChunks]          = useState<CoworkChunk[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState<string | null>(null);
-  const [showChunks,      setShowChunks]      = useState(false); // collapsed by default (matches v1) — summary is the header
 
   const [helpfulVote,     setHelpfulVote]     = useState<"up" | "down" | null>(null);
   const [helpfulCount,    setHelpfulCount]    = useState(0);
@@ -61,9 +59,8 @@ export default function CoworkDetailPage() {
       setError(null);
       try {
         const res = await coworkApi.get(id);
-        const { session: s, chunks: c } = (res as any).data as { session: CoworkSession; chunks: CoworkChunk[] };
+        const { session: s } = (res as any).data as { session: CoworkSession };
         setSession(s);
-        setChunks(c);
         setHelpfulCount(s.helpfulCount);
         setNotHelpfulCount(s.notHelpfulCount);
       } catch (err: any) {
@@ -456,38 +453,8 @@ export default function CoworkDetailPage() {
           )}
         </div>
 
-        {/* Chunks Timeline */}
-        {chunks.length > 0 && (
-          <div className="space-y-4">
-            <button
-              onClick={() => setShowChunks(v => !v)}
-              className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#55556a] hover:text-[#fafafa] font-bold transition-colors cursor-pointer"
-            >
-              {showChunks ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              <span>Knowledge Chunks</span>
-              <span className="text-[#55556a] normal-case">({chunks.length})</span>
-            </button>
-
-            {showChunks && (
-              <div className="relative pl-6 border-l border-[#1e1e24] space-y-6 ml-1.5 mt-2 select-text">
-                {chunks.map((chunk, index) => (
-                  <div key={chunk._id} className="relative space-y-3">
-                    <div className="absolute left-[-31px] top-4 size-2.5 rounded-full bg-[#8b5cf6] border border-[#050505] shadow-[0_0_8px_rgba(139,92,246,0.8)]" />
-                    <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] hover:border-[#8b5cf6]/40 transition-colors rounded-xl p-4 min-w-0 overflow-hidden flex flex-col gap-2">
-                      <div className="flex items-center justify-between text-[9px] text-[#55556a]">
-                        <span className="font-bold text-[#8b5cf6]">Chunk #{index + 1}</span>
-                        <span>{new Date(chunk.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <div className="text-[12px] leading-relaxed text-[#a1a1aa] font-medium font-sans">
-                        <MarkdownViewer content={chunk.text} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Knowledge Chunks intentionally not shown — they're the summary split
+            for search/embeddings; the summary above is the human-facing record. */}
 
       </div>
 
