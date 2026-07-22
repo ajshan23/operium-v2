@@ -135,4 +135,20 @@ export const coworkApi = {
   chat(messages: { role: "user" | "model"; content: string }[], sessionId?: string): Promise<{ data: { reply: string } }> {
     return apiClient("/api/cowork/chat", { method: "POST", data: { messages, sessionId } });
   },
+
+  // ── Per-repo (project) sharing ──
+  listRepos(): Promise<{ data: CoworkRepoPref[] }> {
+    return apiClient("/api/cowork/repos");
+  },
+
+  setRepoVisibility(repoKey: string, shared: boolean): Promise<{ data: { repoKey: string; shared: boolean; sessionsUpdated: number } }> {
+    return apiClient("/api/cowork/repos/visibility", { method: "PUT", data: { repoKey, shared } });
+  },
 };
+
+export interface CoworkRepoPref {
+  repoKey:      string;
+  repoName:     string;
+  sessionCount: number;
+  shared:       boolean;
+}

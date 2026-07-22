@@ -1,6 +1,7 @@
+import mongoose from "mongoose";
 import { CoworkSession, CoworkChunk, User } from "@operium/db";
 import type { CoworkSource, CoworkIntent, CoworkOutcome } from "@operium/db";
-import { normalizeRepoRefs, type RepoRef } from "@operium/core";
+import { normalizeRepoRefs, resolveCoworkShared, type RepoRef } from "@operium/core";
 import { ApiError } from "../utils/ApiError.js";
 import { aiService } from "./ai.service.js";
 import { embeddingService, cosineSimilarity } from "./embedding.service.js";
@@ -110,6 +111,72 @@ export class CoworkService {
     return { session: this._normalize(session, userId), chunks };
   }
 
+  // ─── Per-repo sharing ─────────────────────────────────────────────────────
+  // List the distinct git repos this user has cowork sessions in, each with its
+  // current sharing state (explicit pref, else the global default).
+  async listRepos(userId: string) {
+    const user = await User.findById(userId).select("preferences coworkRepoPrefs").lean() as any;
+    const defaultShared = user?.preferences?.shareCoworkByDefault !== false;
+    const prefMap = new Map<string, boolean>((user?.coworkRepoPrefs ?? []).map((p: any) => [p.repoKey, p.shared]));
+
+    const rows = await CoworkSession.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId), "repos.0": { $exists: true } } },
+      { $unwind: "$repos" },
+      { $group: { _id: "$repos.repoKey", repoName: { $first: "$repos.repoName" }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]);
+
+    return rows.map((r: any) => ({
+      repoKey:      r._id as string,
+      repoName:     (r.repoName as string) ?? r._id,
+      sessionCount: r.count as number,
+      shared:       prefMap.has(r._id) ? prefMap.get(r._id)! : defaultShared,
+    }));
+  }
+
+  // Set a repo's sharing preference AND re-apply it to every existing session
+  // (and its chunks) that touches the repo. Multi-repo aware: a session is
+  // shared only if all its repos are shared.
+  async setRepoVisibility(userId: string, repoKey: string, shared: boolean) {
+    if (!repoKey?.trim()) throw new ApiError(400, "repoKey is required");
+    const user = await User.findById(userId).select("preferences coworkRepoPrefs") as any;
+    if (!user) throw new ApiError(404, "User not found");
+    const defaultShared = user.preferences?.shareCoworkByDefault !== false;
+
+    const prefs: { repoKey: string; shared: boolean }[] = user.coworkRepoPrefs ?? [];
+    const existing = prefs.find(p => p.repoKey === repoKey);
+    if (existing) existing.shared = shared;
+    else prefs.push({ repoKey, shared });
+    user.coworkRepoPrefs = prefs;
+    await user.save();
+
+    const prefMap = new Map<string, boolean>(prefs.map(p => [p.repoKey, p.shared]));
+
+    const sessions = await CoworkSession
+      .find({ userId, "repos.repoKey": repoKey })
+      .select("_id repos isShared").lean() as any[];
+
+    const toShared: any[] = [], toPrivate: any[] = [];
+    for (const s of sessions) {
+      const keys = [...new Set((s.repos ?? []).map((r: any) => r.repoKey))] as string[];
+      const newShared = keys.length ? keys.every(k => prefMap.get(k) ?? defaultShared) : defaultShared;
+      if (newShared !== s.isShared) (newShared ? toShared : toPrivate).push(s._id);
+    }
+
+    const ops: Promise<any>[] = [];
+    if (toShared.length) {
+      ops.push(CoworkSession.updateMany({ _id: { $in: toShared } }, { $set: { isShared: true } }));
+      ops.push(CoworkChunk.updateMany({ sessionId: { $in: toShared } }, { $set: { isShared: true } }));
+    }
+    if (toPrivate.length) {
+      ops.push(CoworkSession.updateMany({ _id: { $in: toPrivate } }, { $set: { isShared: false } }));
+      ops.push(CoworkChunk.updateMany({ sessionId: { $in: toPrivate } }, { $set: { isShared: false } }));
+    }
+    await Promise.all(ops);
+
+    return { repoKey, shared, sessionsUpdated: toShared.length + toPrivate.length };
+  }
+
   async getRelated(id: string, userId: string, orgId: string, limit = 5) {
     const source = await CoworkSession.findOne({
       _id: id,
@@ -163,12 +230,14 @@ export class CoworkService {
     const repos = normalizeRepoRefs(repoRefs);
     const first = repos[0];
 
-    // Sharing: explicit request wins; otherwise fall back to the user's
-    // Settings preference (defaults to shared when never set).
+    // Sharing: explicit request wins; otherwise derive from per-repo prefs,
+    // falling back to the user's global Settings preference for unlisted repos.
     let isShared = data.isShared;
     if (isShared === undefined) {
-      const u = await User.findById(userId).select("preferences").lean() as any;
-      isShared = u?.preferences?.shareCoworkByDefault !== false;
+      const u = await User.findById(userId).select("preferences coworkRepoPrefs").lean() as any;
+      const defaultShared = u?.preferences?.shareCoworkByDefault !== false;
+      const keys = repos.length ? [...new Set(repos.map(r => r.repoKey))] : [];
+      isShared = resolveCoworkShared(keys, u?.coworkRepoPrefs, defaultShared);
     }
 
     const session = await CoworkSession.create({

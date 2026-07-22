@@ -2,6 +2,34 @@ import { describe, expect, it } from "vitest";
 import { contentHash } from "./hash";
 import { compositeScore, recencyDecay } from "./ranking";
 import { sanitize } from "./sanitize";
+import { resolveCoworkShared } from "./coworkSharing";
+
+describe("resolveCoworkShared", () => {
+  it("uses the global default when the session has no repos", () => {
+    expect(resolveCoworkShared([], [], true)).toBe(true);
+    expect(resolveCoworkShared([], [], false)).toBe(false);
+  });
+
+  it("unlisted repos fall back to the default", () => {
+    expect(resolveCoworkShared(["gh/a/b"], [], true)).toBe(true);
+    expect(resolveCoworkShared(["gh/a/b"], [], false)).toBe(false);
+  });
+
+  it("respects an explicit per-repo pref over the default", () => {
+    expect(resolveCoworkShared(["gh/a/b"], [{ repoKey: "gh/a/b", shared: false }], true)).toBe(false);
+    expect(resolveCoworkShared(["gh/a/b"], [{ repoKey: "gh/a/b", shared: true }], false)).toBe(true);
+  });
+
+  it("a multi-repo session is private if ANY repo is private", () => {
+    const prefs = [{ repoKey: "gh/a/priv", shared: false }];
+    expect(resolveCoworkShared(["gh/a/priv", "gh/a/pub"], prefs, true)).toBe(false);
+  });
+
+  it("a multi-repo session is shared only if ALL repos are shared", () => {
+    const prefs = [{ repoKey: "gh/a/x", shared: true }, { repoKey: "gh/a/y", shared: true }];
+    expect(resolveCoworkShared(["gh/a/x", "gh/a/y"], prefs, false)).toBe(true);
+  });
+});
 
 describe("sanitize", () => {
   it("strips private blocks", () => {

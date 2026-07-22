@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { McpToolName } from "@operium/shared";
 import {
   compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints, sanitize,
+  resolveCoworkShared, type RepoSharePref,
   normalizeRepoKey, normalizeRepoRefs, type RepoRef, type NormalizedRepoRef,
   normalizeErrorText, errorSignature,
   repoWebUrl, branchWebUrl,
@@ -23,6 +24,9 @@ export interface McpContext {
   /** The user's default cowork sharing preference (true = share with org).
    *  Resolved once at session start; changing it applies to the next session. */
   shareByDefault?: boolean;
+  /** Per-repo sharing overrides. A session is shared only if every repo it
+   *  touches is shared; unlisted repos fall back to shareByDefault. */
+  repoPrefs?: RepoSharePref[];
 }
 
 // ── Multi-repo session context ────────────────────────────────────────────────
@@ -167,6 +171,10 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // The user's default cowork sharing preference (Settings). Applies to newly
   // created sessions; existing sessions keep whatever they were saved with.
   const shareByDefault = ctx.shareByDefault ?? true;
+  // Repo-aware sharing: a new session is shared only if every repo it touches is
+  // shared (per-repo prefs from Settings; unlisted repos fall back to the above).
+  const sharedForRepos = (repos: { repoKey: string }[]): boolean =>
+    resolveCoworkShared(repos.map(r => r.repoKey), ctx.repoPrefs, shareByDefault);
 
   // Lazy-load heavy deps at tool-call time so the module stays importable without DB.
   async function db() {
@@ -1158,7 +1166,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           title,
           summary: finding.slice(0, 500),
           tags,
-          isShared: shareByDefault,
+          isShared: sharedForRepos(incomingRepos),
           intent, outcome,
           filesTouched,
           repos: incomingRepos,
@@ -1282,7 +1290,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           userId: uid,
           orgId: ctx.orgId ?? undefined,
           source: source as any,
-          title, summary, tags, isShared: shareByDefault,
+          title, summary, tags, isShared: sharedForRepos(incomingRepos),
           intent, outcome, filesTouched,
           repos: incomingRepos,
           ...legacyRepoFields(incomingRepos),

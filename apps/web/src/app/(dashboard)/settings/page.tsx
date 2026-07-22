@@ -5,10 +5,11 @@ import {
   Settings, Database, PenTool, Webhook,
   Sparkles, Clock, Plus, Trash2, Key, Check, Copy, Eye, EyeOff,
   Loader2, AlertTriangle, User, RefreshCw, Bot,
-  Users, Mail, LogOut, X, Shield
+  Users, Mail, LogOut, X, Shield, GitBranch
 } from "lucide-react";
 import { historyApi } from "@/api/history.api";
 import { orgApi } from "@/api/org.api";
+import { coworkApi, type CoworkRepoPref } from "@/api/cowork.api";
 import { getUser } from "@/lib/auth";
 import { getActiveOrgId } from "@/lib/org";
 import { MCP_TOOL_NAMES, MCP_TOOL_COUNT, MCP_TOOL_GROUPS } from "@operium/shared";
@@ -125,6 +126,11 @@ export default function SettingsPage() {
   // Cowork sharing preference (default: shared with org)
   const [shareCowork,   setShareCowork]   = useState(true);
   const [shareSaving,   setShareSaving]   = useState(false);
+
+  // Per-repo (project) sharing overrides
+  const [repoPrefs,   setRepoPrefs]   = useState<CoworkRepoPref[]>([]);
+  const [repoLoading, setRepoLoading] = useState(true);
+  const [repoBusy,    setRepoBusy]    = useState<string | null>(null);
 
   // ── Team / organization management ──
   const [members,     setMembers]     = useState<any[]>([]);
@@ -361,6 +367,33 @@ export default function SettingsPage() {
       setShareCowork(!next); // revert
     } finally {
       setShareSaving(false);
+    }
+  };
+
+  // ── Per-repo sharing ──────────────────────────────────────────────────
+  const loadRepos = useCallback(async () => {
+    setRepoLoading(true);
+    try {
+      const res = await coworkApi.listRepos();
+      setRepoPrefs(res.data ?? []);
+    } catch { /* non-fatal */ }
+    setRepoLoading(false);
+  }, []);
+
+  useEffect(() => { void loadRepos(); }, [loadRepos]);
+
+  // Toggle a repo's visibility. Optimistic; also re-applies to existing sessions
+  // server-side, so the count of shared sessions changes immediately.
+  const toggleRepoShare = async (repoKey: string, current: boolean) => {
+    const next = !current;
+    setRepoBusy(repoKey);
+    setRepoPrefs(prev => prev.map(r => r.repoKey === repoKey ? { ...r, shared: next } : r));
+    try {
+      await coworkApi.setRepoVisibility(repoKey, next);
+    } catch {
+      setRepoPrefs(prev => prev.map(r => r.repoKey === repoKey ? { ...r, shared: current } : r)); // revert
+    } finally {
+      setRepoBusy(null);
     }
   };
 
@@ -668,6 +701,41 @@ export default function SettingsPage() {
             <div className={shareSaving ? "opacity-50 pointer-events-none" : ""}>
               <Toggle value={shareCowork} onChange={toggleShareCowork} />
             </div>
+          </div>
+
+          {/* Per-repo overrides */}
+          <div className="border-t border-[var(--border-subtle)] pt-4">
+            <div className="flex items-center gap-2 mb-1">
+              <GitBranch size={13} className="text-[var(--text-muted)]" />
+              <span className="text-[12px] font-bold text-[var(--text-primary)]">Share by project</span>
+            </div>
+            <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">
+              Override sharing per repository. Turning one off keeps that project&apos;s sessions private — and updates existing ones too. Sessions spanning a private repo stay private.
+            </p>
+
+            {repoLoading ? (
+              <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] py-2">
+                <Loader2 size={13} className="animate-spin" /> Loading projects…
+              </div>
+            ) : repoPrefs.length === 0 ? (
+              <p className="text-[11px] text-[var(--text-muted)] py-2">No projects yet — they appear here once you save cowork sessions with a repo.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {repoPrefs.map(r => (
+                  <div key={r.repoKey} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--s2)]">
+                    <div className="min-w-0">
+                      <p className="text-[12px] font-semibold text-[var(--text-primary)] truncate" title={r.repoKey}>{r.repoName}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">
+                        {r.sessionCount} session{r.sessionCount === 1 ? "" : "s"} · {r.shared ? "shared with team" : "private"}
+                      </p>
+                    </div>
+                    <div className={repoBusy === r.repoKey ? "opacity-50 pointer-events-none shrink-0" : "shrink-0"}>
+                      <Toggle value={r.shared} onChange={() => toggleRepoShare(r.repoKey, r.shared)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -41,6 +41,9 @@ export interface IUser extends Document {
   geminiApiKey?: string;
   // Preferences
   preferences?: { editWindowHours: number; shareCoworkByDefault: boolean };
+  /** Per-repo cowork sharing overrides. A session is shared only if every repo
+   *  it touches is shared (unlisted repos fall back to preferences.shareCoworkByDefault). */
+  coworkRepoPrefs?: { repoKey: string; shared: boolean }[];
   customIntegrations?: ICustomIntegration[];
   createdAt: Date;
 }
@@ -83,6 +86,13 @@ const UserSchema: Schema = new Schema({
     // When true (default), cowork sessions this user saves are visible to
     // their whole org. When false, saves default to private (owner-only).
     shareCoworkByDefault: { type: Boolean, default: true },
+  },
+
+  // Per-repo cowork sharing overrides (repoKey → shared). Absent = use the
+  // shareCoworkByDefault above. Lets a dev keep some projects private.
+  coworkRepoPrefs: {
+    type: [{ repoKey: { type: String, required: true }, shared: { type: Boolean, required: true }, _id: false }],
+    default: undefined,
   },
 
   // Custom webhook integrations

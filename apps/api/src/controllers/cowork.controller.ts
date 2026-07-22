@@ -55,6 +55,21 @@ export const getSession = handle(async (req, res) => {
   res.json(new ApiResponse(200, result, "Session fetched"));
 });
 
+export const listRepos = handle(async (req, res) => {
+  const repos = await coworkService.listRepos(uid(req));
+  res.json(new ApiResponse(200, repos, "Repos fetched"));
+});
+
+export const setRepoVisibility = handle(async (req, res) => {
+  const { repoKey, shared } = req.body as { repoKey?: string; shared?: boolean };
+  if (typeof repoKey !== "string" || typeof shared !== "boolean") {
+    res.status(400).json(new ApiError(400, "repoKey (string) and shared (boolean) are required").toJSON());
+    return;
+  }
+  const result = await coworkService.setRepoVisibility(uid(req), repoKey, shared);
+  res.json(new ApiResponse(200, result, "Repo visibility updated"));
+});
+
 export const getRelated = handle(async (req, res) => {
   const { limit } = req.query as Record<string, string>;
   const result = await coworkService.getRelated(

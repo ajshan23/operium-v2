@@ -24,7 +24,7 @@ const sessions = new Map<string, SessionEntry>();
 
 // ── Auth resolution ───────────────────────────────────────────────────────────
 
-async function resolveUser(req: any): Promise<{ userId: string; orgId: string | null; geminiKey?: string; shareByDefault: boolean } | null> {
+async function resolveUser(req: any): Promise<{ userId: string; orgId: string | null; geminiKey?: string; shareByDefault: boolean; repoPrefs?: { repoKey: string; shared: boolean }[] } | null> {
   let token: string | undefined;
 
   // 1. Cookie
@@ -42,7 +42,7 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     const userId  = decoded.userId as string;
 
     // Fetch user to get gemini key, block status, and sharing preference
-    const user = await User.findById(userId).select("isBlocked geminiApiKey preferences").lean() as any;
+    const user = await User.findById(userId).select("isBlocked geminiApiKey preferences coworkRepoPrefs").lean() as any;
     if (!user || user.isBlocked) return null;
 
     // Resolve the user's org so shared-memory tools stay tenant-scoped.
@@ -54,7 +54,7 @@ async function resolveUser(req: any): Promise<{ userId: string; orgId: string | 
     // Default to shared when the preference has never been set (legacy users).
     const shareByDefault = user.preferences?.shareCoworkByDefault !== false;
 
-    return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined, shareByDefault };
+    return { userId, orgId, geminiKey: user.geminiApiKey ?? undefined, shareByDefault, repoPrefs: user.coworkRepoPrefs ?? undefined };
   } catch {
     return null;
   }
@@ -140,6 +140,7 @@ router.post("/", async (req: any, res: any) => {
     embedFn,
     syncGitFn:      (full: boolean) => gitService.sync(resolved.userId, full),
     shareByDefault: resolved.shareByDefault,
+    repoPrefs:      resolved.repoPrefs,
   });
 
   await mcpServer.connect(transport);

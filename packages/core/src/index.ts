@@ -1,6 +1,7 @@
 export { sanitize } from "./sanitize";
 export { contentHash } from "./hash";
 export { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk";
+export { resolveCoworkShared, type RepoSharePref } from "./coworkSharing";
 export { parseQueryHints, type QueryHints, type ExplicitFilters } from "./queryHints";
 export { normalizeErrorText, errorSignature } from "./errorSignature";
 export {
