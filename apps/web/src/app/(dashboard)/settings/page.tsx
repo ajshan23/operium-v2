@@ -134,6 +134,7 @@ export default function SettingsPage() {
   const [teamError,   setTeamError]   = useState<string | null>(null);
   // Set only after mount so reading localStorage can't cause a hydration mismatch.
   const [hasOrg,      setHasOrg]      = useState(false);
+  const [orgName,     setOrgName]     = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole,  setInviteRole]  = useState<"member" | "admin">("member");
   const [inviteBusy,  setInviteBusy]  = useState(false);
@@ -365,7 +366,8 @@ export default function SettingsPage() {
 
   // ── Team management ───────────────────────────────────────────────────
   const loadTeam = useCallback(async () => {
-    if (!getActiveOrgId()) { setHasOrg(false); setTeamLoading(false); return; }
+    const activeOrgId = getActiveOrgId();
+    if (!activeOrgId) { setHasOrg(false); setTeamLoading(false); return; }
     setHasOrg(true);
     setTeamLoading(true);
     setTeamError(null);
@@ -373,6 +375,14 @@ export default function SettingsPage() {
       const res: any = await orgApi.getMembers();
       const list = res?.data ?? [];
       setMembers(list);
+      // Resolve the active org's display name (getOrgs populates orgId).
+      try {
+        const orgsRes: any = await orgApi.getOrgs();
+        const mine = (orgsRes?.data ?? []).find(
+          (m: any) => String(m.orgId?._id ?? m.orgId) === String(activeOrgId),
+        );
+        setOrgName(mine?.orgId?.name ?? "");
+      } catch { /* non-fatal — heading falls back to "Team" */ }
       const me = getUser();
       const mine = list.find((m: any) => String(m.userId?._id) === String(me?.userId));
       const role = mine?.role ?? "member";
@@ -669,7 +679,9 @@ export default function SettingsPage() {
               <Users size={16} />
             </div>
             <div className="flex-1">
-              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">Team</h2>
+              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">
+                {orgName || "Team"}
+              </h2>
               <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                 {canManage ? "Invite teammates and manage who has access to your organization." : "Members of your organization. Contact an owner or admin to invite others."}
               </p>

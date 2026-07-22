@@ -81,8 +81,10 @@ export function UserMenu({ compact = false }: Props) {
       {/* Dropdown */}
       {open && (
         <div
-          className={`usermenu-dropdown absolute z-50 mt-2 rounded-xl overflow-hidden ${
-            compact ? "right-0 bottom-full mb-2 w-[180px]" : "right-0 w-[200px]"
+          className={`usermenu-dropdown absolute z-50 rounded-xl overflow-hidden ${
+            compact
+              ? "left-full bottom-0 ml-3 w-[180px]"   // flyout to the RIGHT — the sidebar is only 80px, so right-0 pushed it off-screen
+              : "right-0 mt-2 w-[200px]"
           }`}
           style={{
             background: "var(--s1)",
