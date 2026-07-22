@@ -842,28 +842,43 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-2">
               <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Pending Invites ({invites.length})</span>
               {invites.map(inv => (
-                <div key={inv._id} className="flex items-center justify-between p-3 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--s1)]">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Mail size={13} className="text-[var(--text-muted)] shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-[12px] text-[var(--text-primary)] truncate">{inv.email}</div>
-                      <div className="text-[10px] text-[var(--text-muted)]">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
+                <div key={inv._id} className="flex flex-col gap-2 p-3 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--s1)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Mail size={13} className="text-[var(--text-muted)] shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-[12px] text-[var(--text-primary)] truncate">{inv.email}</div>
+                        <div className="text-[10px] text-[var(--text-muted)]">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {inv.token && (
-                      <button
-                        onClick={() => handleCopyKey(inv._id, `${window.location.origin}/public-onboarding?invite=${inv.token}`)}
-                        title="Copy invite link — send it to them manually"
-                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold">
-                        {copiedKeyId === inv._id ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Link</>}
-                      </button>
-                    )}
                     <button onClick={() => handleRevokeInvite(inv._id)} title="Revoke invite"
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
                       <X size={14} />
                     </button>
                   </div>
+
+                  {/* Join code + shareable link — for manual sending. They can paste
+                      either the code or the link on the join screen after signing up. */}
+                  {inv.token && (
+                    <div className="flex items-center gap-1.5">
+                      <code className="flex-1 min-w-0 truncate select-all text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--s2)] border border-[var(--border-subtle)] rounded-md px-2 py-1.5"
+                        title="Invite code — they paste this on the join screen">
+                        {inv.token}
+                      </code>
+                      <button
+                        onClick={() => handleCopyKey(`${inv._id}:code`, inv.token!)}
+                        title="Copy the join code"
+                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold shrink-0">
+                        {copiedKeyId === `${inv._id}:code` ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Code</>}
+                      </button>
+                      <button
+                        onClick={() => handleCopyKey(`${inv._id}:link`, `${window.location.origin}/public-onboarding?invite=${inv.token}`)}
+                        title="Copy the invite link"
+                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold shrink-0">
+                        {copiedKeyId === `${inv._id}:link` ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Link</>}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
