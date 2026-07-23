@@ -28,6 +28,7 @@ interface Memory {
   source?: "manual" | "git" | "pr" | "deploy" | "build" | "azure";
   prRole?: "author" | "reviewer";
   myVote?: number;
+  isAzure?: boolean;
 }
 
 /** Azure review votes: 10 approved, 5 approved w/ suggestions, -5 waiting, -10 rejected */
@@ -57,6 +58,7 @@ function entryToMemory(e: HistoryEntry): Memory {
     source:       e.source as Memory["source"],
     prRole:       e.metadata?.role,
     myVote:       e.metadata?.myVote,
+    isAzure:      e.externalId?.startsWith("az-") ?? false,
   };
 }
 
@@ -386,7 +388,7 @@ export default function HistoryPage() {
             { id: "git",    label: "Git Commits",  icon: GitCommit,     color: "text-emerald-400", count: memories.filter(m => m.source === "git").length },
             { id: "pr",     label: "PR Reviews",   icon: GitPullRequest, color: "text-[#a855f7]", count: memories.filter(m => m.source === "pr").length },
             { id: "deploy", label: "Deployments",  icon: Rocket,        color: "text-pink-400",   count: memories.filter(m => m.source === "deploy" || m.source === "build").length },
-            { id: "azure",  label: "Azure DevOps", icon: Activity,      color: "text-blue-300",   count: memories.filter(m => m.source === "azure").length },
+            { id: "azure",  label: "Azure DevOps", icon: Activity,      color: "text-blue-300",   count: memories.filter(m => m.isAzure).length },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = selectedSource === item.id;
@@ -640,7 +642,7 @@ export default function HistoryPage() {
                                     default:      return <FileText       size={11} className="text-[var(--text-muted)]"  />;
                                   }
                                 })()}
-                                <span>Source: {m.source || "manual"}</span>
+                                <span>Source: {m.source || "manual"}{m.isAzure ? " · Azure DevOps" : ""}</span>
                               </span>
                             </div>
                           </div>

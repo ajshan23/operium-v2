@@ -40,7 +40,12 @@ function buildFilter(userId: string, opts: HistoryQueryOpts) {
     filter.category = opts.category;
   }
   if (opts.source) {
-    filter.source = opts.source;
+    // "azure" is a virtual source: Azure-synced entries carry source git/pr/
+    // build, so match them by their az-* externalId instead. "deploy" folds in
+    // "build" (pipeline runs) — the UI presents them as one "Deployments" group.
+    if (opts.source === "azure")       filter.externalId = { $regex: "^az-" };
+    else if (opts.source === "deploy") filter.source = { $in: ["deploy", "build"] };
+    else                               filter.source = opts.source;
   }
   if (opts.isMilestone) filter.isMilestone = true;
   if (opts.isBlocker)   filter.isBlocker   = true;
