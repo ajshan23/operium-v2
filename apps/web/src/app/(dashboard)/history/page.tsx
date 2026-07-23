@@ -102,6 +102,7 @@ export default function HistoryPage() {
   const [copiedId,       setCopiedId]       = useState<string | null>(null);
   const [isSyncingGitHub, setIsSyncingGitHub] = useState(false);
   const [isSyncingAzure,  setIsSyncingAzure]  = useState(false);
+  const [isAzureFullSyncing, setIsAzureFullSyncing] = useState(false);
 
   // ── Data fetching ────────────────────────────────────────────────────────
 
@@ -183,17 +184,18 @@ export default function HistoryPage() {
     setIsSyncingGitHub(false);
   };
 
-  const handleSyncAzure = async () => {
+  const handleSyncAzure = async (full = false) => {
     setSyncError(null);
-    setIsSyncingAzure(true);
+    const setBusy = full ? setIsAzureFullSyncing : setIsSyncingAzure;
+    setBusy(true);
     try {
-      await historyApi.syncAzure();
+      await historyApi.syncAzure(full);
       await fetchHistory(1);
       await fetchStats();
     } catch (err: any) {
       setSyncError(err.message || "Azure sync failed");
     }
-    setIsSyncingAzure(false);
+    setBusy(false);
   };
 
   // ── CRUD helpers ─────────────────────────────────────────────────────────
@@ -689,7 +691,7 @@ export default function HistoryPage() {
                 {/* GitHub Sync */}
                 <button
                   onClick={handleSyncGitHub}
-                  disabled={isSyncingGitHub || isSyncingAzure}
+                  disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
                   className="w-full h-[54px] px-4 rounded-xl border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.5)] bg-[var(--s1)] hover:bg-[var(--s2)] transition-all flex items-center justify-between group disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
@@ -706,8 +708,8 @@ export default function HistoryPage() {
 
                 {/* Azure DevOps Sync */}
                 <button
-                  onClick={handleSyncAzure}
-                  disabled={isSyncingGitHub || isSyncingAzure}
+                  onClick={() => handleSyncAzure(false)}
+                  disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
                   className="w-full h-[54px] px-4 rounded-xl border border-[var(--border-default)] hover:border-[#0078d4]/50 bg-[var(--s1)] hover:bg-[var(--s2)] transition-all flex items-center justify-between group disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
@@ -720,6 +722,20 @@ export default function HistoryPage() {
                     </div>
                   </div>
                   <RefreshCw className={`w-4 h-4 text-[#0078d4] ${isSyncingAzure ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+                </button>
+
+                {/* Azure Full Sync — backfill entire history */}
+                <button
+                  onClick={() => handleSyncAzure(true)}
+                  disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
+                  title="Fetch your entire Azure history (up to 10 years). Slower — use to backfill after a sync fix."
+                  className="w-full h-[34px] px-4 rounded-xl border border-dashed border-[var(--border-default)] hover:border-[#0078d4]/50 bg-transparent hover:bg-[var(--s2)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                >
+                  {isAzureFullSyncing ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin text-[#0078d4]" /> Full syncing…</>
+                  ) : (
+                    <><RotateCcw className="w-3.5 h-3.5 text-[#0078d4]" /> Full sync (all history)</>
+                  )}
                 </button>
               </div>
             </div>
