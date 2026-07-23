@@ -63,7 +63,10 @@ export class WorkHistoryRepository {
         ...(Object.keys(setOnInsert).length ? { $setOnInsert: setOnInsert } : {}),
         ...(setData && setPaths.size ? { $set: setData } : {}),
       },
-      { upsert: true }
+      // createdAt carries the real event time (push/PR/build date) supplied by
+      // the caller — without this, Mongoose's timestamps plugin overwrites it
+      // with the sync time, piling every synced entry onto "today".
+      { upsert: true, timestamps: { createdAt: false, updatedAt: true } }
     );
   }
 
