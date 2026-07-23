@@ -18,6 +18,8 @@ export interface HistoryEntry {
     prLink?: string;
     prStatus?: string;
     prId?: string;
+    role?: "author" | "reviewer";
+    myVote?: number;
     sourceBranch?: string;
     targetBranch?: string;
     reviewers?: Array<{ name: string; vote: number; isRequired: boolean }>;

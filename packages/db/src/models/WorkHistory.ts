@@ -26,6 +26,10 @@ export interface IWorkHistory extends Document {
     prLink?: string;
     prStatus?: string;
     prId?: string;
+    /** The user's relationship to this PR: they opened it, or were a reviewer on it */
+    role?: "author" | "reviewer";
+    /** The user's own review vote (Azure: 10 approved, 5 approved w/ suggestions, 0 none, -5 waiting, -10 rejected) */
+    myVote?: number;
     sourceBranch?: string;
     targetBranch?: string;
     reviewers?: Array<{ name: string; vote: number; isRequired: boolean }>;
@@ -72,6 +76,8 @@ const WorkHistorySchema = new Schema<IWorkHistory>(
       prLink:       String,
       prStatus:     String,
       prId:         String,
+      role:         { type: String, enum: ["author", "reviewer"] },
+      myVote:       Number,
       sourceBranch: String,
       targetBranch: String,
       reviewers:    [{ name: String, vote: Number, isRequired: Boolean }],

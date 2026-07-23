@@ -331,6 +331,7 @@ export class HistoryService {
               prLink:       pr.html_url,
               prStatus,
               prId:         String(pr.number),
+              role:         "author", // GitHub sync only ingests the user's own PRs
               sourceBranch: pr.head?.ref,
               targetBranch: pr.base?.ref,
               repo:         ev.repo?.name?.split("/")[1] ?? "",
@@ -476,8 +477,8 @@ export class HistoryService {
               const prs: any[] = prsData.value || [];
               for (const pr of prs) {
                 const isAuthor   = pr.createdBy?.id === myId;
-                const isReviewer = (pr.reviewers || []).some((r: any) => r?.id === myId);
-                if (!isAuthor && !isReviewer) continue;
+                const myReview   = (pr.reviewers || []).find((r: any) => r?.id === myId);
+                if (!isAuthor && !myReview) continue;
                 if (!pr.creationDate) continue;
                 const prDate = new Date(pr.creationDate);
                 if (isNaN(prDate.getTime())) continue;
@@ -486,6 +487,10 @@ export class HistoryService {
                                : pr.status === "abandoned" ? "abandoned"
                                : "active";
                 const isMerged  = pr.status === "completed";
+                // The user's relationship to this PR. Author wins when both
+                // (you can be a reviewer on your own PR in Azure).
+                const role: "author" | "reviewer" = isAuthor ? "author" : "reviewer";
+                const myVote: number = isAuthor ? 0 : (myReview?.vote ?? 0);
                 const reviewers = (pr.reviewers || []).map((r: any) => ({
                   name:       r.displayName || r.uniqueName || "Unknown",
                   vote:       r.vote || 0,
@@ -496,16 +501,19 @@ export class HistoryService {
                   {
                     userId:      new mongoose.Types.ObjectId(userId),
                     externalId:  `az-pr-${pr.pullRequestId}`,
-                    title:       pr.title || `Pull Request #${pr.pullRequestId}`,
+                    title:       (role === "reviewer" ? "Reviewed: " : "") + (pr.title || `Pull Request #${pr.pullRequestId}`),
                     description: pr.description?.slice(0, 500) || undefined,
                     category:    "PR Review",
                     type:        "simple",
                     source:      "pr",
-                    isMilestone: isMerged, isBlocker: false, isImportant: false, isOngoing: prStatus === "active",
+                    // A merged PR is YOUR milestone only if you authored it
+                    isMilestone: isMerged && isAuthor,
+                    isBlocker: false, isImportant: false, isOngoing: prStatus === "active",
                     metadata:    {
                       prLink:       pr._links?.web?.href,
                       prStatus,
                       prId:         String(pr.pullRequestId),
+                      role,
                       sourceBranch: pr.sourceRefName?.replace("refs/heads/", ""),
                       targetBranch: pr.targetRefName?.replace("refs/heads/", ""),
                       reviewers,
@@ -517,9 +525,11 @@ export class HistoryService {
                   },
                   {
                     isOngoing: prStatus === "active",
-                    isMilestone: isMerged,
+                    isMilestone: isMerged && isAuthor,
                     "metadata.prStatus": prStatus,
                     "metadata.reviewers": reviewers,
+                    // vote changes as the review progresses — keep it fresh
+                    "metadata.myVote": myVote,
                   }
                 );
                 if (res.upsertedCount) created++;
@@ -614,9 +624,10 @@ export class HistoryService {
                        : pr.status === "abandoned" ? "abandoned"
                        : "active";
         if (prStatus !== "active") {
+          const isAuthorEntry = (item as any).metadata?.role !== "reviewer";
           await WorkHistory.updateOne(
             { _id: item._id },
-            { "metadata.prStatus": prStatus, isOngoing: false, isMilestone: prStatus === "completed" }
+            { "metadata.prStatus": prStatus, isOngoing: false, isMilestone: prStatus === "completed" && isAuthorEntry }
           );
           updated++;
         }

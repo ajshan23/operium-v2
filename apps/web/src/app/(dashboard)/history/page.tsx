@@ -26,6 +26,18 @@ interface Memory {
   checklistItems?: { text: string; completed: boolean }[];
   repo: string;
   source?: "manual" | "git" | "pr" | "deploy" | "build" | "azure";
+  prRole?: "author" | "reviewer";
+  myVote?: number;
+}
+
+/** Azure review votes: 10 approved, 5 approved w/ suggestions, -5 waiting, -10 rejected */
+function voteLabel(vote?: number): string | null {
+  if (vote === undefined || vote === 0) return null;
+  if (vote >= 10) return "approved";
+  if (vote >= 5)  return "approved w/ suggestions";
+  if (vote <= -10) return "rejected";
+  if (vote <= -5)  return "waiting for author";
+  return null;
 }
 
 function entryToMemory(e: HistoryEntry): Memory {
@@ -43,6 +55,8 @@ function entryToMemory(e: HistoryEntry): Memory {
     checklistItems: e.checklistItems,
     repo:         e.metadata?.repo || e.metadata?.project || "",
     source:       e.source as Memory["source"],
+    prRole:       e.metadata?.role,
+    myVote:       e.metadata?.myVote,
   };
 }
 
@@ -545,6 +559,18 @@ export default function HistoryPage() {
                                 <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] font-medium">
                                   <span>{m.category}</span>
                                   {m.repo && <><span>•</span><span>{m.repo}</span></>}
+                                  {m.prRole && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border ${
+                                      m.prRole === "author"
+                                        ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                                        : "bg-sky-500/15 text-sky-500 border-sky-500/30"
+                                    }`}>
+                                      {m.prRole === "author" ? "Opened by you" : "You reviewed"}
+                                    </span>
+                                  )}
+                                  {m.prRole === "reviewer" && voteLabel(m.myVote) && (
+                                    <span className="text-[10px] italic">({voteLabel(m.myVote)})</span>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
