@@ -91,7 +91,7 @@ export class HistoryController {
   syncAzure = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.userId;
-      const days   = req.query.days === "full" ? 90 : Number(req.query.days) || 2;
+      const days   = req.query.days === "full" ? 3650 : Number(req.query.days) || 2;
       const result = await historyService.syncAzure(userId, days);
       res.json(new ApiResponse(200, result, "Azure DevOps sync completed"));
     } catch (err: any) {

@@ -103,6 +103,21 @@ async function azFetch(url: string, token: string): Promise<any> {
   }
 }
 
+// Like azFetch but also surfaces the paging continuation token Azure returns
+// in a response header (used by the build-list endpoint).
+async function azFetchWithHeaders(url: string, token: string): Promise<{ data: any; continuation: string }> {
+  const { signal, clear } = withTimeout();
+  try {
+    const res = await fetch(url, { headers: azureBasicHeaders(token), signal });
+    if (!res.ok) throw new ApiError(res.status, `Azure API error: ${url} → ${res.statusText}`);
+    const continuation = res.headers.get("x-ms-continuationtoken") || "";
+    const data = await res.json();
+    return { data, continuation };
+  } finally {
+    clear();
+  }
+}
+
 // ─── types ───────────────────────────────────────────────────────────────────
 
 interface HistoryQueryOpts {
@@ -360,180 +375,224 @@ export class HistoryService {
       }
     }
 
-    const token   = user.azureDevOpsToken as string;
-    const org     = user.azureDevOpsOrg   as string;
-    const cutoff  = new Date(Date.now() - days * 86400 * 1000).toISOString();
-    const API_VER = "api-version=7.1-preview.1";
+    const token      = user.azureDevOpsToken as string;
+    const org        = user.azureDevOpsOrg   as string;
+    const isFullSync = days >= 90;
+    const cutoff     = new Date(Date.now() - days * 86400 * 1000).toISOString();
+    const API_VER    = "api-version=7.0";
+    const base       = `https://dev.azure.com/${encodeURIComponent(org)}`;
 
     // Validate token and resolve the authenticated user's identity so we only
-    // sync their own activity, not the whole org's
-    const connData = await azFetch(`https://dev.azure.com/${org}/_apis/connectiondata`, token);
+    // sync their own activity, not the whole org's.
+    const connData = await azFetch(`${base}/_apis/connectiondata`, token);
     const myId: string | undefined = connData?.authenticatedUser?.id;
-    const myUniqueName: string | undefined =
-      connData?.authenticatedUser?.properties?.Account?.$value ||
-      connData?.authenticatedUser?.providerDisplayName;
     if (!myId) throw new ApiError(400, "Could not resolve Azure DevOps user identity");
 
     // List projects
-    const projectsData = await azFetch(
-      `https://dev.azure.com/${org}/_apis/projects?$top=20&${API_VER}`,
-      token
-    );
+    const projectsData = await azFetch(`${base}/_apis/projects?$top=20&${API_VER}`, token);
     const projects: any[] = projectsData.value || [];
 
-    let upserted = 0;
-    // Every az-* externalId this (identity-scoped) run returned — used below to
-    // purge foreign entries an earlier unscoped sync wrote into this history.
-    const seenIds = new Set<string>();
+    let created = 0;
+    let updated = 0;
 
     for (const project of projects) {
       const pName = project.name as string;
+      if (!pName) continue;
 
       // Repos → pushes + PRs
-      const reposData = await azFetch(
-        `https://dev.azure.com/${org}/${pName}/_apis/git/repositories?${API_VER}`,
-        token
-      );
-      const repos: any[] = reposData.value || [];
-
-      for (const repo of repos) {
-        const rName = repo.name as string;
-        const rId   = repo.id   as string;
-
-        // Pushes
-        try {
-          const pushesData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pushes?searchCriteria.fromDate=${cutoff}&searchCriteria.pusherId=${myId}&$top=100&${API_VER}`,
-            token
-          );
-          for (const push of (pushesData.value || [])) {
-            const contributors: string[] = (push.commits || []).map((c: any) => c.author?.name).filter(Boolean);
-            const msgs                   = (push.commits || []).map((c: any) => c.comment).filter(Boolean).join("; ");
-            await workHistoryRepository.upsertByExternalId(userId, `az-push-${push.pushId}`, {
-              userId:     new mongoose.Types.ObjectId(userId),
-              externalId: `az-push-${push.pushId}`,
-              title:      `Pushed to ${rName}`,
-              description: msgs || undefined,
-              category:   "Coding",
-              type:       "simple",
-              source:     "git",
-              isMilestone: false, isBlocker: false, isImportant: false, isOngoing: false,
-              metadata:   {
-                pushLink:    push._links?.web?.href,
-                project:     pName,
-                repo:        rName,
-                repoId:      rId,
-                contributors,
-              },
-              createdAt: new Date(push.date),
-            });
-            seenIds.add(`az-push-${push.pushId}`);
-            upserted++;
-          }
-        } catch { /* skip repos the token can't access */ }
-
-        // Pull Requests
-        try {
-          const prsData = await azFetch(
-            `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests?searchCriteria.status=all&searchCriteria.creatorId=${myId}&$top=100&${API_VER}`,
-            token
-          );
-          for (const pr of (prsData.value || [])) {
-            if (new Date(pr.creationDate).getTime() < new Date(cutoff).getTime()) continue;
-
-            const prStatus = pr.status === "completed" ? "completed"
-                           : pr.status === "abandoned" ? "abandoned"
-                           : "active";
-            const isMerged = pr.status === "completed";
-            const reviewers = (pr.reviewers || []).map((r: any) => ({
-              name:       r.displayName,
-              vote:       r.vote,
-              isRequired: !!r.isRequired,
-            }));
-
-            await workHistoryRepository.upsertByExternalId(userId, `az-pr-${pr.pullRequestId}`,
-              {
-                userId:     new mongoose.Types.ObjectId(userId),
-                externalId: `az-pr-${pr.pullRequestId}`,
-                title:      pr.title,
-                description: pr.description?.slice(0, 500) || undefined,
-                category:   "PR Review",
-                type:       "simple",
-                source:     "pr",
-                isMilestone: isMerged, isBlocker: false, isImportant: false, isOngoing: prStatus === "active",
-                metadata:   {
-                  prLink:       pr._links?.web?.href,
-                  prStatus,
-                  prId:         String(pr.pullRequestId),
-                  sourceBranch: pr.sourceRefName?.replace("refs/heads/", ""),
-                  targetBranch: pr.targetRefName?.replace("refs/heads/", ""),
-                  reviewers,
-                  project:  pName,
-                  repo:     rName,
-                  repoId:   rId,
-                },
-                createdAt: new Date(pr.creationDate),
-              },
-              { isOngoing: prStatus === "active", "metadata.prStatus": prStatus, "metadata.reviewers": reviewers }
-            );
-            seenIds.add(`az-pr-${pr.pullRequestId}`);
-            upserted++;
-          }
-        } catch { /* skip */ }
-      }
-
-      // Builds per project
       try {
-        const requestedForParam = myUniqueName ? `&requestedFor=${encodeURIComponent(myUniqueName)}` : "";
-        const buildsData = await azFetch(
-          `https://dev.azure.com/${org}/${pName}/_apis/build/builds?minTime=${cutoff}${requestedForParam}&$top=100&${API_VER}`,
+        const reposData = await azFetch(
+          `${base}/${encodeURIComponent(pName)}/_apis/git/repositories?${API_VER}`,
           token
         );
-        for (const build of (buildsData.value || [])) {
-          const requester = build.requestedFor || build.requestedBy;
-          if (requester?.id && requester.id !== myId) continue;
-          const result = build.result || build.status;
-          await workHistoryRepository.upsertByExternalId(userId, `az-build-${build.id}`,
-            {
-              userId:     new mongoose.Types.ObjectId(userId),
-              externalId: `az-build-${build.id}`,
-              title:      `Build #${build.buildNumber}: ${build.definition?.name || ""}`,
-              category:   "Deployment",
-              type:       "simple",
-              source:     "build",
-              isMilestone: result === "succeeded", isBlocker: result === "failed",
-              isImportant: false, isOngoing: build.status === "inProgress",
-              metadata: {
-                isBuild:     true,
-                buildLink:   build._links?.web?.href,
-                result,
-                buildStatus: build.status,
-                project:     pName,
-                repo:        build.repository?.name,
-              },
-              createdAt: new Date(build.startTime || build.queueTime),
-            },
-            { isOngoing: build.status === "inProgress", "metadata.buildStatus": build.status, "metadata.result": result }
+        const repos: any[] = reposData.value || [];
+
+        for (const repo of repos) {
+          const rName = repo.name as string;
+          const rId   = repo.id   as string;
+          if (!rId) continue;
+
+          // Pushes — immutable events, paginated on full sync
+          try {
+            let skip = 0;
+            let more = true;
+            while (more) {
+              const pushesData = await azFetch(
+                `${base}/${encodeURIComponent(pName)}/_apis/git/repositories/${rId}/pushes` +
+                  `?searchCriteria.fromDate=${encodeURIComponent(cutoff)}` +
+                  `&searchCriteria.pusherId=${encodeURIComponent(myId)}` +
+                  `&$top=100&$skip=${skip}&${API_VER}`,
+                token
+              );
+              const pushes: any[] = pushesData.value || [];
+              for (const push of pushes) {
+                if (!push.date) continue;
+                const pushDate = new Date(push.date);
+                if (isNaN(pushDate.getTime())) continue;
+
+                const commits: any[] = push.commits || [];
+                const description = commits.length
+                  ? commits.map((c: any) => `- ${c?.comment || "Committed"}`).join("\n")
+                  : undefined;
+                const contributors: string[] = commits.map((c: any) => c.author?.name).filter(Boolean);
+
+                const res = await workHistoryRepository.upsertByExternalId(userId, `az-push-${push.pushId}`, {
+                  userId:      new mongoose.Types.ObjectId(userId),
+                  externalId:  `az-push-${push.pushId}`,
+                  title:       `Pushed to ${rName || "Repository"}`,
+                  description,
+                  category:    "Coding",
+                  type:        "simple",
+                  source:      "git",
+                  isMilestone: false, isBlocker: false, isImportant: false, isOngoing: false,
+                  metadata:    {
+                    pushLink:     push._links?.web?.href,
+                    project:      pName,
+                    repo:         rName,
+                    repoId:       rId,
+                    contributors,
+                  },
+                  createdAt: pushDate,
+                });
+                if (res.upsertedCount) created++;
+              }
+              if (!isFullSync || pushes.length < 100 || skip > 2000) more = false;
+              else skip += 100;
+            }
+          } catch { /* skip repos the token can't access */ }
+
+          // Pull requests — the user's own PRs AND PRs they were asked to
+          // review. Mutable: status / reviewers refresh on every sync.
+          try {
+            let skip = 0;
+            let more = true;
+            while (more) {
+              const prsData = await azFetch(
+                `${base}/${encodeURIComponent(pName)}/_apis/git/repositories/${rId}/pullrequests` +
+                  `?searchCriteria.status=all&searchCriteria.minTime=${encodeURIComponent(cutoff)}` +
+                  `&$top=100&$skip=${skip}&${API_VER}`,
+                token
+              );
+              const prs: any[] = prsData.value || [];
+              for (const pr of prs) {
+                const isAuthor   = pr.createdBy?.id === myId;
+                const isReviewer = (pr.reviewers || []).some((r: any) => r?.id === myId);
+                if (!isAuthor && !isReviewer) continue;
+                if (!pr.creationDate) continue;
+                const prDate = new Date(pr.creationDate);
+                if (isNaN(prDate.getTime())) continue;
+
+                const prStatus = pr.status === "completed" ? "completed"
+                               : pr.status === "abandoned" ? "abandoned"
+                               : "active";
+                const isMerged  = pr.status === "completed";
+                const reviewers = (pr.reviewers || []).map((r: any) => ({
+                  name:       r.displayName || r.uniqueName || "Unknown",
+                  vote:       r.vote || 0,
+                  isRequired: !!r.isRequired,
+                }));
+
+                const res = await workHistoryRepository.upsertByExternalId(userId, `az-pr-${pr.pullRequestId}`,
+                  {
+                    userId:      new mongoose.Types.ObjectId(userId),
+                    externalId:  `az-pr-${pr.pullRequestId}`,
+                    title:       pr.title || `Pull Request #${pr.pullRequestId}`,
+                    description: pr.description?.slice(0, 500) || undefined,
+                    category:    "PR Review",
+                    type:        "simple",
+                    source:      "pr",
+                    isMilestone: isMerged, isBlocker: false, isImportant: false, isOngoing: prStatus === "active",
+                    metadata:    {
+                      prLink:       pr._links?.web?.href,
+                      prStatus,
+                      prId:         String(pr.pullRequestId),
+                      sourceBranch: pr.sourceRefName?.replace("refs/heads/", ""),
+                      targetBranch: pr.targetRefName?.replace("refs/heads/", ""),
+                      reviewers,
+                      project:      pName,
+                      repo:         rName,
+                      repoId:       rId,
+                    },
+                    createdAt: prDate,
+                  },
+                  {
+                    isOngoing: prStatus === "active",
+                    isMilestone: isMerged,
+                    "metadata.prStatus": prStatus,
+                    "metadata.reviewers": reviewers,
+                  }
+                );
+                if (res.upsertedCount) created++;
+                else if (res.modifiedCount) updated++;
+              }
+              if (!isFullSync || prs.length < 100 || skip > 1000) more = false;
+              else skip += 100;
+            }
+          } catch { /* skip */ }
+        }
+      } catch { /* skip projects whose repos are inaccessible */ }
+
+      // Builds per project — mutable (result changes as pipelines finish),
+      // paginated via continuation token on full sync.
+      try {
+        let continuation = "";
+        let more = true;
+        while (more) {
+          const { data: buildsData, continuation: nextToken } = await azFetchWithHeaders(
+            `${base}/${encodeURIComponent(pName)}/_apis/build/builds` +
+              `?minTime=${encodeURIComponent(cutoff)}` +
+              `&requestedFor=${encodeURIComponent(myId)}` +
+              `&$top=100${continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : ""}&${API_VER}`,
+            token
           );
-          seenIds.add(`az-build-${build.id}`);
-          upserted++;
+          const builds: any[] = buildsData.value || [];
+          for (const build of builds) {
+            const requester = build.requestedFor || build.requestedBy;
+            if (requester?.id && requester.id !== myId) continue;
+            const rawDate = build.finishTime || build.startTime || build.queueTime;
+            if (!rawDate) continue;
+            const buildDate = new Date(rawDate);
+            if (isNaN(buildDate.getTime())) continue;
+
+            const result = build.result || build.status;
+            const res = await workHistoryRepository.upsertByExternalId(userId, `az-build-${build.id}`,
+              {
+                userId:      new mongoose.Types.ObjectId(userId),
+                externalId:  `az-build-${build.id}`,
+                title:       `Build #${build.buildNumber}: ${build.definition?.name || ""}`,
+                category:    "Deployment",
+                type:        "simple",
+                source:      "build",
+                isMilestone: result === "succeeded", isBlocker: result === "failed",
+                isImportant: false, isOngoing: build.status === "inProgress",
+                metadata: {
+                  isBuild:     true,
+                  buildLink:   build._links?.web?.href,
+                  result,
+                  buildStatus: build.status,
+                  project:     pName,
+                  repo:        build.repository?.name,
+                },
+                createdAt: buildDate,
+              },
+              {
+                isOngoing: build.status === "inProgress",
+                isMilestone: result === "succeeded",
+                isBlocker: result === "failed",
+                "metadata.buildStatus": build.status,
+                "metadata.result": result,
+              }
+            );
+            if (res.upsertedCount) created++;
+            else if (res.modifiedCount) updated++;
+          }
+          if (!isFullSync || !nextToken) more = false;
+          else continuation = nextToken;
         }
       } catch { /* skip */ }
     }
 
-    // Reconcile: earlier syncs ran without the identity filters above and wrote
-    // the whole org's activity into this user's history. Every az-* entry in
-    // the synced window that this identity-scoped run did NOT return belongs to
-    // someone else — remove it. (Window-bounded by the same cutoff/$top as the
-    // fetches, so entries outside the window are never touched.)
-    const cleanupRes = await WorkHistory.deleteMany({
-      userId,
-      externalId: { $regex: "^az-", $nin: [...seenIds] },
-      createdAt: { $gte: new Date(cutoff) },
-    });
-    const cleaned = cleanupRes.deletedCount ?? 0;
-
-    // Refresh stale active PRs (re-fetch individually to get latest status)
+    // Refresh stale active PRs (re-fetch individually to get latest status).
     const staleActive = await WorkHistory.find({
       userId,
       "metadata.prStatus": "active",
@@ -541,14 +600,14 @@ export class HistoryService {
     }).lean();
 
     for (const item of staleActive) {
-      const prId   = (item as any).externalId?.replace("az-pr-", "");
-      const pName  = (item as any).metadata?.project;
-      const rId    = (item as any).metadata?.repoId;
+      const prId  = (item as any).externalId?.replace("az-pr-", "");
+      const pName = (item as any).metadata?.project;
+      const rId   = (item as any).metadata?.repoId;
       if (!prId || !pName || !rId) continue;
 
       try {
         const pr = await azFetch(
-          `https://dev.azure.com/${org}/${pName}/_apis/git/repositories/${rId}/pullrequests/${prId}?${API_VER}`,
+          `${base}/${encodeURIComponent(pName)}/_apis/git/repositories/${rId}/pullrequests/${prId}?${API_VER}`,
           token
         );
         const prStatus = pr.status === "completed" ? "completed"
@@ -559,15 +618,15 @@ export class HistoryService {
             { _id: item._id },
             { "metadata.prStatus": prStatus, isOngoing: false, isMilestone: prStatus === "completed" }
           );
+          updated++;
         }
       } catch { /* ignore */ }
     }
 
-    const isFullSync = days >= 90;
     await User.updateOne(
       { _id: userId },
       {
-        azureLastSync:          new Date(),
+        azureLastSync: new Date(),
         ...(isFullSync ? {
           azureFullSyncCompleted: true,
           azureFullSyncDate:      new Date(),
@@ -575,7 +634,7 @@ export class HistoryService {
       }
     );
 
-    return { synced: upserted, cleaned, org, projects: projects.length };
+    return { synced: created + updated, created, updated, org, projects: projects.length };
   }
 
   // ── Custom integrations ───────────────────────────────────────────────────
