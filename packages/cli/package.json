@@ -1,0 +1,13 @@
+{
+  "name": "@operium/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "operium": "./bin/operium.js"
+  },
+  "scripts": {
+    "start": "node ./bin/operium.js"
+  },
+  "engines": { "node": ">=20" }
+}

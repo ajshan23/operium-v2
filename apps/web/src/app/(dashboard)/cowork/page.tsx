@@ -9,7 +9,7 @@ import {
   AlertTriangle, X,
 } from "lucide-react";
 import { coworkApi } from "@/api/cowork.api";
-import type { CoworkSession } from "@/api/cowork.api";
+import type { CoworkSession, ResumeSession } from "@/api/cowork.api";
 import { repoWebUrl, branchWebUrl } from "@operium/core/repoLinks";
 
 const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ssr: false });
@@ -32,6 +32,8 @@ export default function CoworkPage() {
   const [loadingMore,  setLoadingMore]  = useState(false);
   const [error,        setError]        = useState<string | null>(null);
   const [pagination,   setPagination]   = useState({ total: 0, page: 1, pages: 1 });
+  const [resumeSessions, setResumeSessions] = useState<ResumeSession[]>([]);
+  const [memoryHealth, setMemoryHealth] = useState<{ stale: number; missingNextStep: number; missingRepo: number } | null>(null);
 
   // ── Filter state ──
   const [searchQuery,  setSearchQuery]  = useState("");
@@ -100,6 +102,15 @@ export default function CoworkPage() {
     }, searchQuery ? 400 : 0);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [searchQuery, scopeFilter, sourceFilter, loadSessions]);
+
+  useEffect(() => {
+    coworkApi.resume()
+      .then(res => {
+        setResumeSessions(res.data.sessions);
+        setMemoryHealth(res.data.health);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Delete ───────────────────────────────────────────────────────────────────
 
@@ -268,6 +279,32 @@ export default function CoworkPage() {
 
         {/* Sessions List */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+          {!searchQuery && !repoFilter && resumeSessions.length > 0 && (
+            <section className="rounded-2xl border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.05)] p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-[12px] font-bold text-[var(--text-primary)]">Resume work</h2>
+                  <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Private checkpoints saved by your coding agent.</p>
+                </div>
+                {memoryHealth && (memoryHealth.stale + memoryHealth.missingNextStep + memoryHealth.missingRepo) > 0 && (
+                  <span className="text-[9px] font-mono text-amber-300 bg-amber-500/10 px-2 py-1 rounded">
+                    {memoryHealth.stale + memoryHealth.missingNextStep + memoryHealth.missingRepo} need attention
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                {resumeSessions.slice(0, 3).map(session => (
+                  <Link key={session._id || session.id} href={`/cowork/${session._id || session.id}`} className="block rounded-xl border border-[var(--border-subtle)] bg-[var(--s1)] px-3 py-2.5 hover:border-[rgba(var(--accent-rgb),0.45)] transition-colors">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{session.title}</span>
+                      <span className="shrink-0 text-[9px] text-[var(--accent)]">{session.private ? "Private" : "Shared"}</span>
+                    </div>
+                    <p className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{session.nextStep ? `Next: ${session.nextStep}` : "Open to add the next step"}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
           {loading ? (
             <div className="flex items-center justify-center gap-2 text-[var(--text-muted)] py-20">
               <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
@@ -491,6 +528,7 @@ function getSourceClass(source: string) {
   switch (source) {
     case "antigravity": return "bg-purple-500/10 border-purple-500/20 text-[#a855f7]";
     case "claude-code": return "bg-orange-500/10 border-orange-500/20 text-orange-400";
+    case "codex":       return "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
     case "cursor":      return "bg-blue-500/10 border-blue-500/20 text-[#3b82f6]";
     default:            return "bg-[var(--s2)] border-[var(--border-default)] text-[var(--text-muted)]";
   }
@@ -499,6 +537,7 @@ function getSourceClass(source: string) {
 function SourceIcon({ source }: { source: string }) {
   if (source === "antigravity") return <Bot size={16} />;
   if (source === "claude-code") return <TerminalSquare size={16} />;
+  if (source === "codex")       return <TerminalSquare size={16} />;
   if (source === "cursor")      return <Code2 size={16} />;
   return <ShieldCheck size={16} />;
 }

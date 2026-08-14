@@ -32,6 +32,11 @@ export const listSessions = handle(async (req, res) => {
   res.json(new ApiResponse(200, result, "Sessions fetched"));
 });
 
+export const getResume = handle(async (req, res) => {
+  const result = await coworkService.getResume(uid(req), oid(req));
+  res.json(new ApiResponse(200, result, "Resume sessions fetched"));
+});
+
 export const searchSessions = handle(async (req, res) => {
   const { q, scope, limit } = req.query as Record<string, string | undefined>;
   if (!q) {

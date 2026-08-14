@@ -20,6 +20,7 @@ const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ss
 const SOURCE_MAP: Record<string, { icon: React.ReactNode; bgClass: string; borderClass: string; textClass: string; label: string }> = {
   "antigravity": { icon: <Bot className="w-5 h-5" />,          bgClass: "bg-purple-500/10", borderClass: "border-purple-500/20", textClass: "text-[#a855f7]", label: "Antigravity" },
   "claude-code": { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-orange-500/10", borderClass: "border-orange-500/20", textClass: "text-orange-400", label: "Claude Code" },
+  "codex":       { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-emerald-500/10", borderClass: "border-emerald-500/20", textClass: "text-emerald-400", label: "Codex" },
   "cursor":      { icon: <Code2 className="w-5 h-5" />,         bgClass: "bg-blue-500/10",   borderClass: "border-blue-500/20",   textClass: "text-[#3b82f6]", label: "Cursor" },
 };
 const defaultSource = { icon: <ShieldCheck className="w-5 h-5" />, bgClass: "bg-slate-500/10", borderClass: "border-slate-500/20", textClass: "text-slate-400", label: "System" };

@@ -10,6 +10,7 @@ import {
 import { historyApi } from "@/api/history.api";
 import { orgApi } from "@/api/org.api";
 import { coworkApi, type CoworkRepoPref } from "@/api/cowork.api";
+import { apiClient } from "@/api/client";
 import { getUser } from "@/lib/auth";
 import { getActiveOrgId } from "@/lib/org";
 import { MCP_TOOL_NAMES, MCP_TOOL_COUNT, MCP_TOOL_GROUPS } from "@operium/shared";
@@ -37,6 +38,12 @@ const AzureIcon = ({ size = 16 }: { size?: number }) => (
 interface GeminiKey { id: string; name: string; keyPreview: string; isActive: boolean; }
 interface ExtensionKey { id: string; name: string; keyPreview: string; createdAt: string; }
 interface WebhookItem { id: string; name: string; url: string; isActive: boolean; }
+interface McpStatus {
+  connected: boolean;
+  lastSuccessfulCallAt: string | null;
+  lastStartupAt: string | null;
+  lastCaptureAt: string | null;
+}
 
 function formatSyncDate(d: string | null): string {
   if (!d) return "Never";
@@ -123,9 +130,13 @@ export default function SettingsPage() {
   const [gridSnapping,  setGridSnapping]  = useState(true);
   const [defaultStroke, setDefaultStroke] = useState("#8b5cf6");
 
-  // Cowork sharing preference (default: shared with org)
+  // Deliberately shared sessions can use this default; automatic capture stays private.
   const [shareCowork,   setShareCowork]   = useState(true);
   const [shareSaving,   setShareSaving]   = useState(false);
+
+  // MCP first-value state — usage timestamps only; no prompts or code are read.
+  const [mcpStatus, setMcpStatus] = useState<McpStatus | null>(null);
+  const [mcpClient, setMcpClient] = useState<"claude" | "codex">("claude");
 
   // Per-repo (project) sharing overrides
   const [repoPrefs,   setRepoPrefs]   = useState<CoworkRepoPref[]>([]);
@@ -188,6 +199,10 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadIntegrations(); }, [loadIntegrations]);
+
+  useEffect(() => {
+    apiClient<McpStatus>("/api/mcp/status").then(setMcpStatus).catch(() => setMcpStatus(null));
+  }, []);
 
   // ── GitHub handlers ───────────────────────────────────────────────────
   const handleConnectGithub = async (e: React.FormEvent) => {
@@ -589,30 +604,42 @@ export default function SettingsPage() {
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C12 2 17 8.5 17 12.5C17 15.26 14.76 17.5 12 17.5C9.24 17.5 7 15.26 7 12.5C7 8.5 12 2 12 2Z"/></svg>
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">MCP Server Setup</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Connect Operium to Claude Code, Cursor, or any MCP-compatible AI tool.</p>
+              <h2 className="text-[14px] font-bold text-white leading-tight">MCP: connected work memory</h2>
+              <p className="text-[11px] text-[#63637a] mt-0.5">One setup gives your coding agent a private startup brief and quiet progress capture.</p>
             </div>
           </div>
           <div className="space-y-4">
             <div className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4 space-y-3">
-              <p className="text-[12px] font-semibold text-[#fafafa]">Add to your <code className="text-[#8b5cf6] bg-[#8b5cf6]/10 px-1.5 py-0.5 rounded text-[11px]">claude_desktop_config.json</code> or MCP settings:</p>
-              <pre className="text-[11px] font-mono text-[#c4b5fd] leading-relaxed overflow-x-auto bg-[#050505] rounded-lg p-3 border border-[#1a1a22]">{`{
-  "mcpServers": {
-    "operium": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "http://localhost:4000/mcp"],
-      "env": {}
-    }
-  }
-}`}</pre>
-              <p className="text-[10px] text-[#63637a]">Authentication uses your session token automatically. Make sure Operium API is running on port 4000.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex rounded-lg border border-[#282534] p-0.5">
+                  {(["claude", "codex"] as const).map(client => (
+                    <button key={client} onClick={() => setMcpClient(client)} className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-colors ${mcpClient === client ? "bg-violet-500/20 text-violet-300" : "text-[#77758c] hover:text-white"}`}>
+                      {client === "claude" ? "Claude Code" : "Codex"}
+                    </button>
+                  ))}
+                </div>
+                <span className={`text-[10px] font-semibold ${mcpStatus?.connected ? "text-emerald-400" : "text-[#8f8da3]"}`}>
+                  {mcpStatus?.connected ? `Connected · last call ${formatSyncDate(mcpStatus.lastSuccessfulCallAt)}` : "Not verified yet"}
+                </span>
+              </div>
+              <p className="text-[12px] font-semibold text-[#fafafa]">Run this once from the repository root:</p>
+              <div className="flex gap-2">
+                <code className="min-w-0 flex-1 text-[11px] font-mono text-[#c4b5fd] leading-relaxed overflow-x-auto bg-[#050505] rounded-lg p-3 border border-[#1a1a22]">{`npx @operium/cli init --client ${mcpClient}`}</code>
+                <button onClick={() => navigator.clipboard.writeText(`npx @operium/cli init --client ${mcpClient}`)} className="px-3 text-[#a78bfa] hover:text-white border border-[#332b4a] rounded-lg text-[10px] font-semibold">Copy</button>
+              </div>
+              <div className="grid gap-2 text-[10px] text-[#8f8da3] sm:grid-cols-3">
+                <span>1. Detects repo, branch, and worktree</span>
+                <span>2. Verifies MCP with ping</span>
+                <span>3. Enables private capture by default</span>
+              </div>
+              <p className="text-[10px] text-[#63637a]">Startup: {formatSyncDate(mcpStatus?.lastStartupAt ?? null)} · Last private checkpoint: {formatSyncDate(mcpStatus?.lastCaptureAt ?? null)}. Capture is private unless you deliberately share a session.</p>
             </div>
-            <div className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4">
-              <p className="text-[12px] font-semibold text-[#fafafa] mb-3">
-                Available MCP Tools
+            <details className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4">
+              <summary className="cursor-pointer text-[12px] font-semibold text-[#fafafa]">
+                Advanced MCP tools
                 <span className="ml-2 text-[10px] font-mono text-[#63637a] bg-[#1a1a22] px-1.5 py-0.5 rounded">{MCP_TOOL_COUNT}</span>
-              </p>
-              <div className="space-y-3">
+              </summary>
+              <div className="space-y-3 mt-3">
                 {mcpToolGroups.map(group => (
                   <div key={group.label}>
                     <p className="text-[10px] font-bold text-[#63637a] uppercase tracking-wider mb-1.5">{group.label}</p>
@@ -625,11 +652,9 @@ export default function SettingsPage() {
                 ))}
               </div>
               <p className="text-[10px] text-[#63637a] mt-3">
-                Sessions are repo-aware: agents register every git repo in the workspace at startup, and saved
-                sessions, rules, and recall are scoped/boosted by repo. Azure Boards tools read and write live
-                work items when a DevOps token is configured below.
+                The agent normally needs only startup context and <code>capture_work</code>. All specialized tools remain available when a task needs them.
               </p>
-            </div>
+            </details>
           </div>
         </div>
 
@@ -687,7 +712,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">Cowork Sharing</h2>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Control whether the AI sessions you save are visible to your team.</p>
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Automatic checkpoints are private. Control sharing for sessions you intentionally publish.</p>
             </div>
           </div>
           <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--s2)]">
@@ -695,8 +720,8 @@ export default function SettingsPage() {
               <span className="text-[12px] font-bold text-[var(--text-primary)]">Share new sessions with my team</span>
               <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
                 {shareCowork
-                  ? "On — new cowork sessions are added to your organization's shared knowledge base."
-                  : "Off — new cowork sessions stay private to you. Existing sessions are unchanged."}
+                  ? "On — sessions you deliberately save for team use are added to your organization's knowledge base. Automatic checkpoints still stay private."
+                  : "Off — new sessions stay private to you. Existing sessions are unchanged."}
               </p>
             </div>
             <div className={shareSaving ? "opacity-50 pointer-events-none" : ""}>

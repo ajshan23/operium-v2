@@ -207,6 +207,8 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.21)(sass@1.51.0)
 
+  packages/cli: {}
+
   packages/db:
     dependencies:
       '@operium/core':

@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import jwt from "jsonwebtoken";
 import { buildMcpServer } from "@operium/mcp";
-import { User, Membership } from "@operium/db";
+import { User, Membership, McpUsageLog } from "@operium/db";
 import { embeddingService } from "../services/embedding.service.js";
 import { gitService } from "../services/git.service.js";
 import { JWT_SECRET } from "../utils/jwtSecret.js";
@@ -74,6 +74,20 @@ function sendUnauthorized(res: any) {
     id: null,
   });
 }
+
+// Settings uses this to show time-to-first-value without logging content or
+// inspecting agent prompts. It is authenticated with the same cookie/Bearer
+// resolution as the MCP transport.
+router.get("/status", async (req: any, res: any) => {
+  const resolved = await resolveUser(req);
+  if (!resolved) { sendUnauthorized(res); return; }
+  const [last, startup, capture] = await Promise.all([
+    McpUsageLog.findOne({ userId: resolved.userId, success: true }).sort({ createdAt: -1 }).lean(),
+    McpUsageLog.findOne({ userId: resolved.userId, toolName: "get_startup_context", success: true }).sort({ createdAt: -1 }).lean(),
+    McpUsageLog.findOne({ userId: resolved.userId, toolName: { $in: ["capture_work", "checkpoint_cowork", "save_chat"] }, success: true }).sort({ createdAt: -1 }).lean(),
+  ]);
+  res.json({ connected: !!last, lastSuccessfulCallAt: last?.createdAt ?? null, lastStartupAt: startup?.createdAt ?? null, lastCaptureAt: capture?.createdAt ?? null });
+});
 
 // ── POST /mcp — all JSON-RPC requests ────────────────────────────────────────
 

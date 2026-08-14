@@ -53,6 +53,37 @@ function buildScopeFilter(userId: string, orgId: string, scope?: string) {
 
 export class CoworkService {
 
+  /** Small review payload for developers returning to work. No content is
+   * generated here; it only surfaces sessions already saved by MCP. */
+  async getResume(userId: string, _orgId: string) {
+    const since = new Date(Date.now() - 21 * 86_400_000);
+    const sessions = await CoworkSession.find({
+      userId,
+      updatedAt: { $gte: since },
+      $or: [{ outcome: { $in: ["blocked", "partial"] } }, { outcome: { $exists: false } }],
+    })
+      .sort({ updatedAt: -1 }).limit(8).lean() as any[];
+
+    const resume = sessions.map(s => ({
+      ...this._normalize(s, userId),
+      nextStep: this._nextStep(s.summary),
+      private: !s.isShared,
+    }));
+    const stale = sessions.filter(s => Date.now() - new Date(s.updatedAt).getTime() > 3 * 86_400_000).length;
+    const missingNextStep = sessions.filter(s => !this._nextStep(s.summary)).length;
+    const missingRepo = sessions.filter(s => !(s.repos?.length || s.repoUrl)).length;
+    return {
+      sessions: resume,
+      health: {
+        active: sessions.length,
+        stale,
+        missingNextStep,
+        missingRepo,
+        private: sessions.filter(s => !s.isShared).length,
+      },
+    };
+  }
+
   async list(userId: string, orgId: string, params: ListParams) {
     const limit  = Math.min(params.limit  ?? 20, 100);
     const page   = Math.max(params.page   ?? 1,  1);
@@ -74,6 +105,14 @@ export class CoworkService {
 
     const normalized = sessions.map(s => this._normalize(s, userId));
     return { sessions: normalized, pagination: { total, page, pages: Math.ceil(total / limit) } };
+  }
+
+  private _nextStep(summary?: string): string | null {
+    if (!summary) return null;
+    const heading = summary.match(/^#{1,4}\s*(?:next(?:\s+steps?)?|todo|remaining)\b[^\n]*\n([\s\S]*?)(?=\n#{1,4}\s|$)/im);
+    if (heading?.[1]?.trim()) return heading[1].trim().replace(/^[-*]\s*/m, "").slice(0, 180);
+    const inline = summary.match(/\*\*Next[^*]*\*\*:?[\s]*([^\n]+)/i);
+    return inline?.[1]?.trim().slice(0, 180) ?? null;
   }
 
   async search(userId: string, orgId: string, q: string, scope?: string, limit = 10) {
