@@ -108,6 +108,17 @@ async function azFetch(url: string, token: string): Promise<any> {
   }
 }
 
+async function azFetchPage(url: string, token: string): Promise<any[]> {
+  const out: any[] = [];
+  for (let skip = 0; ; skip += 100) {
+    const join = url.includes("?") ? "&" : "?";
+    const data = await azFetch(`${url}${join}$top=100&$skip=${skip}`, token);
+    const values = Array.isArray(data?.value) ? data.value : [];
+    out.push(...values);
+    if (values.length < 100) return out;
+  }
+}
+
 // Like azFetch but also surfaces the paging continuation token Azure returns
 // in a response header (used by the build-list endpoint).
 async function azFetchWithHeaders(url: string, token: string): Promise<{ data: any; continuation: string }> {
@@ -369,7 +380,7 @@ export class HistoryService {
   // ── Azure DevOps sync ─────────────────────────────────────────────────────
 
   async syncAzure(userId: string, days: number) {
-    const user = await User.findById(userId).select("+azureDevOpsToken").lean() as any;
+    const user = await User.findById(userId).select("+azureDevOpsToken azureLastSync").lean() as any;
     if (!user?.azureDevOpsToken) throw new ApiError(400, "Azure DevOps token not configured");
     if (!user?.azureDevOpsOrg)   throw new ApiError(400, "Azure DevOps organisation not configured");
 
@@ -384,7 +395,14 @@ export class HistoryService {
     const token      = user.azureDevOpsToken as string;
     const org        = user.azureDevOpsOrg   as string;
     const isFullSync = days >= 90;
-    const cutoff     = new Date(Date.now() - days * 86400 * 1000).toISOString();
+    // Incremental scans overlap by one day to tolerate delayed Azure indexing;
+    // stable external IDs make the overlap idempotent. Full sync retains its
+    // explicit caller-selected horizon.
+    const overlapMs = 24 * 60 * 60 * 1000;
+    const incrementalSince = user.azureLastSync
+      ? new Date(new Date(user.azureLastSync).getTime() - overlapMs)
+      : new Date(Date.now() - days * 86400 * 1000);
+    const cutoff     = (isFullSync ? new Date(Date.now() - days * 86400 * 1000) : incrementalSince).toISOString();
     const API_VER    = "api-version=7.0";
     const base       = `https://dev.azure.com/${encodeURIComponent(org)}`;
 
@@ -395,11 +413,12 @@ export class HistoryService {
     if (!myId) throw new ApiError(400, "Could not resolve Azure DevOps user identity");
 
     // List projects
-    const projectsData = await azFetch(`${base}/_apis/projects?$top=20&${API_VER}`, token);
-    const projects: any[] = projectsData.value || [];
+    const projects: any[] = await azFetchPage(`${base}/_apis/projects?${API_VER}`, token);
 
     let created = 0;
     let updated = 0;
+    const failures: Array<{ scope: string; message: string }> = [];
+    let skipped = 0;
 
     for (const project of projects) {
       const pName = project.name as string;
@@ -407,11 +426,10 @@ export class HistoryService {
 
       // Repos → pushes + PRs
       try {
-        const reposData = await azFetch(
+        const repos: any[] = await azFetchPage(
           `${base}/${encodeURIComponent(pName)}/_apis/git/repositories?${API_VER}`,
           token
         );
-        const repos: any[] = reposData.value || [];
 
         for (const repo of repos) {
           const rName = repo.name as string;
@@ -462,10 +480,10 @@ export class HistoryService {
                 });
                 if (res.upsertedCount) created++;
               }
-              if (!isFullSync || pushes.length < 100 || skip > 2000) more = false;
+              if (pushes.length < 100) more = false;
               else skip += 100;
             }
-          } catch { /* skip repos the token can't access */ }
+          } catch (err: any) { skipped++; failures.push({ scope: `${pName}/${rName}: pushes`, message: err?.message ?? "Azure push query failed" }); }
 
           // Pull requests — the user's own PRs AND PRs they were asked to
           // review. Mutable: status / reviewers refresh on every sync.
@@ -473,13 +491,19 @@ export class HistoryService {
             let skip = 0;
             let more = true;
             while (more) {
-              const prsData = await azFetch(
-                `${base}/${encodeURIComponent(pName)}/_apis/git/repositories/${rId}/pullrequests` +
-                  `?searchCriteria.status=all&searchCriteria.minTime=${encodeURIComponent(cutoff)}` +
-                  `&$top=100&$skip=${skip}&${API_VER}`,
-                token
-              );
-              const prs: any[] = prsData.value || [];
+              const basePrUrl = `${base}/${encodeURIComponent(pName)}/_apis/git/repositories/${rId}/pullrequests` +
+                `?searchCriteria.status=all&searchCriteria.minTime=${encodeURIComponent(cutoff)}` +
+                `&$top=100&$skip=${skip}&${API_VER}`;
+              // Azure's creator/reviewer filters are separate dimensions. Query
+              // both server-side and merge, rather than scanning arbitrary repo
+              // PR pages and hoping the user's work appears before the cutoff.
+              const [authoredData, reviewedData] = await Promise.all([
+                azFetch(`${basePrUrl}&searchCriteria.creatorId=${encodeURIComponent(myId)}`, token),
+                azFetch(`${basePrUrl}&searchCriteria.reviewerId=${encodeURIComponent(myId)}`, token),
+              ]);
+              const authored: any[] = authoredData.value || [];
+              const reviewed: any[] = reviewedData.value || [];
+              const prs: any[] = [...new Map([...authored, ...reviewed].map(pr => [pr.pullRequestId, pr])).values()];
               for (const pr of prs) {
                 const isAuthor   = pr.createdBy?.id === myId;
                 const myReview   = (pr.reviewers || []).find((r: any) => r?.id === myId);
@@ -540,12 +564,12 @@ export class HistoryService {
                 if (res.upsertedCount) created++;
                 else if (res.modifiedCount) updated++;
               }
-              if (!isFullSync || prs.length < 100 || skip > 1000) more = false;
+              if (authored.length < 100 && reviewed.length < 100) more = false;
               else skip += 100;
             }
-          } catch { /* skip */ }
+          } catch (err: any) { skipped++; failures.push({ scope: `${pName}/${rName}: pull requests`, message: err?.message ?? "Azure PR query failed" }); }
         }
-      } catch { /* skip projects whose repos are inaccessible */ }
+      } catch (err: any) { skipped++; failures.push({ scope: `${pName}: repositories`, message: err?.message ?? "Azure repository query failed" }); }
 
       // Builds per project — mutable (result changes as pipelines finish),
       // paginated via continuation token on full sync.
@@ -601,10 +625,10 @@ export class HistoryService {
             if (res.upsertedCount) created++;
             else if (res.modifiedCount) updated++;
           }
-          if (!isFullSync || !nextToken) more = false;
+          if (!nextToken) more = false;
           else continuation = nextToken;
         }
-      } catch { /* skip */ }
+      } catch (err: any) { skipped++; failures.push({ scope: `${pName}: builds`, message: err?.message ?? "Azure build query failed" }); }
     }
 
     // Refresh stale active PRs (re-fetch individually to get latest status).
@@ -639,18 +663,93 @@ export class HistoryService {
       } catch { /* ignore */ }
     }
 
-    await User.updateOne(
-      { _id: userId },
-      {
-        azureLastSync: new Date(),
-        ...(isFullSync ? {
-          azureFullSyncCompleted: true,
-          azureFullSyncDate:      new Date(),
-        } : {}),
-      }
-    );
+    const complete = failures.length === 0;
+    // Never move the checkpoint after a partial run: otherwise skipped pages
+    // become permanently invisible to later incremental syncs.
+    if (complete) {
+      await User.updateOne(
+        { _id: userId },
+        {
+          azureLastSync: new Date(),
+          ...(isFullSync ? { azureFullSyncCompleted: true, azureFullSyncDate: new Date() } : {}),
+        }
+      );
+    }
 
-    return { synced: created + updated, created, updated, org, projects: projects.length };
+    return { synced: created + updated, created, updated, org, projects: projects.length, mode: isFullSync ? "full" : "incremental", cutoff, complete, skipped, failures };
+  }
+
+  /** Read-only health report for legacy Azure history. It deliberately makes no
+   * external calls: callers choose the exact records to verify/repair next. */
+  async auditAzure(userId: string) {
+    const entries = await WorkHistory.find({ userId, externalId: { $regex: "^az-" } })
+      .select("externalId title createdAt metadata isOngoing").sort({ createdAt: -1 }).lean() as any[];
+    const dateCounts = new Map<string, number>();
+    for (const entry of entries) {
+      const day = new Date(entry.createdAt).toISOString().slice(0, 10);
+      dateCounts.set(day, (dateCounts.get(day) ?? 0) + 1);
+    }
+    const suspiciousDates = [...dateCounts.entries()]
+      .filter(([, count]) => count >= 25)
+      .sort((a, b) => b[1] - a[1])
+      .map(([date, count]) => ({ date, count }));
+    const candidates = entries.filter(e => !e.metadata?.project || (!e.metadata?.repoId && !e.externalId.startsWith("az-build-")))
+      .slice(0, 100).map(e => ({ externalId: e.externalId, title: e.title, reason: "missing source coordinates" }));
+    return {
+      total: entries.length,
+      activePrs: entries.filter(e => e.externalId.startsWith("az-pr-") && e.isOngoing).length,
+      suspiciousDates,
+      candidates,
+      message: "Audit is read-only. Submit explicit externalIds with confirm=true to verify and repair their event dates/statuses.",
+    };
+  }
+
+  /** Verify explicitly selected records against Azure and repair only proven
+   * source facts. No deletion is performed; foreign records are reported. */
+  async repairAzure(userId: string, externalIds: string[], confirm: boolean) {
+    if (!confirm) return { applied: false, ...(await this.auditAzure(userId)) };
+    const ids = [...new Set(externalIds)].filter(id => /^az-(push|pr|build)-/.test(id)).slice(0, 100);
+    if (!ids.length) throw new ApiError(400, "Pass up to 100 Azure externalIds to repair");
+    const user = await User.findById(userId).select("+azureDevOpsToken azureDevOpsOrg").lean() as any;
+    if (!user?.azureDevOpsToken || !user?.azureDevOpsOrg) throw new ApiError(400, "Azure DevOps is not connected");
+    const token = user.azureDevOpsToken as string;
+    const base = `https://dev.azure.com/${encodeURIComponent(user.azureDevOpsOrg)}`;
+    const api = "api-version=7.0";
+    const identity = await azFetch(`${base}/_apis/connectiondata`, token);
+    const myId = identity?.authenticatedUser?.id;
+    if (!myId) throw new ApiError(400, "Could not resolve Azure DevOps user identity");
+    const entries = await WorkHistory.find({ userId, externalId: { $in: ids } }).lean() as any[];
+    const repaired: string[] = [], foreign: string[] = [], unavailable: string[] = [];
+    for (const entry of entries) {
+      const meta = entry.metadata ?? {}, id = entry.externalId as string;
+      try {
+        let source: any, eventDate: Date | undefined, owner: string | undefined, patch: Record<string, any> = {};
+        if (id.startsWith("az-push-") && meta.project && meta.repoId) {
+          source = await azFetch(`${base}/${encodeURIComponent(meta.project)}/_apis/git/repositories/${meta.repoId}/pushes/${id.slice(8)}?${api}`, token);
+          owner = source?.pushedBy?.id; eventDate = source?.date ? new Date(source.date) : undefined;
+        } else if (id.startsWith("az-pr-") && meta.project && meta.repoId) {
+          source = await azFetch(`${base}/${encodeURIComponent(meta.project)}/_apis/git/repositories/${meta.repoId}/pullrequests/${id.slice(6)}?${api}`, token);
+          const review = (source?.reviewers ?? []).find((r: any) => r.id === myId);
+          if (source?.createdBy?.id !== myId && !review) { foreign.push(id); continue; }
+          eventDate = source?.creationDate ? new Date(source.creationDate) : undefined;
+          const role = source?.createdBy?.id === myId ? "author" : "reviewer";
+          const status = source?.status === "completed" ? "completed" : source?.status === "abandoned" ? "abandoned" : "active";
+          patch = { "metadata.role": role, "metadata.myVote": role === "author" ? 0 : (review?.vote ?? 0), "metadata.prStatus": status, isOngoing: status === "active", isMilestone: status === "completed" && role === "author" };
+        } else if (id.startsWith("az-build-") && meta.project) {
+          source = await azFetch(`${base}/${encodeURIComponent(meta.project)}/_apis/build/builds/${id.slice(9)}?${api}`, token);
+          owner = (source?.requestedFor ?? source?.requestedBy)?.id;
+          const raw = source?.finishTime ?? source?.startTime ?? source?.queueTime;
+          eventDate = raw ? new Date(raw) : undefined;
+        } else { unavailable.push(id); continue; }
+        if (owner && owner !== myId) { foreign.push(id); continue; }
+        if (!eventDate || Number.isNaN(eventDate.getTime())) { unavailable.push(id); continue; }
+        // Native collection update is intentional: Mongoose treats createdAt
+        // as immutable and otherwise silently drops the repair date.
+        await WorkHistory.collection.updateOne({ _id: entry._id }, { $set: { ...patch, createdAt: eventDate } });
+        repaired.push(id);
+      } catch { unavailable.push(id); }
+    }
+    return { applied: true, repaired, foreign, unavailable };
   }
 
   // ── Custom integrations ───────────────────────────────────────────────────

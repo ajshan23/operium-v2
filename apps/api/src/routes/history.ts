@@ -12,6 +12,8 @@ router.get("/live",        historyController.getLiveItems);
 
 router.post("/sync",       historyController.syncGithub);
 router.post("/sync-azure", historyController.syncAzure);
+router.get("/audit-azure", historyController.auditAzure);
+router.post("/repair-azure", historyController.repairAzure);
 router.post("/reset-azure",  historyController.resetAzure);
 router.post("/reset-github", historyController.resetGithub);
 router.post("/sync-custom", historyController.syncCustom);

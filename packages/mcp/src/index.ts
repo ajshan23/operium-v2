@@ -42,6 +42,19 @@ const repoRefShape = {
   filesTouched: z.array(z.string()).optional().describe("Paths touched in THIS repo"),
 };
 
+// Read tools used to accept only a URL string even though their instructions
+// told clients to provide a branch. Keep those strings valid, but use the same
+// shape as the write tools so a workspace can identify a worktree precisely.
+const contextRepoShape = z.union([
+  z.string().min(1),
+  z.object(repoRefShape),
+]);
+type ContextRepoRef = string | RepoRef;
+
+function normalizeContextRepoRefs(repos: ContextRepoRef[] | undefined): NormalizedRepoRef[] {
+  return normalizeRepoRefs((repos ?? []).map(r => typeof r === "string" ? { repoUrl: r } : r));
+}
+
 /** Fold legacy scalar args + repos[] into one normalized list. */
 function collectRepoRefs(
   repos: RepoRef[] | undefined,
@@ -77,8 +90,22 @@ function legacyRepoFields(repos: NormalizedRepoRef[]) {
 }
 
 /** Normalize a list of raw repo URL strings to unique repoKeys. */
-function toRepoKeys(repos: string[] | undefined): string[] {
-  return [...new Set((repos ?? []).map((r: string) => normalizeRepoKey(r)).filter((k): k is string => !!k))];
+function toRepoKeys(repos: ContextRepoRef[] | undefined): string[] {
+  return [...new Set(normalizeContextRepoRefs(repos).map(r => r.repoKey))];
+}
+
+/** Exact worktree match wins; same-repo context remains useful as a fallback. */
+function repoBranchBoost(session: any, refs: NormalizedRepoRef[]): number {
+  if (!refs.length) return 0;
+  const sessionRepos = session.repos ?? [];
+  if (refs.some(ref => ref.branch && sessionRepos.some((r: any) => r.repoKey === ref.repoKey && r.branch === ref.branch))) return 0.16;
+  if (refs.some(ref => sessionRepos.some((r: any) => r.repoKey === ref.repoKey))) return 0.08;
+  return 0;
+}
+
+function matchingBranchLabel(session: any, refs: NormalizedRepoRef[]): string | null {
+  const match = refs.find(ref => ref.branch && (session.repos ?? []).some((r: any) => r.repoKey === ref.repoKey && r.branch === ref.branch));
+  return match?.branch ?? null;
 }
 
 function repoKeysOf(repos: { repoKey: string }[] | undefined): string[] | undefined {
@@ -494,18 +521,19 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   tool(
     "get_startup_context",
     "CALL THIS FIRST at the start of every session. Returns your active rules/conventions, recent work history, and pending tasks so you start with full context. " +
-    "Pass `repos` with the remote URL of EVERY git repo in your workspace (run `git remote get-url origin` in each repo root and worktree) — sessions from those repos are surfaced first.",
+    "Pass `repos` for EVERY git repo/worktree in your workspace (prefer { repoUrl, branch } after running git remote get-url origin) — exact branch sessions are surfaced first.",
     {
       days:  z.number().int().min(1).max(90).default(7).describe("How many days of history to include"),
-      repos: z.array(z.string()).default([]).describe(
-        "Git remote URLs (or host/owner/name) of every repo in the current workspace — include all of them when the workspace spans multiple repos"),
+      repos: z.array(contextRepoShape).default([]).describe(
+        "Every repo/worktree in the workspace. Pass either a legacy remote URL string or { repoUrl, branch?, commitSha? }. Branch-aware entries are ranked first."),
     },
     async ({ days, repos }) => {
       const { WorkHistory, ContextRule, Task, CoworkSession, CoworkChunk } = await db();
       const uid = ctx.userId;
       const since = new Date(Date.now() - days * 86_400_000);
 
-      const repoKeys = toRepoKeys(repos);
+      const repoRefs = normalizeContextRepoRefs(repos);
+      const repoKeys = repoRefs.map(r => r.repoKey);
       const repoNames = repoKeys.map(k => k.split("/").pop()!);
 
       // Rules: own rules + org-wide team rules; repo-scoped ones only for
@@ -530,7 +558,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const [rules, history, tasks, repoCowork, recentCowork, resumable, teammateActive] = await Promise.all([
         ContextRule.find(ruleFilter).sort({ timesApplied: -1 }).limit(20)
           .populate("userId", "name").lean(),
-        WorkHistory.find({ userId: uid, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(15).lean(),
+        // Fetch a larger candidate window whenever repos are known. A generic
+        // top-15 query could otherwise omit the relevant repository entirely.
+        WorkHistory.find({
+          userId: uid,
+          createdAt: { $gte: since },
+          ...(repoNames.length ? { $or: [{ "metadata.repo": { $in: repoNames } }, { "metadata.repoName": { $in: repoNames } }, { "metadata.repo": { $exists: false } }] } : {}),
+        }).sort({ createdAt: -1 }).limit(repoNames.length ? 40 : 15).lean(),
         Task.find({ userId: uid, status: { $in: ["todo", "in_progress"] } }).sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
         repoKeys.length
           ? CoworkSession.find({ $or: [{ userId: uid }, sharedScope], "repos.repoKey": { $in: repoKeys } } as any)
@@ -641,7 +675,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         ` — ${s.summary?.slice(0, 100) ?? ""}${s.isShared ? " 🌐" : ""}\n  → get_cowork("${s._id}")`;
 
       const resumableId = resumable?._id?.toString();
-      const repoCoworkRest = repoCowork.filter(s => s._id.toString() !== resumableId);
+      const repoCoworkRest = repoCowork
+        .filter(s => s._id.toString() !== resumableId)
+        .sort((a, b) => repoBranchBoost(b, repoRefs) - repoBranchBoost(a, repoRefs) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       if (repoCoworkRest.length > 0) {
         sections.push(
           `## Cowork Sessions In These Repos (${repoCoworkRest.length})\n\n` +
@@ -678,11 +714,11 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       query: z.string().min(1).describe("Natural language query — e.g. 'how did we fix the auth bug last week'"),
       days:  z.number().int().optional().describe("Limit to memories from the last N days"),
       limit: z.number().int().min(1).max(20).default(8).describe("Max results"),
-      repos: z.array(z.string()).optional().describe(
-        "Git remote URLs of the repos you're working in — sessions touching them rank higher (soft boost, never a hard filter)"),
+      repos: z.array(contextRepoShape).optional().describe(
+        "Workspace repos/worktrees as URLs or { repoUrl, branch? }; exact branch matches rank first, then same-repo memory."),
     },
     async ({ query, days, limit, repos }) => {
-      const repoKeys = toRepoKeys(repos);
+      const repoRefs = normalizeContextRepoRefs(repos);
       const hints = parseQueryHints(query, { days });
       const effectiveDays = hints.days ?? days;
       const since = effectiveDays ? new Date(Date.now() - effectiveDays * 86_400_000) : undefined;
@@ -735,7 +771,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             const hintBoost =
               (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
               (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0) +
-              (repoKeys.length && (s.repos ?? []).some((r: any) => repoKeys.includes(r.repoKey)) ? 0.08 : 0) +
+              repoBranchBoost(s, repoRefs) +
               fileHintBoost(hints.files, s.filesTouched);
             const score = compositeScore({
               relevance: (meta.sim || 0.5) + hintBoost,
@@ -752,7 +788,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             `🛠️ ${s.source} · 📅 ${timeAgo(s.createdAt)}` +
             (s.intent ? ` · 🎯 ${s.intent}` : "") +
             (s.outcome ? ` · ✅ ${s.outcome}` : "") + "\n" +
-            `🏷️ ${s.tags?.length ? s.tags.join(", ") : "no tags"}\n` +
+            `🏷️ ${s.tags?.length ? s.tags.join(", ") : "no tags"}` +
+            (matchingBranchLabel(s, repoRefs) ? ` · 🌿 exact branch ${matchingBranchLabel(s, repoRefs)}` : "") + "\n" +
             `💬 ${snippet(meta.text, 300)}\n` +
             `→ get_cowork("${s._id}")`
           ).join("\n\n---\n\n");
@@ -899,15 +936,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       outcome:      z.string().optional().describe("Filter cowork by outcome: fixed, implemented, blocked, etc."),
       days:         z.number().int().optional().describe("Limit to last N days"),
       tags:         z.array(z.string()).optional(),
+      repos:        z.array(contextRepoShape).optional().describe("Optional workspace repos/worktrees. Exact repo+branch matches rank before same-repo and global memory."),
       limit:        z.number().int().min(1).max(20).default(8),
       includeSummary: z.boolean().default(false),
     },
-    async ({ query, scope, intent, outcome, days, tags, limit, includeSummary }) => {
+    async ({ query, scope, intent, outcome, days, tags, repos, limit, includeSummary }) => {
       const hints     = parseQueryHints(query, { intent, outcome, days, tags });
       const effIntent = intent ?? hints.intent;
       const effDays   = days ?? hints.days;
       const effTags   = [...(tags ?? []), ...hints.tags.filter(t => !(tags ?? []).includes(t))];
       const since     = effDays ? new Date(Date.now() - effDays * 86_400_000) : undefined;
+      const repoRefs  = normalizeContextRepoRefs(repos);
 
       const { CoworkChunk, CoworkSession, NoteBlock, Note, WorkHistory } = await db();
       const uid = ctx.userId;
@@ -948,7 +987,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             const hintBoost =
               (hints.intent && s.intent === hints.intent ? 0.05 : 0) +
               (hints.outcome && s.outcome === hints.outcome ? 0.03 : 0) +
-              fileHintBoost(hints.files, s.filesTouched);
+              fileHintBoost(hints.files, s.filesTouched) + repoBranchBoost(s, repoRefs);
             return {
               s, meta,
               score: compositeScore({
@@ -967,6 +1006,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
             (s.intent ? ` · 🎯 ${s.intent}` : "") +
             (s.outcome ? ` · ✅ ${s.outcome}` : "") + "\n" +
             (s.tags?.length ? `🏷️ ${s.tags.join(", ")}\n` : "") +
+            (matchingBranchLabel(s, repoRefs) ? `🌿 Exact branch: ${matchingBranchLabel(s, repoRefs)}\n` : "") +
             `💬 ${snippet(meta.text, 300)}\n` +
             (includeSummary && s.summary ? `\n**Summary**: ${s.summary.slice(0, 500)}\n` : "") +
             `→ get_cowork("${s._id}")`
@@ -1998,15 +2038,18 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     "Briefing for a repository (optionally a specific file): who worked on it and when, relevant past sessions, repo-scoped rules, and recent commits/PRs. " +
     "Call before diving into an unfamiliar repo or file — it answers 'who touched this before and what did they learn?'",
     {
-      repo:  z.string().min(1).describe("Git remote URL or repoKey, any spelling"),
+      repo:  contextRepoShape.describe("Git remote URL/repoKey, or { repoUrl, branch? }"),
+      branch: z.string().optional().describe("Branch to prioritize; overrides a branch supplied in repo"),
       file:  z.string().optional().describe("A file path to focus on — sessions touching it rank first"),
       topic: z.string().optional().describe("Optional topic/area to focus the session ranking (e.g. 'auth', 'billing')"),
       limit: z.number().int().min(1).max(15).default(6),
     },
-    async ({ repo, file, topic, limit }) => {
+    async ({ repo, branch, file, topic, limit }) => {
       const { CoworkSession, ContextRule, WorkHistory } = await db();
       const uid = ctx.userId;
-      const repoKey = normalizeRepoKey(repo);
+      const repoRef = normalizeContextRepoRefs([repo])[0];
+      const repoKey = repoRef?.repoKey;
+      const requestedBranch = branch ?? repoRef?.branch;
       if (!repoKey) {
         return { content: [{ type: "text" as const, text: `Could not parse "${repo}" as a repository URL.` }] };
       }
@@ -2052,7 +2095,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         const touchesFile = fileBase && (s.filesTouched ?? []).some((p: string) => base(p) === fileBase);
         const tagMatch = topicTags.length && (s.tags ?? []).some((t: string) => topicTags.includes(t));
         const score = compositeScore({
-          relevance: 0.5 + (touchesFile ? 0.3 : 0) + (tagMatch ? 0.1 : 0),
+          relevance: 0.5 + (touchesFile ? 0.3 : 0) + (tagMatch ? 0.1 : 0) + repoBranchBoost(s, requestedBranch ? [{ ...repoRef!, branch: requestedBranch }] : []),
           createdAt: s.createdAt,
           helpfulCount: s.helpfulCount,
           notHelpfulCount: s.notHelpfulCount,
@@ -2063,7 +2106,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
       const sections: string[] = [];
       const webUrl = repoWebUrl(repoKey);
-      sections.push(`# Repo Briefing: \`${repoKey}\`${webUrl ? `\n${webUrl}` : ""}${file ? `\nFocus file: \`${file}\`` : ""}`);
+      sections.push(`# Repo Briefing: \`${repoKey}\`${requestedBranch ? `\nBranch: \`${requestedBranch}\`` : ""}${webUrl ? `\n${webUrl}` : ""}${file ? `\nFocus file: \`${file}\`` : ""}`);
 
       // ── Experts: who has real session history here ──
       const expertise = new Map<string, { name: string; count: number; latest: Date; fileCount: number }>();
@@ -2102,7 +2145,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           top.map(({ s, touchesFile }, i) => {
             const author = (s.userId as any);
             const own = (author?._id ?? s.userId).toString() === uid;
-            const branchRef = (s.repos ?? []).find((r: any) => r.repoKey === repoKey);
+            const branchRef = (s.repos ?? []).find((r: any) => r.repoKey === repoKey && (!requestedBranch || r.branch === requestedBranch))
+              ?? (s.repos ?? []).find((r: any) => r.repoKey === repoKey);
             const link = branchRef?.branch ? branchWebUrl(repoKey, branchRef.branch) : null;
             return `### ${i + 1}. ${s.title}${touchesFile ? " 📌" : ""}\n` +
               `👤 ${own ? "you" : author?.name ?? "Unknown"} · 📅 ${timeAgo(s.createdAt)}` +
@@ -2276,7 +2320,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     {
       prUrl:  z.string().optional().describe("Full PR URL (GitHub or Azure DevOps)"),
       branch: z.string().optional().describe("Branch name — used when no prUrl, or to find sibling sessions"),
-      repo:   z.string().optional().describe("Git remote URL or repoKey to scope branch matching"),
+      repo:   contextRepoShape.optional().describe("Git remote URL/repoKey, or { repoUrl, branch? }, to scope branch matching"),
       limit:  z.number().int().min(1).max(10).default(5),
     },
     async ({ prUrl, branch, repo, limit }) => {
@@ -2285,7 +2329,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       }
       const { CoworkSession, WorkHistory } = await db();
       const uid = ctx.userId;
-      const repoKey = repo ? normalizeRepoKey(repo) : null;
+      const repoRef = repo ? normalizeContextRepoRefs([repo])[0] : undefined;
+      const repoKey = repoRef?.repoKey ?? null;
+      branch = branch ?? repoRef?.branch;
       const visibility = { $or: [{ userId: uid }, sharedScope] };
 
       // Sessions producing this PR — match repos[].prUrl and legacy prUrl

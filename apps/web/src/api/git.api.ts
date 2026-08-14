@@ -33,17 +33,19 @@ export interface GitPullRequest {
 
 export interface GitBranch {
   name:         string;
+  repoKey:      string;
   repo:         string;
   project:      string;
   provider:     GitProvider;
-  targetBranch: string;
-  status:       "Open" | "Merged" | "Abandoned";
-  openPrs:      number;
-  totalPrs:     number;
+  latestSessionId: string;
+  latestTitle:  string;
+  outcome?:     string;
+  sessions:     number;
   lastActivity: string;
 }
 
 export interface GitRepo {
+  repoKey:  string;
   name:     string;
   project:  string;
   provider: GitProvider;

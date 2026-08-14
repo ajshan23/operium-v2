@@ -82,6 +82,7 @@ const CoworkSessionSchema = new Schema<ICoworkSession>(
 
 CoworkSessionSchema.index({ userId: 1, createdAt: -1 });
 CoworkSessionSchema.index({ "repos.repoKey": 1, createdAt: -1 });
+CoworkSessionSchema.index({ "repos.repoKey": 1, "repos.branch": 1, updatedAt: -1 });
 CoworkSessionSchema.index({ userId: 1, title: "text", summary: "text" });
 
 export const CoworkSession: Model<ICoworkSession> =

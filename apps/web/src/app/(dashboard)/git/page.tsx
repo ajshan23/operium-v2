@@ -466,9 +466,9 @@ export default function GitPage() {
               {/* Right Column: Branches + Repos */}
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-gray-300 px-1">Active Branches</h3>
+                  <h3 className="text-sm font-medium text-gray-300 px-1">Saved Session Branches</h3>
                   {data.branches.length === 0 ? (
-                    <p className="text-xs text-gray-500 px-1">No branches with pull requests yet.</p>
+                    <p className="text-xs text-gray-500 px-1">No branches have been registered by MCP sessions yet.</p>
                   ) : (
                     data.branches.slice(0, 12).map((branch, i) => (
                       <div key={`${branch.repo}-${branch.name}-${i}`} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors group">
@@ -477,23 +477,14 @@ export default function GitPage() {
                             <GitBranch className="w-4 h-4 text-indigo-400 shrink-0" />
                             <span className="font-mono text-sm text-gray-200 truncate" title={branch.name}>{branch.name}</span>
                           </div>
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                            branch.status === "Merged" ? "bg-purple-500/10 text-purple-400" :
-                            branch.status === "Abandoned" ? "bg-rose-500/10 text-rose-400" :
-                            "bg-emerald-500/10 text-emerald-400"
-                          }`}>
-                            {branch.status}
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-indigo-500/10 text-indigo-300">
+                            {branch.outcome || "in progress"}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs mb-3">
                           <div className="flex space-x-3">
-                            <span className="text-emerald-400" title="Open pull requests">
-                              {branch.openPrs} open
-                            </span>
-                            <span className="text-gray-400" title="Total pull requests">
-                              {branch.totalPrs} total
-                            </span>
+                            <span className="text-emerald-400" title="Saved sessions">{branch.sessions} session{branch.sessions === 1 ? "" : "s"}</span>
                           </div>
                           <span className="text-gray-500">{relativeTime(branch.lastActivity)}</span>
                         </div>
@@ -502,10 +493,16 @@ export default function GitPage() {
                           <div className="flex items-center space-x-2 min-w-0">
                             <ProviderBadge provider={branch.provider} />
                             {branch.repo && (
-                              <span className="text-xs text-gray-500 font-mono truncate">{branch.repo}</span>
+                              <span className="text-xs text-gray-500 font-mono truncate" title={branch.latestTitle}>{branch.repo} · {branch.latestTitle}</span>
                             )}
                           </div>
-                          <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-300 transition-colors shrink-0" />
+                          <Link
+                            href={`/cowork/${branch.latestSessionId}`}
+                            aria-label={`Open latest saved session for ${branch.name}`}
+                            className="text-gray-600 hover:text-indigo-300 transition-colors shrink-0"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
                         </div>
                       </div>
                     ))
@@ -524,9 +521,9 @@ export default function GitPage() {
                       </button>
                       {data.repos.slice(0, 15).map((repo, i) => (
                         <button
-                          key={`${repo.name}-${i}`}
-                          onClick={() => setRepoFilter(repo.name === repoFilter ? "" : repo.name)}
-                          className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-white/[0.04] ${repoFilter === repo.name ? "bg-indigo-500/10 text-indigo-300" : "text-gray-300"}`}
+                        key={repo.repoKey}
+                          onClick={() => setRepoFilter(repo.repoKey === repoFilter ? "" : repo.repoKey)}
+                          className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-white/[0.04] ${repoFilter === repo.repoKey ? "bg-indigo-500/10 text-indigo-300" : "text-gray-300"}`}
                         >
                           <span className="flex items-center space-x-2 min-w-0">
                             <ProviderBadge provider={repo.provider} />

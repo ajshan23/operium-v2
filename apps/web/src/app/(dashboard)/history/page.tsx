@@ -205,7 +205,10 @@ export default function HistoryPage() {
     const setBusy = full ? setIsAzureFullSyncing : setIsSyncingAzure;
     setBusy(true);
     try {
-      await historyApi.syncAzure(full);
+      const result = await historyApi.syncAzure(full);
+      if (result.data.complete === false) {
+        setSyncError(`Azure sync is incomplete: ${result.data.skipped ?? result.data.failures?.length ?? 0} resource(s) failed. The checkpoint was not advanced; retry after fixing access or connectivity.`);
+      }
       await fetchHistory(1);
       await fetchStats();
     } catch (err: any) {

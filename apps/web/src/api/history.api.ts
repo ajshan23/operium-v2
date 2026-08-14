@@ -118,12 +118,20 @@ export const historyApi = {
     return apiClient(`/api/history/sync${full ? "?days=full" : ""}`, { method: "POST" });
   },
 
-  syncAzure(full = false): Promise<{ data: { synced: number; org: string; projects: number } }> {
+  syncAzure(full = false): Promise<{ data: { synced: number; org: string; projects: number; complete?: boolean; skipped?: number; failures?: Array<{ scope: string; message: string }> } }> {
     return apiClient(`/api/history/sync-azure${full ? "?days=full" : ""}`, { method: "POST" });
   },
 
   resetAzure(): Promise<{ data: { deleted: number } }> {
     return apiClient("/api/history/reset-azure", { method: "POST" });
+  },
+
+  auditAzure(): Promise<{ data: { total: number; activePrs: number; suspiciousDates: Array<{ date: string; count: number }>; candidates: Array<{ externalId: string; title: string; reason: string }> } }> {
+    return apiClient("/api/history/audit-azure");
+  },
+
+  repairAzure(externalIds: string[], confirm = false): Promise<{ data: { applied: boolean; repaired?: string[]; foreign?: string[]; unavailable?: string[] } }> {
+    return apiClient("/api/history/repair-azure", { method: "POST", data: { externalIds, confirm } });
   },
 
   getIntegrations(): Promise<{ data: IntegrationsResponse }> {

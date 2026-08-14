@@ -6,6 +6,7 @@ import Link from "next/link";
 import { API_BASE_URL } from "@/api/client";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import CanvasEditor from "@/components/CanvasEditor";
+import Logo from "@/components/Logo";
 import { FileText, Palette, Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 
 interface SharedNote {
@@ -68,14 +69,9 @@ export default function SharedNotePage() {
     <div className="min-h-screen bg-[#050505] text-[#fafafa]">
       {/* Top bar */}
       <div className="border-b border-[#1a1a22] bg-[#050505]/90 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-3xl lg:max-w-5xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Logo */}
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#7c3aed] to-[#ec4899] flex items-center justify-center shadow-[0_0_12px_rgba(139,92,246,0.4)]">
-              <svg viewBox="0 0 24 24" className="w-4 h-4 text-white fill-current">
-                <path d="M12 2C12 2 17 8.5 17 12.5C17 15.26 14.76 17.5 12 17.5C9.24 17.5 7 15.26 7 12.5C7 8.5 12 2 12 2Z" />
-              </svg>
-            </div>
+            <Logo variant="mark" size={32} className="shrink-0" />
             <span className="text-sm font-semibold text-[#8b5cf6]">Operium</span>
             <span className="text-[#2a2a35] text-sm">/</span>
             <span className="text-sm text-[#63637a]">Shared Note</span>
@@ -91,7 +87,7 @@ export default function SharedNotePage() {
       </div>
 
       {/* Content */}
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="max-w-3xl lg:max-w-5xl mx-auto px-6 lg:px-8 py-12 lg:py-14">
         {/* Note header */}
         <div className="mb-8 pb-8 border-b border-[#1a1a22]">
           <div className="flex items-center gap-2 mb-4">

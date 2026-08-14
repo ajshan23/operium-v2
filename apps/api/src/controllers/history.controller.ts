@@ -109,6 +109,28 @@ export class HistoryController {
     }
   };
 
+  auditAzure = async (req: Request, res: Response) => {
+    try {
+      const result = await historyService.auditAzure((req as any).user.userId);
+      res.json(new ApiResponse(200, result, "Azure history audit completed"));
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json(err instanceof ApiError ? err.toJSON() : { message: err.message });
+    }
+  };
+
+  repairAzure = async (req: Request, res: Response) => {
+    try {
+      const result = await historyService.repairAzure(
+        (req as any).user.userId,
+        Array.isArray(req.body?.externalIds) ? req.body.externalIds.map(String) : [],
+        req.body?.confirm === true,
+      );
+      res.json(new ApiResponse(200, result, result.applied ? "Azure history repair completed" : "Azure history repair preview"));
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json(err instanceof ApiError ? err.toJSON() : { message: err.message });
+    }
+  };
+
   resetGithub = async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user.userId;

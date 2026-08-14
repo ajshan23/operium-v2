@@ -1,4 +1,5 @@
-import { WorkHistory } from "@operium/db";
+import { CoworkSession, WorkHistory } from "@operium/db";
+import { normalizeRepoKey, repoNameFromKey } from "@operium/core";
 import { historyService } from "./history.service.js";
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -43,17 +44,19 @@ interface PullRequestDTO {
 
 interface BranchDTO {
   name:         string;
+  repoKey:      string;
   repo:         string;
   project:      string;
   provider:     GitProvider;
-  targetBranch: string;
-  status:       "Open" | "Merged" | "Abandoned";
-  openPrs:      number;
-  totalPrs:     number;
+  latestSessionId: string;
+  latestTitle:  string;
+  outcome?:     string;
+  sessions:     number;
   lastActivity: string;
 }
 
 interface RepoDTO {
+  repoKey:  string;
   name:     string;
   project:  string;
   provider: GitProvider;
@@ -87,6 +90,12 @@ function mapPrStatus(raw?: string): "Open" | "Merged" | "Abandoned" {
   return "Open";
 }
 
+function providerForRepoKey(repoKey: string): GitProvider {
+  if (repoKey.startsWith("github.com/")) return "github";
+  if (repoKey.startsWith("dev.azure.com/")) return "azure";
+  return "other";
+}
+
 // ─── service ─────────────────────────────────────────────────────────────────
 
 export class GitService {
@@ -96,6 +105,7 @@ export class GitService {
    * DevOps. Optionally filtered by provider, repository or a free-text query.
    */
   async getOverview(userId: string, opts: GitOverviewOpts) {
+    const connections = await historyService.getIntegrations(userId);
     // Use the string userId directly — Mongoose auto-casts it in .find() filters,
     // which avoids constructing an ObjectId (and the cross-package bson edge cases
     // that come with it).
@@ -106,7 +116,6 @@ export class GitService {
 
     if (opts.provider === "github") match.externalId = { $regex: "^github-" };
     if (opts.provider === "azure")  match.externalId = { $regex: "^az-" };
-    if (opts.repo) match["metadata.repo"] = opts.repo;
     if (opts.q) {
       const rx = new RegExp(escapeRegex(opts.q), "i");
       match.$or = [{ title: rx }, { description: rx }];
@@ -118,18 +127,24 @@ export class GitService {
     const commits: CommitDTO[] = [];
     const prs:     PullRequestDTO[] = [];
     const repoMap = new Map<string, RepoDTO>();
-    const branchMap = new Map<string, BranchDTO & { _ts: number }>();
+    const repoKeyFor = (provider: GitProvider, project: string, repo: string) => {
+      if (provider === "github" && project && repo) return `github.com/${project}/${repo}`.toLowerCase();
+      if (provider === "azure" && connections.azureOrg && project && repo) return `dev.azure.com/${connections.azureOrg}/${project}/${repo}`.toLowerCase();
+      return `${provider}://${project}/${repo}`.toLowerCase();
+    };
 
     for (const d of docs as any[]) {
       const provider = providerOf(d.externalId);
       const meta = d.metadata || {};
       const repo = meta.repo || meta.repoName || "";
       const project = meta.project || "";
+      const repoKey = repoKeyFor(provider, project, repo);
+      if (opts.repo && repoKey !== opts.repo) continue;
 
       // repo rollup
       if (repo) {
-        const key = `${provider}::${project}::${repo}`;
-        const r = repoMap.get(key) || { name: repo, project, provider, commits: 0, prs: 0 };
+        const key = repoKey;
+        const r = repoMap.get(key) || { repoKey, name: repo, project, provider, commits: 0, prs: 0 };
         if (d.source === "git") r.commits++;
         if (d.source === "pr")  r.prs++;
         repoMap.set(key, r);
@@ -171,39 +186,36 @@ export class GitService {
           createdAt:    new Date(d.createdAt).toISOString(),
         });
 
-        // branch rollup (feature branches that have PRs)
-        if (branch) {
-          const ts = new Date(d.createdAt).getTime();
-          const key = `${provider}::${repo}::${branch}`;
-          const existing = branchMap.get(key);
-          if (!existing) {
-            branchMap.set(key, {
-              name: branch, repo, project, provider,
-              targetBranch: meta.targetBranch || "",
-              status,
-              openPrs:  status === "Open" ? 1 : 0,
-              totalPrs: 1,
-              lastActivity: new Date(d.createdAt).toISOString(),
-              _ts: ts,
-            });
-          } else {
-            existing.totalPrs++;
-            if (status === "Open") existing.openPrs++;
-            if (ts > existing._ts) {
-              existing._ts = ts;
-              existing.lastActivity = new Date(d.createdAt).toISOString();
-              existing.targetBranch = meta.targetBranch || existing.targetBranch;
-              // Most-recent PR drives the displayed branch status.
-              existing.status = status;
-            }
-          }
-        }
       }
     }
 
-    const branches = Array.from(branchMap.values())
-      .sort((a, b) => b._ts - a._ts)
-      .map(({ _ts, ...rest }) => rest);
+    // Branches are MCP session metadata, not a side effect of PR history. This
+    // makes worktrees and branches without a PR visible, and never presents a
+    // merged PR as an "active" branch.
+    const savedSessions = await CoworkSession.find({ userId, $or: [{ "repos.branch": { $exists: true, $ne: "" } }, { branch: { $exists: true, $ne: "" } }] })
+      .select("title outcome updatedAt repos branch repoUrl").sort({ updatedAt: -1 }).limit(500).lean() as any[];
+    const branchMap = new Map<string, BranchDTO & { _ts: number }>();
+    for (const session of savedSessions) {
+      const refs = session.repos?.length ? session.repos : (() => {
+        const repoKey = session.repoUrl ? normalizeRepoKey(session.repoUrl) : null;
+        return repoKey && session.branch ? [{ repoKey, repoName: repoNameFromKey(repoKey), branch: session.branch }] : [];
+      })();
+      for (const ref of refs) {
+        if (!ref.branch || (opts.repo && ref.repoKey !== opts.repo)) continue;
+        const key = `${ref.repoKey}\u0000${ref.branch}`;
+        const ts = new Date(session.updatedAt).getTime();
+        const existing = branchMap.get(key);
+        if (existing) { existing.sessions++; continue; }
+        branchMap.set(key, {
+          name: ref.branch, repoKey: ref.repoKey, repo: ref.repoName,
+          project: "", provider: providerForRepoKey(ref.repoKey),
+          latestSessionId: String(session._id), latestTitle: session.title,
+          outcome: session.outcome, sessions: 1,
+          lastActivity: new Date(session.updatedAt).toISOString(), _ts: ts,
+        });
+      }
+    }
+    const branches = Array.from(branchMap.values()).sort((a, b) => b._ts - a._ts).map(({ _ts, ...rest }) => rest);
 
     const repos = Array.from(repoMap.values()).sort(
       (a, b) => b.commits + b.prs - (a.commits + a.prs)
@@ -219,8 +231,6 @@ export class GitService {
       repos:     repos.length,
       branches:  branches.length,
     };
-
-    const connections = await historyService.getIntegrations(userId);
 
     return {
       connections: {
@@ -293,7 +303,9 @@ export class GitService {
     }
 
     try {
-      results.azure = await historyService.syncAzure(userId, full ? 90 : 3);
+      // Keep MCP/Git-page "full" aligned with the History page's Azure full
+      // sync rather than silently reducing it to 90 days.
+      results.azure = await historyService.syncAzure(userId, full ? 3650 : 3);
     } catch (err: any) {
       results.azure = { error: err?.message || "Azure DevOps sync failed" };
     }
