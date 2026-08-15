@@ -126,6 +126,10 @@ export const coworkApi = {
     return apiClient(`/api/cowork/${id}`);
   },
 
+  recordResumeOpen(id: string): Promise<{ data: { recorded: boolean } }> {
+    return apiClient(`/api/cowork/${id}/resume-open`, { method: "POST", data: {} });
+  },
+
   related(id: string, limit = 5): Promise<{ data: { related: CoworkSession[] } }> {
     return apiClient(`/api/cowork/${id}/related?limit=${limit}`);
   },

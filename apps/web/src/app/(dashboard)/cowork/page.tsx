@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
-  Bot, User, Users, Code2, Trash2, ShieldCheck, TerminalSquare,
+  Bot, User, Users, Code2, Trash2, ShieldCheck, TerminalSquare, Copy, Check,
   Loader2, ExternalLink, Send, GitBranch, Search, ChevronDown,
   AlertTriangle, X,
 } from "lucide-react";
@@ -34,6 +34,7 @@ export default function CoworkPage() {
   const [pagination,   setPagination]   = useState({ total: 0, page: 1, pages: 1 });
   const [resumeSessions, setResumeSessions] = useState<ResumeSession[]>([]);
   const [memoryHealth, setMemoryHealth] = useState<{ stale: number; missingNextStep: number; missingRepo: number } | null>(null);
+  const [copiedResumeId, setCopiedResumeId] = useState<string | null>(null);
 
   // ── Filter state ──
   const [searchQuery,  setSearchQuery]  = useState("");
@@ -78,6 +79,25 @@ export default function CoworkPage() {
     }
     setLoading(false);
   }, []);
+
+  const copyResumeInstruction = async (session: ResumeSession) => {
+    const id = session._id || session.id;
+    const repo = session.repos?.[0];
+    const prompt = [
+      `Resume Operium session ${id}.`,
+      `Call get_cowork with sessionId="${id}" first, then continue the next action below.`,
+      `Next action: ${session.nextStep ?? "Review the saved session and choose the next concrete step."}`,
+      repo ? `Workspace: ${repo.repoKey}${repo.branch ? ` @ ${repo.branch}` : ""}.` : "",
+    ].filter(Boolean).join("\n");
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedResumeId(id);
+      void coworkApi.recordResumeOpen(id).catch(() => {});
+      window.setTimeout(() => setCopiedResumeId(current => current === id ? null : current), 1800);
+    } catch {
+      setError("Could not copy the resume instruction.");
+    }
+  };
 
   // Fetch the next page and append (list mode only; search returns all matches).
   const loadMore = useCallback(async () => {
@@ -293,15 +313,24 @@ export default function CoworkPage() {
                 )}
               </div>
               <div className="flex flex-col gap-2">
-                {resumeSessions.slice(0, 3).map(session => (
-                  <Link key={session._id || session.id} href={`/cowork/${session._id || session.id}`} className="block rounded-xl border border-[var(--border-subtle)] bg-[var(--s1)] px-3 py-2.5 hover:border-[rgba(var(--accent-rgb),0.45)] transition-colors">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{session.title}</span>
-                      <span className="shrink-0 text-[9px] text-[var(--accent)]">{session.private ? "Private" : "Shared"}</span>
+                {resumeSessions.slice(0, 3).map(session => {
+                  const id = session._id || session.id;
+                  return (
+                    <div key={id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--s1)] px-3 py-2.5">
+                      <Link href={`/cowork/${id}`} className="block hover:text-[var(--accent)] transition-colors">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{session.title}</span>
+                          <span className="shrink-0 text-[9px] text-[var(--accent)]">{session.private ? "Private" : "Shared"}</span>
+                        </div>
+                        <p className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{session.nextStep ? `Next: ${session.nextStep}` : "Open to add the next step"}</p>
+                      </Link>
+                      <button onClick={() => void copyResumeInstruction(session)} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[rgba(var(--accent-rgb),0.22)] px-2 py-1 text-[9px] font-semibold text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)]">
+                        {copiedResumeId === id ? <Check size={10} /> : <Copy size={10} />}
+                        {copiedResumeId === id ? "Copied" : "Copy agent resume"}
+                      </button>
                     </div>
-                    <p className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{session.nextStep ? `Next: ${session.nextStep}` : "Open to add the next step"}</p>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}

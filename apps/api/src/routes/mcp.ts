@@ -81,12 +81,14 @@ function sendUnauthorized(res: any) {
 router.get("/status", async (req: any, res: any) => {
   const resolved = await resolveUser(req);
   if (!resolved) { sendUnauthorized(res); return; }
-  const [last, startup, capture] = await Promise.all([
+  const [last, initialized, startup, capture, resume] = await Promise.all([
     McpUsageLog.findOne({ userId: resolved.userId, success: true }).sort({ createdAt: -1 }).lean(),
+    McpUsageLog.findOne({ userId: resolved.userId, toolName: "initialize", success: true }).sort({ createdAt: -1 }).lean(),
     McpUsageLog.findOne({ userId: resolved.userId, toolName: "get_startup_context", success: true }).sort({ createdAt: -1 }).lean(),
     McpUsageLog.findOne({ userId: resolved.userId, toolName: { $in: ["capture_work", "checkpoint_cowork", "save_chat"] }, success: true }).sort({ createdAt: -1 }).lean(),
+    McpUsageLog.findOne({ userId: resolved.userId, toolName: "resume_session_open", success: true }).sort({ createdAt: -1 }).lean(),
   ]);
-  res.json({ connected: !!last, lastSuccessfulCallAt: last?.createdAt ?? null, lastStartupAt: startup?.createdAt ?? null, lastCaptureAt: capture?.createdAt ?? null });
+  res.json({ connected: !!last, lastInitializationAt: initialized?.createdAt ?? null, lastSuccessfulCallAt: last?.createdAt ?? null, lastStartupAt: startup?.createdAt ?? null, lastCaptureAt: capture?.createdAt ?? null, lastResumeAt: resume?.createdAt ?? null });
 });
 
 // ── POST /mcp — all JSON-RPC requests ────────────────────────────────────────
@@ -139,6 +141,9 @@ router.post("/", async (req: any, res: any) => {
         geminiKey:      resolved.geminiKey,
         shareByDefault: resolved.shareByDefault,
       });
+      // Lifecycle telemetry deliberately stores no client prompt, repository,
+      // or code — only that an authenticated MCP initialization completed.
+      void McpUsageLog.create({ userId: resolved.userId, toolName: "initialize", success: true, durationMs: 0 }).catch(() => {});
     },
   });
 

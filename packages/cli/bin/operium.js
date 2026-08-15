@@ -5,7 +5,6 @@ import { resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const value = (name) => args[args.indexOf(name) + 1];
-const has = (name) => args.includes(name);
 
 if (args[0] !== "init") {
   console.log("Usage: operium init [--client claude|codex|both] [--mcp-url URL] [--token TOKEN]");
@@ -21,7 +20,7 @@ if (!["claude", "codex", "both"].includes(client)) {
   process.exit(1);
 }
 const git = (command) => {
-  try { return execFileSync("git", command, { cwd: root, encoding: "utf8" }).trim(); }
+  try { return execFileSync("git", command, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); }
   catch { return ""; }
 };
 const repoUrl = git(["remote", "get-url", "origin"]);

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { CoworkSession, CoworkChunk, User } from "@operium/db";
+import { CoworkSession, CoworkChunk, User, McpUsageLog } from "@operium/db";
 import type { CoworkSource, CoworkIntent, CoworkOutcome } from "@operium/db";
 import { normalizeRepoRefs, resolveCoworkShared, type RepoRef } from "@operium/core";
 import { ApiError } from "../utils/ApiError.js";
@@ -148,6 +148,22 @@ export class CoworkService {
       .lean();
 
     return { session: this._normalize(session, userId), chunks };
+  }
+
+  /** A user deliberately copied an agent hand-off instruction.  The event has
+   * no code, prompt, or session text — only a counter for workflow usefulness. */
+  async recordResumeOpen(id: string, userId: string, orgId: string) {
+    const session = await CoworkSession.findOne({
+      _id: id,
+      $or: [{ userId }, { isShared: true, orgId }],
+    }).select("_id").lean();
+    if (!session) throw new ApiError(404, "Session not found");
+
+    await Promise.all([
+      CoworkSession.updateOne({ _id: id }, { $inc: { useCount: 1 }, $set: { lastUsedAt: new Date() } }),
+      McpUsageLog.create({ userId, toolName: "resume_session_open", success: true, durationMs: 0 }),
+    ]);
+    return { recorded: true };
   }
 
   // ─── Per-repo sharing ─────────────────────────────────────────────────────

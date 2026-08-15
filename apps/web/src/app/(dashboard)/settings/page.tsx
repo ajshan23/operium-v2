@@ -40,9 +40,11 @@ interface ExtensionKey { id: string; name: string; keyPreview: string; createdAt
 interface WebhookItem { id: string; name: string; url: string; isActive: boolean; }
 interface McpStatus {
   connected: boolean;
+  lastInitializationAt: string | null;
   lastSuccessfulCallAt: string | null;
   lastStartupAt: string | null;
   lastCaptureAt: string | null;
+  lastResumeAt: string | null;
 }
 
 function formatSyncDate(d: string | null): string {
@@ -632,7 +634,7 @@ export default function SettingsPage() {
                 <span>2. Verifies MCP with ping</span>
                 <span>3. Enables private capture by default</span>
               </div>
-              <p className="text-[10px] text-[#63637a]">Startup: {formatSyncDate(mcpStatus?.lastStartupAt ?? null)} · Last private checkpoint: {formatSyncDate(mcpStatus?.lastCaptureAt ?? null)}. Capture is private unless you deliberately share a session.</p>
+              <p className="text-[10px] text-[#63637a]">Initialized: {formatSyncDate(mcpStatus?.lastInitializationAt ?? null)} · Startup: {formatSyncDate(mcpStatus?.lastStartupAt ?? null)} · Last checkpoint: {formatSyncDate(mcpStatus?.lastCaptureAt ?? null)}. Capture is private unless you deliberately share a session.</p>
             </div>
             <details className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4">
               <summary className="cursor-pointer text-[12px] font-semibold text-[#fafafa]">

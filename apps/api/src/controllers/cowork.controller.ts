@@ -60,6 +60,11 @@ export const getSession = handle(async (req, res) => {
   res.json(new ApiResponse(200, result, "Session fetched"));
 });
 
+export const recordResumeOpen = handle(async (req, res) => {
+  const result = await coworkService.recordResumeOpen(pid(req), uid(req), oid(req));
+  res.json(new ApiResponse(200, result, "Resume hand-off recorded"));
+});
+
 export const listRepos = handle(async (req, res) => {
   const repos = await coworkService.listRepos(uid(req));
   res.json(new ApiResponse(200, repos, "Repos fetched"));

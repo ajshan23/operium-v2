@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/auth.middleware.js";
 import { requireTenantAccess } from "../middlewares/tenant.middleware.js";
 import {
   listSessions, getResume, searchSessions, createSession,
-  getSession, getRelated, recordFeedback, deleteSession, chatWithSession,
+  getSession, getRelated, recordFeedback, recordResumeOpen, deleteSession, chatWithSession,
   listRepos, setRepoVisibility,
 } from "../controllers/cowork.controller.js";
 
@@ -19,6 +19,7 @@ router.put("/repos/visibility", setRepoVisibility);
 router.get("/",             listSessions);
 router.post("/",            createSession);
 router.post("/chat",        chatWithSession);
+router.post("/:id/resume-open", recordResumeOpen);
 router.get("/:id",          getSession);
 router.get("/:id/related",  getRelated);
 router.post("/:id/feedback",recordFeedback);
