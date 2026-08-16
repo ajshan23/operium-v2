@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { authService } from "../services/auth.service.js";
+import { APP_SESSION_TTL_MS, authService } from "../services/auth.service.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 
@@ -12,7 +12,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 86400 * 1000,
+      maxAge: APP_SESSION_TTL_MS,
       path: "/",
     });
   }
