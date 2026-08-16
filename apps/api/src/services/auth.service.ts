@@ -10,6 +10,11 @@ import { JWT_SECRET } from "../utils/jwtSecret.js";
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 
+// Browser sessions are intentionally long-lived for a developer tool. Account
+// blocking is still checked on every authenticated API request.
+export const APP_SESSION_TTL_DAYS = 30;
+export const APP_SESSION_TTL_MS = APP_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
+
 export class AuthService {
   generateToken(user: IUser): string {
     const payload: TokenPayload = {
@@ -17,7 +22,7 @@ export class AuthService {
       email: user.email,
       isSuperUser: user.isSuperUser,
     };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: "1d" });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: `${APP_SESSION_TTL_DAYS}d` });
   }
 
   async generateAndSendOTP(email: string): Promise<void> {

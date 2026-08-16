@@ -165,11 +165,13 @@ function cosine(a: number[], b: number[]): number {
 
 const OPERIUM_INSTRUCTIONS = `Operium is persistent, shared memory for AI coding agents. Everything you save is rendered as rich Markdown in a web app and re-read by other agents and teammates.
 
-Session contract:
-1. START — call get_startup_context first, every session. Pass \`repos\` with the git remote URL of EVERY repo in your workspace (run \`git remote get-url origin\` in each repo root and worktree — work often spans more than one repo).
-2. BEFORE non-trivial work — recall_context("<topic>", repos=[...]): a teammate or a past session may already have the answer.
-3. DURING — checkpoint_cowork after every significant finding (~every 10-15 messages) so progress survives crashes and context loss. Always pass \`repos\` — one entry per repo with its branch; list every repo the work touches, not just the first.
-4. END — save_chat to finalize with a polished summary and the final \`repos\` (branch, commitSha, prUrl per repo). Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
+Default workflow (do this without asking the developer to manage Operium):
+1. START — call get_startup_context first with every workspace repo/worktree.
+2. DURING — use capture_work for a short private checkpoint after a plan is approved, an error is diagnosed, files/tests materially change, or work becomes blocked. Reuse its sessionId.
+3. FINISH — use capture_work phase="finish" with the next concrete action. Keep it private unless the developer explicitly asks to share it.
+4. BEFORE non-trivial work — use recall_context only when the compact startup brief is insufficient. Use the specialized tools only for their explicit job.
+
+Advanced contract: checkpoint_cowork/save_chat remain available for detailed or team-shared records. Always pass repos — one entry per repo with branch and final commit/PR data where known. Call save_rule / learn_correction the moment the user states a convention or corrects you. Use update_plan to tick off plan steps as you complete them, and update_task to move tasks you finish.
 
 Live Azure Boards: list_board_items / list_sprints / update_board_item / create_board_item read and write real Azure DevOps work items. Call update_board_item to move a work item's state and sprint the moment the user says they've finished sprint work on it.
 
@@ -696,8 +698,13 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       // Bound the whole payload so a busy account can't hand the agent a
       // context dump that crowds out the actual task. Sections above are ordered
       // by importance; fitToBudget keeps the top ones and trims the tail.
-      const maxChars = Number(process.env.OPERIUM_STARTUP_MAX_CHARS) || 12_000;
+      // Startup is a resume card, not an archive dump. The full history remains
+      // retrievable through recall_context/get_cowork when the task needs it.
+      const maxChars = Number(process.env.OPERIUM_STARTUP_MAX_CHARS) || 6_000;
       const body = fitToBudget(sections, maxChars);
+      if (!repoCowork.length && !resumable && !history.length) {
+        body.push("## No Relevant Memory Yet\n\nThis workspace has no saved context yet. Continue normally; capture_work will preserve the first useful checkpoint privately.");
+      }
       body.push("---\n**Tip**: Use recall_context(query) for semantic search across all your memory.");
 
       return { content: [{ type: "text" as const, text: body.join("\n\n") }] };
@@ -1156,6 +1163,86 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       ).join("\n\n");
 
       return { content: [{ type: "text" as const, text: `## Work History (last ${days}d — ${entries.length} entries)\n\n${text}` }] };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // capture_work — the quiet default workflow. Private by design; the detailed
+  // checkpoint/save tools remain available for deliberate, rich team records.
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "capture_work",
+    "Default low-friction memory capture. Use automatically at start, meaningful progress, blockers, and finish. Saves a concise PRIVATE checkpoint and returns a reusable sessionId. Use checkpoint_cowork/save_chat only when detailed or shared documentation is explicitly needed.",
+    {
+      phase: z.enum(["start", "progress", "blocker", "finish"]),
+      summary: z.string().min(1).max(4000).describe("Short factual update: goal, what changed/was learned, and the next concrete action."),
+      title: z.string().min(1).max(200).optional().describe("Use the task title at start; omitted later keeps the existing title."),
+      sessionId: z.string().optional(),
+      repos: z.array(z.object(repoRefShape)).optional(),
+      filesTouched: z.array(z.string()).default([]),
+      source: z.enum(["claude-code", "codex", "cursor", "antigravity", "system"]).default("claude-code"),
+      outcome: z.enum(["fixed", "implemented", "explored", "blocked", "abandoned", "partial"]).optional().describe("Use at finish when the work has a known outcome; defaults to implemented."),
+    },
+    async ({ phase, summary, title, sessionId, repos, filesTouched, source, outcome: requestedOutcome }) => {
+      const { CoworkSession, CoworkChunk } = await db();
+      const uid = ctx.userId;
+      const incomingRepos = collectRepoRefs(repos, {});
+      const sanitized = sanitize(summary);
+      let session: any = sessionId
+        ? await CoworkSession.findOne({ _id: sessionId, userId: uid })
+        : null;
+      const outcome = phase === "blocker" ? "blocked" : phase === "finish" ? (requestedOutcome ?? "implemented") : undefined;
+
+      if (!session) {
+        session = await CoworkSession.create({
+          userId: uid,
+          orgId: ctx.orgId ?? undefined,
+          source: source as any,
+          title: title ?? (phase === "start" ? "Work in progress" : "Recovered work session"),
+          summary: sanitized.slice(0, 800),
+          tags: ["auto-capture"],
+          // Automatic capture is intentionally private. Sharing remains an
+          // explicit developer decision through the existing save/handoff flow.
+          isShared: false,
+          outcome,
+          filesTouched,
+          repos: incomingRepos,
+          ...legacyRepoFields(incomingRepos),
+        });
+      } else {
+        const merged = incomingRepos.length ? mergeRepoLists(session.repos ?? [], incomingRepos) : session.repos ?? [];
+        await CoworkSession.updateOne(
+          { _id: session._id, userId: uid },
+          {
+            $set: {
+              ...(title ? { title } : {}),
+              summary: sanitized.slice(0, 800),
+              outcome: outcome ?? session.outcome,
+              repos: merged,
+              ...legacyRepoFields(merged),
+              updatedAt: new Date(),
+            },
+            $addToSet: { tags: "auto-capture", filesTouched: { $each: filesTouched } },
+          },
+        );
+        session = await CoworkSession.findById(session._id);
+      }
+
+      const order = await CoworkChunk.countDocuments({ sessionId: session._id });
+      await CoworkChunk.create({
+        sessionId: session._id, userId: uid, orgId: ctx.orgId ?? undefined,
+        isShared: false, kind: "checkpoint", order,
+        text: `## ${phase === "start" ? "Started" : phase === "progress" ? "Progress" : phase === "blocker" ? "Blocked" : "Paused / next step"}\n\n${sanitized}`,
+        sessionTitle: session.title, sessionSource: source,
+        sessionOutcome: outcome ?? session.outcome,
+        repoKeys: repoKeysOf(session.repos), embeddingDirty: true,
+      });
+      embedDirtyChunks(session._id, session.title, source);
+
+      return { content: [{ type: "text" as const, text:
+        `✓ Private ${phase} captured — session ${session._id}. ` +
+        (phase === "finish" ? "The next agent will see this in its startup brief." : "Reuse this sessionId for the next capture.")
+      }] };
     },
   );
 

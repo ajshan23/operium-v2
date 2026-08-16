@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CoworkSource  = "antigravity" | "claude-code" | "cursor" | "system";
+export type CoworkSource  = "antigravity" | "claude-code" | "codex" | "cursor" | "system";
 export type CoworkIntent  = "bug-fix" | "feature" | "refactor" | "investigation" | "planning" | "review" | "docs";
 export type CoworkOutcome = "fixed" | "implemented" | "explored" | "blocked" | "abandoned" | "partial";
 
@@ -63,9 +63,18 @@ export interface Pagination {
   pages: number;
 }
 
+export interface ResumeSession extends CoworkSession {
+  nextStep: string | null;
+  private: boolean;
+}
+
 // ─── API client ───────────────────────────────────────────────────────────────
 
 export const coworkApi = {
+
+  resume(): Promise<{ data: { sessions: ResumeSession[]; health: { active: number; stale: number; missingNextStep: number; missingRepo: number; private: number } } }> {
+    return apiClient("/api/cowork/resume");
+  },
 
   list(params: {
     scope?:  "team" | "personal";
@@ -115,6 +124,10 @@ export const coworkApi = {
 
   get(id: string): Promise<{ data: { session: CoworkSession; chunks: CoworkChunk[] } }> {
     return apiClient(`/api/cowork/${id}`);
+  },
+
+  recordResumeOpen(id: string): Promise<{ data: { recorded: boolean } }> {
+    return apiClient(`/api/cowork/${id}/resume-open`, { method: "POST", data: {} });
   },
 
   related(id: string, limit = 5): Promise<{ data: { related: CoworkSession[] } }> {

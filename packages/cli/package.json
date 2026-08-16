@@ -1,0 +1,18 @@
+{
+  "name": "@operium/cli",
+  "version": "0.2.0",
+  "description": "Set up private, repo-aware Operium memory for Claude Code and Codex.",
+  "type": "module",
+  "bin": {
+    "operium": "./bin/operium.js"
+  },
+  "scripts": {
+    "start": "node ./bin/operium.js",
+    "test": "node --test ./test/*.test.js",
+    "typecheck": "node --check ./bin/operium.js"
+  },
+  "files": ["bin", "src", "README.md"],
+  "keywords": ["mcp", "claude-code", "codex", "developer-tools", "memory"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=20" }
+}

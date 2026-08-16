@@ -1,6 +1,6 @@
 import mongoose, { Document, Model, Schema } from "mongoose";
 
-export type CoworkSource   = "antigravity" | "claude-code" | "cursor" | "system";
+export type CoworkSource   = "antigravity" | "claude-code" | "codex" | "cursor" | "system";
 export type CoworkIntent   = "bug-fix" | "feature" | "refactor" | "investigation" | "planning" | "review" | "docs";
 export type CoworkOutcome  = "fixed" | "implemented" | "explored" | "blocked" | "abandoned" | "partial";
 
@@ -46,7 +46,7 @@ const CoworkSessionSchema = new Schema<ICoworkSession>(
   {
     userId:  { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     orgId:   { type: Schema.Types.ObjectId, ref: "Org", index: true },
-    source:  { type: String, enum: ["antigravity","claude-code","cursor","system"], required: true },
+    source:  { type: String, enum: ["antigravity","claude-code","codex","cursor","system"], required: true },
     title:   { type: String, required: true },
     summary: { type: String, required: true, default: "" },
     tags:    { type: [String], default: [], index: true },

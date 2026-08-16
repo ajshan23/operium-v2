@@ -3,8 +3,8 @@ import type { IRouter } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { requireTenantAccess } from "../middlewares/tenant.middleware.js";
 import {
-  listSessions, searchSessions, createSession,
-  getSession, getRelated, recordFeedback, deleteSession, chatWithSession,
+  listSessions, getResume, searchSessions, createSession,
+  getSession, getRelated, recordFeedback, recordResumeOpen, deleteSession, chatWithSession,
   listRepos, setRepoVisibility,
 } from "../controllers/cowork.controller.js";
 
@@ -12,12 +12,14 @@ const router: IRouter = Router();
 router.use(requireAuth);
 router.use(requireTenantAccess);
 
-router.get("/",             listSessions);
+router.get("/resume",       getResume);
 router.get("/search",       searchSessions);
 router.get("/repos",        listRepos);
 router.put("/repos/visibility", setRepoVisibility);
+router.get("/",             listSessions);
 router.post("/",            createSession);
 router.post("/chat",        chatWithSession);
+router.post("/:id/resume-open", recordResumeOpen);
 router.get("/:id",          getSession);
 router.get("/:id/related",  getRelated);
 router.post("/:id/feedback",recordFeedback);

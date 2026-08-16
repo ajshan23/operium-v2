@@ -32,6 +32,11 @@ export const listSessions = handle(async (req, res) => {
   res.json(new ApiResponse(200, result, "Sessions fetched"));
 });
 
+export const getResume = handle(async (req, res) => {
+  const result = await coworkService.getResume(uid(req), oid(req));
+  res.json(new ApiResponse(200, result, "Resume sessions fetched"));
+});
+
 export const searchSessions = handle(async (req, res) => {
   const { q, scope, limit } = req.query as Record<string, string | undefined>;
   if (!q) {
@@ -53,6 +58,11 @@ export const createSession = handle(async (req, res) => {
 export const getSession = handle(async (req, res) => {
   const result = await coworkService.getById(pid(req), uid(req), oid(req));
   res.json(new ApiResponse(200, result, "Session fetched"));
+});
+
+export const recordResumeOpen = handle(async (req, res) => {
+  const result = await coworkService.recordResumeOpen(pid(req), uid(req), oid(req));
+  res.json(new ApiResponse(200, result, "Resume hand-off recorded"));
 });
 
 export const listRepos = handle(async (req, res) => {

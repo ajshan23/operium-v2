@@ -40,8 +40,8 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
 
-    // Tokens live for a day — a blocked (or deleted) user must lose REST
-    // access before their token expires, same as the MCP path.
+    // Browser tokens live for 30 days, but a blocked (or deleted) user loses
+    // REST access immediately on the next request, same as the MCP path.
     if (await isBlocked(decoded.userId)) {
       throw new ApiError(401, "Account is blocked");
     }
