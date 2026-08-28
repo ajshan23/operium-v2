@@ -7,6 +7,9 @@ import {
   normalizeRepoKey, normalizeRepoRefs, type RepoRef, type NormalizedRepoRef,
   normalizeErrorText, errorSignature,
   repoWebUrl, branchWebUrl,
+  MAX_CANVAS_ELEMENTS, DEFAULT_CANVAS_BACKGROUND,
+  buildCanvasScene, parseCanvasScene, canvasPreview,
+  type CanvasElementInput,
   AzureBoardsClient, AzureBoardsError, buildTree,
   type BoardItem, type BoardItemNode, type BoardComment, type QueryWorkItemsOpts,
   type UpdateWorkItemPatch, type CreateWorkItemFields,
@@ -49,6 +52,40 @@ const contextRepoShape = z.union([
   z.string().min(1),
   z.object(repoRefShape),
 ]);
+
+const canvasColorSchema = z.string().regex(
+  /^(?:transparent|#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))$/,
+  "Use transparent or a 3, 4, 6, or 8 digit hex color",
+);
+const canvasIdSchema = z.string().min(1).max(100).regex(
+  /^[a-zA-Z0-9_-]+$/,
+  "Use only letters, numbers, underscores, and hyphens",
+);
+
+const canvasElementSchema = z.object({
+  id:              canvasIdSchema.optional().describe("Stable element ID; required when arrows use fromId/toId"),
+  type:            z.enum(["rectangle", "ellipse", "diamond", "text", "arrow", "line"]),
+  x:               z.number().finite().min(-100_000).max(100_000).optional(),
+  y:               z.number().finite().min(-100_000).max(100_000).optional(),
+  width:           z.number().finite().positive().max(20_000).optional(),
+  height:          z.number().finite().positive().max(20_000).optional(),
+  endX:            z.number().finite().min(-100_000).max(100_000).optional().describe("Absolute connector endpoint when toId is omitted"),
+  endY:            z.number().finite().min(-100_000).max(100_000).optional().describe("Absolute connector endpoint when toId is omitted"),
+  points:          z.array(z.tuple([z.number().finite(), z.number().finite()])).min(2).max(32).optional().describe("Connector points relative to x/y"),
+  fromId:          canvasIdSchema.optional().describe("Shape ID where an arrow/line starts"),
+  toId:            canvasIdSchema.optional().describe("Shape ID where an arrow/line ends"),
+  text:            z.string().max(4_000).optional().describe("Text for a text element"),
+  label:           z.string().max(2_000).optional().describe("Centered label for a shape or connector"),
+  strokeColor:     canvasColorSchema.optional(),
+  backgroundColor: canvasColorSchema.optional(),
+  fillStyle:       z.enum(["hachure", "cross-hatch", "solid", "zigzag"]).optional(),
+  strokeWidth:     z.number().finite().min(1).max(10).optional(),
+  strokeStyle:     z.enum(["solid", "dashed", "dotted"]).optional(),
+  roughness:       z.number().finite().min(0).max(2).optional(),
+  opacity:         z.number().finite().min(0).max(100).optional(),
+  fontSize:        z.number().finite().min(8).max(96).optional(),
+  locked:          z.boolean().optional(),
+});
 type ContextRepoRef = string | RepoRef;
 
 function normalizeContextRepoRefs(repos: ContextRepoRef[] | undefined): NormalizedRepoRef[] {
@@ -1727,13 +1764,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       if (spaceId) filter.spaceId = spaceId;
       const notes = await Note.find(filter)
         .sort({ updatedAt: -1 }).limit(limit)
-        .select("title tags isStarred updatedAt spaceId").lean();
+        .select("title type tags isStarred updatedAt spaceId").lean();
 
       if (notes.length === 0) {
         return { content: [{ type: "text" as const, text: "No notes found." }] };
       }
       const text = notes.map(n =>
-        `• ${n.isStarred ? "⭐ " : ""}**${n.title || "Untitled"}** [ID: ${n._id}]` +
+        `• ${n.isStarred ? "⭐ " : ""}${n.type === "canvas" ? "🎨 " : ""}**${n.title || "Untitled"}** [ID: ${n._id}]` +
+        ` · ${n.type === "canvas" ? "canvas" : "text"}` +
         (n.tags?.length ? ` 🏷️ ${n.tags.join(", ")}` : "") +
         ` · ${timeAgo(n.updatedAt)}`
       ).join("\n");
@@ -1755,6 +1793,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const note = await Note.findOne({ _id: noteId, userId: ctx.userId }).lean();
       if (!note) {
         return { content: [{ type: "text" as const, text: `Note not found: ${noteId}` }] };
+      }
+      if (note.type === "canvas") {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `"${note.title || "Untitled Canvas"}" is a canvas note. Use get_canvas_note with noteId "${noteId}" to read its Excalidraw scene.`,
+          }],
+        };
       }
       const blocks = await NoteBlock.find({ noteId }).sort({ order: 1 }).lean();
       const content = blocks.map(b => b.content).join("\n\n");
@@ -1814,6 +1860,155 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         content: [{
           type: "text" as const,
           text: `✅ Note created.\n\nID: ${note._id}\nTitle: ${title || "Untitled"}\nSpace: ${spaceName}`,
+        }],
+      };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Canvas notes — compact agent inputs normalized to editable Excalidraw scenes
+  // ─────────────────────────────────────────────────────────────────────────────
+  tool(
+    "create_canvas_note",
+    "Create an editable Excalidraw canvas note in Operium. Supply compact shapes, text, arrows, and lines; Operium fills Excalidraw's internal fields, binds labels, and stores the whole scene as one safe block. Use stable shape IDs plus arrow fromId/toId for connected diagrams.",
+    {
+      title:           z.string().max(200).default("Untitled Canvas"),
+      elements:        z.array(canvasElementSchema).max(MAX_CANVAS_ELEMENTS).default([]),
+      backgroundColor: canvasColorSchema.default(DEFAULT_CANVAS_BACKGROUND),
+      tags:            z.array(z.string().max(100)).max(30).default([]),
+      spaceId:         z.string().optional().describe("Space ID; omit to auto-create or reuse a 'Canvases' space"),
+    },
+    async ({ title, elements, backgroundColor, tags, spaceId }) => {
+      // Normalize before any database operation. Invalid IDs, bindings, colors,
+      // or size limits must not leave an empty space or orphan note behind.
+      const scene = buildCanvasScene(elements as CanvasElementInput[], backgroundColor);
+      const content = JSON.stringify(scene);
+      const { Space, Note, NoteBlock } = await db();
+      const uid = ctx.userId;
+      let resolvedSpaceId = spaceId;
+      let spaceName = "Canvases";
+      if (!resolvedSpaceId) {
+        let canvasSpace = await Space.findOne({ userId: uid, name: "Canvases" }).lean();
+        if (!canvasSpace) {
+          canvasSpace = await Space.create({
+            userId: uid,
+            name: "Canvases",
+            icon: "folder",
+            description: "Visual notes and diagrams",
+          }) as any;
+        }
+        resolvedSpaceId = (canvasSpace as any)._id.toString();
+      } else {
+        const space = await Space.findOne({ _id: resolvedSpaceId, userId: uid }).lean();
+        if (!space) return { content: [{ type: "text" as const, text: "Space not found or access denied." }] };
+        spaceName = (space as any).name;
+      }
+
+      const note = await Note.create({
+        title,
+        type: "canvas",
+        spaceId: resolvedSpaceId,
+        userId: uid,
+        tags,
+        preview: canvasPreview(scene),
+      });
+      try {
+        await NoteBlock.create({
+          noteId: note._id,
+          spaceId: resolvedSpaceId,
+          userId: uid,
+          order: 0,
+          content,
+        });
+      } catch (error) {
+        await Note.deleteOne({ _id: note._id, userId: uid }).catch(() => {});
+        throw error;
+      }
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: `✅ Canvas note created.\n\nID: ${note._id}\nTitle: ${title || "Untitled Canvas"}\nSpace: ${spaceName}\nInput elements: ${elements.length}\nRendered elements: ${scene.elements.length}\n\nOpen it in Operium Spaces to continue editing visually.`,
+        }],
+      };
+    },
+  );
+
+  tool(
+    "get_canvas_note",
+    "Read an Operium canvas note and return its complete Excalidraw scene JSON for inspection. update_canvas_note accepts the compact element format documented by that tool, not raw Excalidraw elements.",
+    { noteId: z.string().min(1) },
+    async ({ noteId }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOne({ _id: noteId, userId: ctx.userId }).lean();
+      if (!note) return { content: [{ type: "text" as const, text: `Canvas note not found: ${noteId}` }] };
+      if (note.type !== "canvas") {
+        return { content: [{ type: "text" as const, text: `"${note.title || "Untitled"}" is a text note. Use get_note instead.` }] };
+      }
+      const blocks = await NoteBlock.find({ noteId }).sort({ order: 1 }).lean();
+      const scene = parseCanvasScene(blocks.map(block => block.content).join(""));
+      const visibleCount = scene.elements.filter(element => element.isDeleted !== true).length;
+      return {
+        content: [{
+          type: "text" as const,
+          text: `# ${note.title || "Untitled Canvas"}\n\n- Note ID: ${note._id}\n- Visible elements: ${visibleCount}\n- Background: ${scene.appState.viewBackgroundColor}\n\n\`\`\`json\n${JSON.stringify(scene, null, 2)}\n\`\`\``,
+        }],
+      };
+    },
+  );
+
+  tool(
+    "update_canvas_note",
+    "Replace an Operium canvas note's editable scene or update its metadata. When elements are supplied, pass the same compact element format used by create_canvas_note; the complete scene is regenerated and consolidated into one block.",
+    {
+      noteId:          z.string().min(1),
+      title:           z.string().max(200).optional(),
+      elements:        z.array(canvasElementSchema).max(MAX_CANVAS_ELEMENTS).optional(),
+      backgroundColor: canvasColorSchema.optional(),
+      tags:            z.array(z.string().max(100)).max(30).optional(),
+    },
+    async ({ noteId, title, elements, backgroundColor, tags }) => {
+      const { Note, NoteBlock } = await db();
+      const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
+      if (!note) return { content: [{ type: "text" as const, text: `Canvas note not found: ${noteId}` }] };
+      if (note.type !== "canvas") {
+        return { content: [{ type: "text" as const, text: `"${note.title || "Untitled"}" is a text note. Use update_note instead.` }] };
+      }
+
+      const existingBlocks = await NoteBlock.find({ noteId }).sort({ order: 1 }).lean();
+      const existingContent = existingBlocks.map(block => block.content).join("");
+      const currentScene = existingContent
+        ? parseCanvasScene(existingContent)
+        : buildCanvasScene([], DEFAULT_CANVAS_BACKGROUND);
+      const scene = elements !== undefined
+        ? buildCanvasScene(elements as CanvasElementInput[], backgroundColor ?? currentScene.appState.viewBackgroundColor)
+        : {
+            ...currentScene,
+            appState: {
+              viewBackgroundColor: backgroundColor ?? currentScene.appState.viewBackgroundColor,
+            },
+          };
+      const content = JSON.stringify(scene);
+
+      await NoteBlock.updateOne(
+        { noteId, order: 0 },
+        {
+          $set: { content, spaceId: note.spaceId, userId: ctx.userId },
+          $setOnInsert: { noteId, order: 0 },
+        },
+        { upsert: true },
+      );
+      await NoteBlock.deleteMany({ noteId, order: { $ne: 0 } });
+
+      const update: any = { preview: canvasPreview(scene), updatedAt: new Date() };
+      if (title !== undefined) update.title = title;
+      if (tags !== undefined) update.tags = tags;
+      await Note.updateOne({ _id: noteId, userId: ctx.userId }, update);
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: `✅ Canvas updated: "${title ?? note.title ?? "Untitled Canvas"}"\nRendered elements: ${scene.elements.length}`,
         }],
       };
     },
@@ -2709,6 +2904,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { Note, NoteBlock } = await db();
       const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
       if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
+      if (note.type === "canvas") {
+        return { content: [{ type: "text" as const, text: "Canvas notes cannot be appended as Markdown. Use get_canvas_note and update_canvas_note instead." }] };
+      }
 
       content = sanitize(content);
       const order = await NoteBlock.countDocuments({ noteId });
@@ -2735,6 +2933,9 @@ export function buildMcpServer(ctx: McpContext): McpServer {
       const { Note, NoteBlock } = await db();
       const note = await Note.findOne({ _id: noteId, userId: ctx.userId });
       if (!note) return { content: [{ type: "text" as const, text: `Note not found (or not yours): ${noteId}` }] };
+      if (note.type === "canvas" && content !== undefined) {
+        return { content: [{ type: "text" as const, text: "Canvas content is Excalidraw JSON, not Markdown. Use update_canvas_note to replace the scene. Title-only and tag-only updates remain supported here." }] };
+      }
 
       const upd: any = {};
       if (title !== undefined) upd.title = title;

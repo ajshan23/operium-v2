@@ -95,6 +95,7 @@ export const MCP_TOOL_NAMES = [
   "checkpoint_cowork", "save_chat", "list_cowork", "get_cowork", "cowork_digest",
   "related_cowork", "mark_cowork_used", "delete_cowork", "handoff_session",
   "list_spaces", "list_notes", "get_note", "create_note", "append_note", "update_note", "delete_note",
+  "create_canvas_note", "get_canvas_note", "update_canvas_note",
   "save_plan", "list_plans", "update_plan", "search_notes",
   "save_rule", "list_rules", "learn_correction", "delete_rule",
   "get_experts", "list_tasks", "create_task", "update_task",
@@ -111,7 +112,7 @@ export const MCP_TOOL_COUNT = MCP_TOOL_NAMES.length;
 export const MCP_TOOL_GROUPS: { label: string; tools: McpToolName[] }[] = [
   { label: "Memory & Recall",  tools: ["get_startup_context", "recall_context", "recall_error", "repo_context", "search", "get_experts"] },
   { label: "Cowork Sessions",  tools: ["capture_work", "checkpoint_cowork", "save_chat", "list_cowork", "get_cowork", "related_cowork", "cowork_digest", "mark_cowork_used", "delete_cowork", "handoff_session"] },
-  { label: "Notes & Plans",    tools: ["list_spaces", "list_notes", "get_note", "create_note", "append_note", "update_note", "delete_note", "search_notes", "save_plan", "list_plans", "update_plan"] },
+  { label: "Notes & Plans",    tools: ["list_spaces", "list_notes", "get_note", "create_note", "append_note", "update_note", "delete_note", "create_canvas_note", "get_canvas_note", "update_canvas_note", "search_notes", "save_plan", "list_plans", "update_plan"] },
   { label: "Rules",            tools: ["save_rule", "list_rules", "learn_correction", "delete_rule"] },
   { label: "Tasks",            tools: ["list_tasks", "create_task", "update_task"] },
   { label: "Work History",     tools: ["create_history", "list_history", "update_history", "delete_history", "pr_context", "sync_git", "generate_standup"] },

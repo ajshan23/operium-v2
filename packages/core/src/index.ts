@@ -1,4 +1,16 @@
 export { sanitize } from "./sanitize";
+export {
+  MAX_CANVAS_ELEMENTS,
+  MAX_CANVAS_SCENE_BYTES,
+  DEFAULT_CANVAS_BACKGROUND,
+  normalizeCanvasElements,
+  buildCanvasScene,
+  parseCanvasScene,
+  canvasPreview,
+  type CanvasElementType,
+  type CanvasElementInput,
+  type CanvasScene,
+} from "./canvas";
 export { contentHash } from "./hash";
 export { splitMarkdownChunks, markdownQualityNudge, snippet } from "./chunk";
 export { resolveCoworkShared, type RepoSharePref } from "./coworkSharing";
