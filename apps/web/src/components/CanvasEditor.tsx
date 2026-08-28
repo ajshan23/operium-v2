@@ -30,6 +30,8 @@ interface CanvasEditorProps {
   /** Debounced; receives the serialized scene. Omit for read-only display. */
   onChange?: (json: string) => void;
   readOnly?: boolean;
+  /** Fill the parent pane without the card border or rounded corners. */
+  fullBleed?: boolean;
 }
 
 function parseScene(raw: string) {
@@ -53,7 +55,7 @@ function sceneSignature(elements: readonly any[], bg: string) {
     .join("|") + "~" + bg;
 }
 
-export default function CanvasEditor({ value, onChange, readOnly = false }: CanvasEditorProps) {
+export default function CanvasEditor({ value, onChange, readOnly = false, fullBleed = false }: CanvasEditorProps) {
   // Excalidraw manages the scene after mount; initialData is read once per
   // mount — parents must remount (key={noteId}) to switch canvases.
   const [initialData] = useState(() => parseScene(value));
@@ -80,7 +82,9 @@ export default function CanvasEditor({ value, onChange, readOnly = false }: Canv
   };
 
   return (
-    <div className="w-full h-full rounded-2xl border border-[#1e1e24] overflow-hidden bg-[#0c0c0f]">
+    <div className={`w-full h-full overflow-hidden bg-[#0c0c0f] ${
+      fullBleed ? "" : "rounded-2xl border border-[#1e1e24]"
+    }`}>
       <Excalidraw
         initialData={initialData}
         onChange={handleChange}

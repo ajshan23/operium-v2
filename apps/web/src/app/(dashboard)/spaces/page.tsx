@@ -616,10 +616,22 @@ export default function SpacesPage() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col z-10 relative">
+            <div className={`flex-1 min-h-0 flex flex-col z-10 relative ${
+              activeNote.type === "canvas"
+                ? "overflow-hidden"
+                : "overflow-y-auto p-6 md:p-8"
+            }`}>
 
               {/* Tags */}
-              <div className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+              <div className={activeNote.type === "canvas"
+                ? "h-[46px] px-4 border-b border-[#1a1a22] bg-[#070709] flex items-center gap-2 shrink-0 overflow-x-auto"
+                : "flex flex-wrap items-center gap-2 mb-4 shrink-0"
+              }>
+                {activeNote.type === "canvas" && (
+                  <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
+                    placeholder="Canvas Title"
+                    className="w-[40%] min-w-[180px] max-w-[460px] bg-transparent text-[14px] font-bold text-[#fafafa] placeholder:text-[#333342] focus:outline-none border-r border-[#1a1a22] pr-4 mr-2 shrink-0" />
+                )}
                 <Tag size={12} className="text-[#55556a]" />
                 {activeNote.tags?.map(tag => (
                   <span key={tag} className="h-5 px-2 rounded bg-[#120e20]/60 border border-[#8b5cf6]/25 text-[#a855f7] text-[10px] font-medium flex items-center gap-1">
@@ -635,20 +647,15 @@ export default function SpacesPage() {
               </div>
 
               {activeNote.type === "canvas" ? (
-                <div className="flex-1 flex flex-col gap-4 min-h-0">
-                  <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
-                    placeholder="Canvas Title"
-                    className="w-full bg-transparent text-[22px] font-extrabold text-[#fafafa] placeholder:text-[#333342] focus:outline-none border-b border-transparent focus:border-[#1a1a22] pb-2 transition-colors shrink-0" />
-                  <div className="flex-1 min-h-[400px]">
-                    {activeNote.content !== undefined ? (
-                      // key: remount per note — Excalidraw reads initialData once
-                      <CanvasEditor key={activeNote._id} value={activeNote.content} onChange={handleCanvasChange} />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[#55556a]">
-                        <Loader2 size={18} className="animate-spin" />
-                      </div>
-                    )}
-                  </div>
+                <div className="flex-1 min-h-0">
+                  {activeNote.content !== undefined ? (
+                    // key: remount per note — Excalidraw reads initialData once
+                    <CanvasEditor key={activeNote._id} value={activeNote.content} onChange={handleCanvasChange} fullBleed />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[#55556a]">
+                      <Loader2 size={18} className="animate-spin" />
+                    </div>
+                  )}
                 </div>
               ) : isEditMode ? (
                 <div className="flex-1 flex flex-col gap-4">
