@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Folder, User, Users, Plus, Search, FileText, Trash2, Edit2,
   Eye, X, BookOpen, Clock, Tag, Check, Star, Loader2, AlertTriangle,
-  Share2, Copy, Globe, Palette,
+  Share2, Copy, Globe, Palette, Maximize2, Minimize2,
 } from "lucide-react";
 import TipTapEditor from "./TipTapEditor";
 import MarkdownViewer from "@/components/MarkdownViewer";
@@ -46,6 +46,7 @@ export default function SpacesPage() {
   const [isEditMode,    setIsEditMode]    = useState(true);
   const [tagInput,      setTagInput]      = useState("");
   const [newNoteMenuOpen, setNewNoteMenuOpen] = useState(false);
+  const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
 
   // ── Sharing ──
   const [shareOpen,  setShareOpen]  = useState(false);
@@ -150,7 +151,24 @@ export default function SpacesPage() {
   useEffect(() => {
     setShareOpen(false);
     setLinkCopied(false);
+    setIsCanvasFullscreen(false);
   }, [activeNoteId]);
+
+  // Fullscreen canvas is a viewport overlay. Escape always restores the
+  // regular Spaces layout, and page scrolling stays locked while it is open.
+  useEffect(() => {
+    if (!isCanvasFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsCanvasFullscreen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCanvasFullscreen]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Derived
@@ -644,10 +662,29 @@ export default function SpacesPage() {
                     placeholder="+ tag"
                     className="h-5 px-2 bg-[#0c0c0f] border border-[#1e1e24] focus:border-[#8b5cf6]/35 rounded text-[10px] text-[#fafafa] focus:outline-none w-[60px] focus:w-[90px] transition-all" />
                 </form>
+                {activeNote.type === "canvas" && (
+                  <button type="button" onClick={() => setIsCanvasFullscreen(true)}
+                    title="Open canvas fullscreen"
+                    aria-label="Open canvas fullscreen"
+                    className="sticky right-0 ml-auto h-7 px-2.5 rounded-lg border border-[#2a2a35] bg-[#0c0c0f] text-[#a1a1aa] hover:text-white hover:border-[#8b5cf6]/50 flex items-center gap-1.5 text-[10px] font-semibold shrink-0 transition-colors shadow-[-10px_0_16px_#070709]">
+                    <Maximize2 size={12} /> Fullscreen
+                  </button>
+                )}
               </div>
 
               {activeNote.type === "canvas" ? (
-                <div className="flex-1 min-h-0">
+                <div className={isCanvasFullscreen
+                  ? "fixed inset-0 z-[100] bg-[#0c0c0f]"
+                  : "flex-1 min-h-0"
+                }>
+                  {isCanvasFullscreen && (
+                    <button type="button" onClick={() => setIsCanvasFullscreen(false)}
+                      title="Exit fullscreen (Esc)"
+                      aria-label="Exit canvas fullscreen"
+                      className="absolute top-4 right-4 z-[110] h-9 px-3 rounded-xl border border-[#3a3a46] bg-[#16161c]/95 text-[#fafafa] hover:bg-[#24242c] hover:border-[#8b5cf6]/60 flex items-center gap-2 text-[11px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-colors">
+                      <Minimize2 size={14} /> Exit fullscreen
+                    </button>
+                  )}
                   {activeNote.content !== undefined ? (
                     // key: remount per note — Excalidraw reads initialData once
                     <CanvasEditor key={activeNote._id} value={activeNote.content} onChange={handleCanvasChange} fullBleed />
