@@ -71,7 +71,10 @@ const canvasElementSchema = z.object({
   height:          z.number().finite().positive().max(20_000).optional(),
   endX:            z.number().finite().min(-100_000).max(100_000).optional().describe("Absolute connector endpoint when toId is omitted"),
   endY:            z.number().finite().min(-100_000).max(100_000).optional().describe("Absolute connector endpoint when toId is omitted"),
-  points:          z.array(z.tuple([z.number().finite(), z.number().finite()])).min(2).max(32).optional().describe("Connector points relative to x/y"),
+  // Keep the wire format as [number, number][] without emitting legacy
+  // array-valued JSON Schema `items`, which Codex rejects during tool loading.
+  // The inner length constraint preserves tuple validation on the server.
+  points:          z.array(z.array(z.number().finite()).length(2)).min(2).max(32).optional().describe("Connector points relative to x/y"),
   fromId:          canvasIdSchema.optional().describe("Shape ID where an arrow/line starts"),
   toId:            canvasIdSchema.optional().describe("Shape ID where an arrow/line ends"),
   text:            z.string().max(4_000).optional().describe("Text for a text element"),
