@@ -1,0 +1,86 @@
+/* Soft Operium theme tokens.
+ * Keep components on semantic tokens; raw palette values belong only here. */
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-page-rgb: 21 23 26;
+  --surface-panel-rgb: 27 30 35;
+  --surface-raised-rgb: 34 38 45;
+  --surface-hover-rgb: 42 47 56;
+  --surface-page: rgb(var(--surface-page-rgb));
+  --surface-panel: rgb(var(--surface-panel-rgb));
+  --surface-raised: rgb(var(--surface-raised-rgb));
+  --surface-hover: rgb(var(--surface-hover-rgb));
+
+  --border-subtle-rgb: 43 48 56;
+  --border-default-rgb: 58 65 76;
+  --border-strong-rgb: 82 91 104;
+  --border-control-rgb: 97 108 124;
+  --border-subtle: rgb(var(--border-subtle-rgb));
+  --border-default: rgb(var(--border-default-rgb));
+  --border-strong: rgb(var(--border-strong-rgb));
+  --border-control: rgb(var(--border-control-rgb));
+
+  --text-primary-rgb: 232 234 237;
+  --text-secondary-rgb: 180 186 195;
+  --text-muted-rgb: 143 152 165;
+  --text-inverse-rgb: 255 255 255;
+  --text-primary: rgb(var(--text-primary-rgb));
+  --text-secondary: rgb(var(--text-secondary-rgb));
+  --text-muted: rgb(var(--text-muted-rgb));
+  --text-inverse: rgb(var(--text-inverse-rgb));
+
+  --accent-solid-rgb: 118 85 212;
+  --accent-hover-rgb: 104 70 195;
+  --accent-text-rgb: 183 154 255;
+  --accent-solid: rgb(var(--accent-solid-rgb));
+  --accent-hover: rgb(var(--accent-hover-rgb));
+  --accent-text: rgb(var(--accent-text-rgb));
+  --accent-ring: rgb(var(--accent-text-rgb) / 0.72);
+
+  --success-rgb: 111 211 154;
+  --error-rgb: 255 138 138;
+  --warning-rgb: 245 198 106;
+  --info-rgb: 125 183 255;
+  --success: rgb(var(--success-rgb));
+  --error: rgb(var(--error-rgb));
+  --warning: rgb(var(--warning-rgb));
+  --info: rgb(var(--info-rgb));
+
+  --overlay-rgb: 8 10 13;
+  --shadow-color: rgb(0 0 0 / 0.34);
+
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-page-rgb: 246 244 240;
+  --surface-panel-rgb: 252 251 248;
+  --surface-raised-rgb: 239 238 233;
+  --surface-hover-rgb: 231 229 223;
+
+  --border-subtle-rgb: 223 220 212;
+  --border-default-rgb: 202 198 189;
+  --border-strong-rgb: 170 165 154;
+  --border-control-rgb: 141 136 126;
+
+  --text-primary-rgb: 36 38 43;
+  --text-secondary-rgb: 86 92 102;
+  --text-muted-rgb: 97 105 117;
+  --text-inverse-rgb: 255 255 255;
+
+  --accent-solid-rgb: 109 69 194;
+  --accent-hover-rgb: 93 54 178;
+  --accent-text-rgb: 109 69 194;
+  --accent-ring: rgb(var(--accent-solid-rgb) / 0.52);
+
+  --success-rgb: 24 121 78;
+  --error-rgb: 198 60 60;
+  --warning-rgb: 138 91 0;
+  --info-rgb: 36 94 168;
+
+  --overlay-rgb: 36 28 48;
+  --shadow-color: rgb(75 65 55 / 0.16);
+}

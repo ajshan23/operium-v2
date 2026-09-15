@@ -50,7 +50,7 @@ function relativeTime(iso: string): string {
 const ProviderBadge = ({ provider }: { provider: GitProvider }) => {
   if (provider === "github") {
     return (
-      <span className="inline-flex items-center space-x-1 text-[10px] text-gray-400" title="GitHub">
+      <span className="inline-flex items-center space-x-1 text-xs text-content-muted" title="GitHub">
         <GithubIcon className="w-3 h-3" />
         <span>GitHub</span>
       </span>
@@ -58,7 +58,7 @@ const ProviderBadge = ({ provider }: { provider: GitProvider }) => {
   }
   if (provider === "azure") {
     return (
-      <span className="inline-flex items-center space-x-1 text-[10px] text-sky-400" title="Azure DevOps">
+      <span className="inline-flex items-center space-x-1 text-xs text-status-info" title="Azure DevOps">
         <AzureIcon className="w-3 h-3" />
         <span>Azure</span>
       </span>
@@ -129,14 +129,14 @@ export default function GitPage() {
 
   const getBadgeColor = (type: string) => {
     switch (type) {
-      case "feat": return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
-      case "fix": return "bg-rose-500/10 text-rose-400 border-rose-500/20";
-      case "refactor": return "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
-      case "docs": return "bg-sky-500/10 text-sky-400 border-sky-500/20";
-      case "chore": return "bg-amber-500/10 text-amber-400 border-amber-500/20";
-      case "test": return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+      case "feat": return "bg-status-success/10 text-status-success border-status-success/20";
+      case "fix": return "bg-status-error/10 text-status-error border-status-error/20";
+      case "refactor": return "bg-accent/10 text-accent-text border-accent/20";
+      case "docs": return "bg-status-info/10 text-status-info border-status-info/20";
+      case "chore": return "bg-status-warning/10 text-status-warning border-status-warning/20";
+      case "test": return "bg-accent/10 text-accent-text border-accent/20";
       case "perf": return "bg-teal-500/10 text-teal-400 border-teal-500/20";
-      default: return "bg-gray-500/10 text-gray-400 border-gray-500/20";
+      default: return "bg-surface-raised text-content-muted border-line-subtle";
     }
   };
 
@@ -159,18 +159,18 @@ export default function GitPage() {
   }, [data?.connections.githubLastSync, data?.connections.azureLastSync]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#030303] text-gray-100 overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-surface-page text-content-primary overflow-hidden">
       {/* Header */}
-      <header className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.02] gap-4 flex-wrap">
+      <header className="px-6 py-5 border-b border-line-subtle/70 flex items-center justify-between shrink-0 bg-surface-panel/60 gap-4 flex-wrap">
         <div className="flex items-center space-x-3 min-w-0">
-          <div className="p-2 bg-indigo-500/10 rounded-lg shrink-0">
-            <GitFork className="w-5 h-5 text-indigo-400" />
+          <div className="p-2 bg-accent/10 rounded-lg shrink-0">
+            <GitFork className="w-5 h-5 text-accent-text" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-tight truncate">
               {repoFilter || "Git Activity"}
             </h1>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-content-muted">
               {lastSync ? `Last synced ${relativeTime(lastSync)}` : "Commits, pull requests & branches"}
             </p>
           </div>
@@ -178,24 +178,24 @@ export default function GitPage() {
 
         <div className="flex items-center space-x-3 flex-wrap gap-y-2">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-muted" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search commits, PRs..."
-              className="bg-black border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500/50 w-56"
+              className="bg-surface-panel border border-line-subtle rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-accent/50 w-56"
             />
           </div>
 
           {/* Provider filter */}
-          <div className="flex items-center bg-white/5 border border-white/10 rounded-lg overflow-hidden text-xs">
+          <div className="flex items-center bg-surface-raised border border-line-subtle rounded-lg overflow-hidden text-xs">
             {(["all", "github", "azure"] as const).map((p) => (
               <button
                 key={p}
                 onClick={() => setProviderFilter(p)}
                 className={`px-3 py-2 capitalize transition-colors ${
-                  providerFilter === p ? "bg-indigo-500/20 text-white" : "text-gray-400 hover:text-gray-200"
+                  providerFilter === p ? "bg-accent/20 text-content-primary" : "text-content-muted hover:text-content-secondary"
                 }`}
               >
                 {p === "all" ? "All" : p === "github" ? "GitHub" : "Azure"}
@@ -206,7 +206,7 @@ export default function GitPage() {
           <button
             onClick={handleSync}
             disabled={syncing}
-            className="flex items-center space-x-2 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg text-sm text-indigo-300 transition-colors disabled:opacity-50"
+            className="flex items-center space-x-2 px-3 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/20 rounded-lg text-sm text-accent-text transition-colors disabled:opacity-50"
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             <span>{syncing ? "Syncing..." : "Sync"}</span>
@@ -215,7 +215,7 @@ export default function GitPage() {
       </header>
 
       {syncMessage && (
-        <div className="px-6 py-2 text-xs text-indigo-300 bg-indigo-500/5 border-b border-white/5 shrink-0">
+        <div className="px-6 py-2 text-xs text-accent-text bg-accent/5 border-b border-line-subtle/70 shrink-0">
           {syncMessage}
         </div>
       )}
@@ -224,33 +224,33 @@ export default function GitPage() {
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
         {loading && !data ? (
-          <div className="flex items-center justify-center h-64 text-gray-400">
+          <div className="flex items-center justify-center h-64 text-content-muted">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Loading Git activity...
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <AlertCircle className="w-8 h-8 text-rose-400 mb-3" />
-            <p className="text-gray-300">{error}</p>
+            <AlertCircle className="w-8 h-8 text-status-error mb-3" />
+            <p className="text-content-secondary">{error}</p>
             <button
               onClick={fetchOverview}
-              className="mt-4 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm hover:bg-white/10"
+              className="mt-4 px-4 py-2 bg-surface-raised border border-line-subtle rounded-lg text-sm hover:bg-surface-hover"
             >
               Retry
             </button>
           </div>
         ) : notConnected ? (
           <div className="flex flex-col items-center justify-center h-64 text-center max-w-md mx-auto">
-            <div className="p-3 bg-indigo-500/10 rounded-xl mb-4">
-              <GitFork className="w-7 h-7 text-indigo-400" />
+            <div className="p-3 bg-accent/10 rounded-xl mb-4">
+              <GitFork className="w-7 h-7 text-accent-text" />
             </div>
             <h2 className="text-lg font-semibold mb-1">No Git provider connected</h2>
-            <p className="text-sm text-gray-400 mb-5">
+            <p className="text-sm text-content-muted mb-5">
               Connect a GitHub personal access token or Azure DevOps organisation to pull your
               commits, pull requests and branches into Operium.
             </p>
             <Link
               href="/settings"
-              className="flex items-center space-x-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg text-sm text-indigo-300"
+              className="flex items-center space-x-2 px-4 py-2 bg-accent/10 hover:bg-accent/20 border border-accent/20 rounded-lg text-sm text-accent-text"
             >
               <Settings className="w-4 h-4" />
               <span>Connect in Settings</span>
@@ -266,24 +266,24 @@ export default function GitPage() {
                 { label: "Merged PRs", value: data.totals.mergedPrs, icon: GitMerge },
                 { label: "Repositories", value: data.totals.repos, icon: GitFork },
               ].map((s) => (
-                <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div key={s.label} className="bg-surface-raised border border-line-subtle rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-semibold">{s.value}</span>
-                    <s.icon className="w-5 h-5 text-gray-500" />
+                    <s.icon className="w-5 h-5 text-content-muted" />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">{s.label}</p>
+                  <p className="text-xs text-content-muted mt-1">{s.label}</p>
                 </div>
               ))}
             </div>
 
             {/* Heatmap Section */}
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+            <div className="bg-surface-raised border border-line-subtle rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium flex items-center space-x-2">
-                  <GitCommit className="w-4 h-4 text-gray-400" />
+                  <GitCommit className="w-4 h-4 text-content-muted" />
                   <span>Activity (Last 12 Months)</span>
                 </h2>
-                <span className="text-xs text-gray-500">{data.heatmap.total} events</span>
+                <span className="text-xs text-content-muted">{data.heatmap.total} events</span>
               </div>
               <div className="flex space-x-1 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-white/10">
                 {heatmapWeeks.map((week, i) => (
@@ -292,11 +292,11 @@ export default function GitPage() {
                       <div
                         key={j}
                         className={`w-3 h-3 rounded-sm ${
-                          day.level === 0 ? "bg-white/5" :
-                          day.level === 1 ? "bg-indigo-500/20" :
-                          day.level === 2 ? "bg-indigo-500/40" :
-                          day.level === 3 ? "bg-indigo-500/60" :
-                          "bg-indigo-500/80"
+                          day.level === 0 ? "bg-surface-raised" :
+                          day.level === 1 ? "bg-accent/20" :
+                          day.level === 2 ? "bg-accent/40" :
+                          day.level === 3 ? "bg-accent/60" :
+                          "bg-accent/80"
                         }`}
                         title={`${day.count} event${day.count === 1 ? "" : "s"} on ${day.date}`}
                       />
@@ -311,45 +311,45 @@ export default function GitPage() {
 
               {/* Left Column: Commits / PRs Feed */}
               <div className="lg:col-span-2 space-y-4">
-                <div className="bg-white/5 border border-white/10 rounded-xl flex overflow-hidden">
+                <div className="bg-surface-raised border border-line-subtle rounded-xl flex overflow-hidden">
                   <button
                     onClick={() => setActiveTab("commits")}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === "commits" ? "border-indigo-500 text-white bg-indigo-500/5" : "border-transparent text-gray-400 hover:text-gray-200"}`}
+                    className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === "commits" ? "border-accent text-content-primary bg-accent/5" : "border-transparent text-content-muted hover:text-content-secondary"}`}
                   >
                     Recent Commits ({data.totals.commits})
                   </button>
                   <button
                     onClick={() => setActiveTab("prs")}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === "prs" ? "border-indigo-500 text-white bg-indigo-500/5" : "border-transparent text-gray-400 hover:text-gray-200"}`}
+                    className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === "prs" ? "border-accent text-content-primary bg-accent/5" : "border-transparent text-content-muted hover:text-content-secondary"}`}
                   >
                     Pull Requests ({data.totals.prs})
                   </button>
                 </div>
 
-                <div className="bg-black/40 border border-white/10 rounded-xl overflow-hidden">
+                <div className="bg-surface-panel border border-line-subtle rounded-xl overflow-hidden">
                   {activeTab === "commits" ? (
                     data.commits.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-gray-500">No commits found.</div>
+                      <div className="p-8 text-center text-sm text-content-muted">No commits found.</div>
                     ) : (
-                      <div className="divide-y divide-white/5">
+                      <div className="divide-y divide-line-subtle">
                         {data.commits.map((commit) => (
-                          <div key={commit.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
+                          <div key={commit.id} className="p-4 hover:bg-surface-panel/60 transition-colors group">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start space-x-3 min-w-0">
                                 <div className="mt-1 shrink-0">
-                                  <GitCommit className="w-4 h-4 text-gray-500" />
+                                  <GitCommit className="w-4 h-4 text-content-muted" />
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center space-x-2 flex-wrap">
-                                    <span className="font-medium text-gray-200 break-words">{commit.message}</span>
-                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getBadgeColor(commit.type)}`}>
+                                    <span className="font-medium text-content-secondary break-words">{commit.message}</span>
+                                    <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded border ${getBadgeColor(commit.type)}`}>
                                       {commit.type}
                                     </span>
                                   </div>
-                                  <div className="flex items-center space-x-3 mt-1.5 text-xs text-gray-500 flex-wrap gap-y-1">
+                                  <div className="flex items-center space-x-3 mt-1.5 text-xs text-content-muted flex-wrap gap-y-1">
                                     <ProviderBadge provider={commit.provider} />
                                     {commit.repo && (
-                                      <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-gray-400">{commit.repo}</span>
+                                      <span className="font-mono bg-surface-raised px-1.5 py-0.5 rounded text-content-muted">{commit.repo}</span>
                                     )}
                                     {commit.author && (
                                       <>
@@ -362,7 +362,7 @@ export default function GitPage() {
                                     {commit.commits > 1 && (
                                       <>
                                         <span>•</span>
-                                        <span className="text-gray-400">{commit.commits} commits</span>
+                                        <span className="text-content-muted">{commit.commits} commits</span>
                                       </>
                                     )}
                                   </div>
@@ -373,7 +373,7 @@ export default function GitPage() {
                                   href={commit.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="p-1 hover:text-indigo-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                                  className="p-1 hover:text-accent-text transition-colors opacity-0 group-hover:opacity-100 shrink-0"
                                 >
                                   <ExternalLink className="w-4 h-4" />
                                 </a>
@@ -385,31 +385,31 @@ export default function GitPage() {
                     )
                   ) : (
                     data.prs.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-gray-500">No pull requests found.</div>
+                      <div className="p-8 text-center text-sm text-content-muted">No pull requests found.</div>
                     ) : (
-                      <div className="divide-y divide-white/5">
+                      <div className="divide-y divide-line-subtle">
                         {data.prs.map((pr) => (
-                          <div key={pr.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
+                          <div key={pr.id} className="p-4 hover:bg-surface-panel/60 transition-colors group">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start space-x-3 min-w-0">
                                 <div className="mt-1 shrink-0">
                                   {pr.status === "Merged" ? (
-                                    <GitMerge className="w-5 h-5 text-purple-400" />
+                                    <GitMerge className="w-5 h-5 text-accent-text" />
                                   ) : pr.status === "Abandoned" ? (
-                                    <XCircle className="w-5 h-5 text-rose-400" />
+                                    <XCircle className="w-5 h-5 text-status-error" />
                                   ) : (
-                                    <GitPullRequest className="w-5 h-5 text-emerald-400" />
+                                    <GitPullRequest className="w-5 h-5 text-status-success" />
                                   )}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center space-x-2 flex-wrap">
-                                    <span className="font-medium text-gray-200 break-words">{pr.title}</span>
-                                    {pr.prId && <span className="text-xs text-gray-500 font-mono">#{pr.prId}</span>}
+                                    <span className="font-medium text-content-secondary break-words">{pr.title}</span>
+                                    {pr.prId && <span className="text-xs text-content-muted font-mono">#{pr.prId}</span>}
                                   </div>
-                                  <div className="flex items-center space-x-3 mt-1.5 text-xs text-gray-500 flex-wrap gap-y-1">
+                                  <div className="flex items-center space-x-3 mt-1.5 text-xs text-content-muted flex-wrap gap-y-1">
                                     <ProviderBadge provider={pr.provider} />
                                     {pr.repo && (
-                                      <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-gray-400">{pr.repo}</span>
+                                      <span className="font-mono bg-surface-raised px-1.5 py-0.5 rounded text-content-muted">{pr.repo}</span>
                                     )}
                                     {pr.branch && (
                                       <>
@@ -424,30 +424,30 @@ export default function GitPage() {
                               </div>
                               <div className="flex flex-col items-end space-y-2 shrink-0">
                                 <span className={`text-xs px-2 py-1 rounded-full border ${
-                                  pr.status === "Merged" ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
-                                  pr.status === "Abandoned" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
-                                  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                  pr.status === "Merged" ? "bg-accent/10 text-accent-text border-accent/20" :
+                                  pr.status === "Abandoned" ? "bg-status-error/10 text-status-error border-status-error/20" :
+                                  "bg-status-success/10 text-status-success border-status-success/20"
                                 }`}>
                                   {pr.status}
                                 </span>
                                 {pr.reviewers.length > 0 ? (
-                                  <div className="flex items-center space-x-1 text-xs text-gray-400" title={pr.reviewers.map(r => r.name).join(", ")}>
+                                  <div className="flex items-center space-x-1 text-xs text-content-muted" title={pr.reviewers.map(r => r.name).join(", ")}>
                                     {pr.approved > 0 ? (
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <CheckCircle2 className="w-3 h-3 text-status-success" />
                                     ) : (
-                                      <Clock className="w-3 h-3 text-amber-400" />
+                                      <Clock className="w-3 h-3 text-status-warning" />
                                     )}
                                     <span>{pr.approved}/{pr.reviewers.length} approved</span>
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-gray-600">No reviewers</span>
+                                  <span className="text-xs text-content-muted">No reviewers</span>
                                 )}
                                 {pr.url && (
                                   <a
                                     href={pr.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-gray-500 hover:text-indigo-400 flex items-center space-x-1"
+                                    className="text-xs text-content-muted hover:text-accent-text flex items-center space-x-1"
                                   >
                                     <span>Open</span>
                                     <ExternalLink className="w-3 h-3" />
@@ -466,40 +466,40 @@ export default function GitPage() {
               {/* Right Column: Branches + Repos */}
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-gray-300 px-1">Saved Session Branches</h3>
+                  <h3 className="text-sm font-medium text-content-secondary px-1">Saved Session Branches</h3>
                   {data.branches.length === 0 ? (
-                    <p className="text-xs text-gray-500 px-1">No branches have been registered by MCP sessions yet.</p>
+                    <p className="text-xs text-content-muted px-1">No branches have been registered by MCP sessions yet.</p>
                   ) : (
                     data.branches.slice(0, 12).map((branch, i) => (
-                      <div key={`${branch.repo}-${branch.name}-${i}`} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors group">
+                      <div key={`${branch.repo}-${branch.name}-${i}`} className="bg-surface-raised border border-line-subtle rounded-xl p-4 hover:border-line-strong transition-colors group">
                         <div className="flex items-center justify-between mb-3 gap-2">
                           <div className="flex items-center space-x-2 min-w-0">
-                            <GitBranch className="w-4 h-4 text-indigo-400 shrink-0" />
-                            <span className="font-mono text-sm text-gray-200 truncate" title={branch.name}>{branch.name}</span>
+                            <GitBranch className="w-4 h-4 text-accent-text shrink-0" />
+                            <span className="font-mono text-sm text-content-secondary truncate" title={branch.name}>{branch.name}</span>
                           </div>
-                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-indigo-500/10 text-indigo-300">
+                          <span className="text-xs uppercase font-bold px-1.5 py-0.5 rounded shrink-0 bg-accent/10 text-accent-text">
                             {branch.outcome || "in progress"}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between text-xs mb-3">
                           <div className="flex space-x-3">
-                            <span className="text-emerald-400" title="Saved sessions">{branch.sessions} session{branch.sessions === 1 ? "" : "s"}</span>
+                            <span className="text-status-success" title="Saved sessions">{branch.sessions} session{branch.sessions === 1 ? "" : "s"}</span>
                           </div>
-                          <span className="text-gray-500">{relativeTime(branch.lastActivity)}</span>
+                          <span className="text-content-muted">{relativeTime(branch.lastActivity)}</span>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-1">
+                        <div className="flex items-center justify-between border-t border-line-subtle/70 pt-3 mt-1">
                           <div className="flex items-center space-x-2 min-w-0">
                             <ProviderBadge provider={branch.provider} />
                             {branch.repo && (
-                              <span className="text-xs text-gray-500 font-mono truncate" title={branch.latestTitle}>{branch.repo} · {branch.latestTitle}</span>
+                              <span className="text-xs text-content-muted font-mono truncate" title={branch.latestTitle}>{branch.repo} · {branch.latestTitle}</span>
                             )}
                           </div>
                           <Link
                             href={`/cowork/${branch.latestSessionId}`}
                             aria-label={`Open latest saved session for ${branch.name}`}
-                            className="text-gray-600 hover:text-indigo-300 transition-colors shrink-0"
+                            className="text-content-muted hover:text-accent-text transition-colors shrink-0"
                           >
                             <ChevronRight className="w-4 h-4" />
                           </Link>
@@ -511,11 +511,11 @@ export default function GitPage() {
 
                 {data.repos.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-gray-300 px-1">Repositories</h3>
-                    <div className="bg-white/5 border border-white/10 rounded-xl divide-y divide-white/5 overflow-hidden">
+                    <h3 className="text-sm font-medium text-content-secondary px-1">Repositories</h3>
+                    <div className="bg-surface-raised border border-line-subtle rounded-xl divide-y divide-line-subtle overflow-hidden">
                       <button
                         onClick={() => setRepoFilter("")}
-                        className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-white/[0.04] ${repoFilter === "" ? "text-indigo-300" : "text-gray-400"}`}
+                        className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-surface-hover/60 ${repoFilter === "" ? "text-accent-text" : "text-content-muted"}`}
                       >
                         <span>All repositories</span>
                       </button>
@@ -523,13 +523,13 @@ export default function GitPage() {
                         <button
                         key={repo.repoKey}
                           onClick={() => setRepoFilter(repo.repoKey === repoFilter ? "" : repo.repoKey)}
-                          className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-white/[0.04] ${repoFilter === repo.repoKey ? "bg-indigo-500/10 text-indigo-300" : "text-gray-300"}`}
+                          className={`w-full text-left px-4 py-2.5 text-xs flex items-center justify-between hover:bg-surface-hover/60 ${repoFilter === repo.repoKey ? "bg-accent/10 text-accent-text" : "text-content-secondary"}`}
                         >
                           <span className="flex items-center space-x-2 min-w-0">
                             <ProviderBadge provider={repo.provider} />
                             <span className="font-mono truncate">{repo.name}</span>
                           </span>
-                          <span className="text-gray-500 shrink-0">{repo.commits + repo.prs}</span>
+                          <span className="text-content-muted shrink-0">{repo.commits + repo.prs}</span>
                         </button>
                       ))}
                     </div>

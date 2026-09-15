@@ -84,31 +84,31 @@ export default function ProjectsPage() {
     <div className="flex h-full w-full overflow-hidden relative">
 
       {/* ── COLUMN 1: SPACES SIDEBAR ── */}
-      <div className="w-[240px] border-r border-[#1a1a22] bg-[#070709] flex flex-col shrink-0 overflow-y-auto select-none">
+      <div className="w-[240px] border-r border-line-subtle bg-surface-page flex flex-col shrink-0 overflow-y-auto select-none">
 
-        <div className="p-4 border-b border-[#1a1a22]">
+        <div className="p-4 border-b border-line-subtle">
           <Link
             href="/spaces"
-            className="w-full h-[40px] px-4 rounded-xl border border-[#2a2a35] hover:border-[#8b5cf6]/50 bg-[#120e20]/20 hover:bg-[#120e20]/40 text-[13px] font-semibold text-[#fafafa] flex items-center justify-between transition-all duration-300 group"
+            className="w-full h-[40px] px-4 rounded-xl border border-line hover:border-accent/50 bg-accent/10 hover:bg-accent/10 text-[13px] font-semibold text-content-primary flex items-center justify-between transition-all duration-300 group"
           >
             <span>Open Notebook</span>
-            <ArrowRight size={14} className="text-[#8b5cf6] group-hover:translate-x-1 transition-transform" />
+            <ArrowRight size={14} className="text-accent-text group-hover:translate-x-1 transition-transform" />
           </Link>
         </div>
 
         <div className="p-4 flex flex-col gap-1">
           <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-[10px] font-bold text-[#63637a] tracking-wider uppercase">Spaces</span>
+            <span className="text-xs font-bold text-content-muted tracking-wider uppercase">Spaces</span>
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-6 text-[#55556a]">
+            <div className="flex items-center justify-center py-6 text-content-muted">
               <Loader2 size={14} className="animate-spin" />
             </div>
           ) : spaces.length === 0 ? (
             <div className="px-2 py-4 text-center">
-              <p className="text-[11px] text-[#55556a]">No spaces yet.</p>
-              <Link href="/spaces" className="text-[11px] text-[#8b5cf6] hover:underline mt-1 block">Create one →</Link>
+              <p className="text-xs text-content-muted">No spaces yet.</p>
+              <Link href="/spaces" className="text-xs text-accent-text hover:underline mt-1 block">Create one →</Link>
             </div>
           ) : (
             spaces.map(space => (
@@ -117,8 +117,8 @@ export default function ProjectsPage() {
                 onClick={() => setActiveSpaceId(space._id)}
                 className={`w-full h-[36px] px-3 rounded-xl border text-[13px] font-medium flex items-center gap-2.5 transition-all text-left ${
                   activeSpaceId === space._id
-                    ? "bg-[#120e20]/60 border-[#8b5cf6]/45 text-[#fafafa] shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
-                    : "border-transparent hover:border-[#1e1e24] hover:bg-[#141418]/40 text-[#63637a] hover:text-[#fafafa]"
+                    ? "bg-accent/10 border-accent/50 text-content-primary shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
+                    : "border-transparent hover:border-line-subtle hover:bg-surface-raised/40 text-content-muted hover:text-content-primary"
                 }`}
               >
                 <span>{space.icon || "📁"}</span>
@@ -129,8 +129,8 @@ export default function ProjectsPage() {
         </div>
 
         {/* Quick links */}
-        <div className="mt-auto p-4 border-t border-[#1a1a22]/60 flex flex-col gap-1">
-          <span className="text-[10px] font-bold text-[#63637a] tracking-wider uppercase px-2 mb-1">Navigate</span>
+        <div className="mt-auto p-4 border-t border-line-subtle/60 flex flex-col gap-1">
+          <span className="text-xs font-bold text-content-muted tracking-wider uppercase px-2 mb-1">Navigate</span>
           {[
             { label: "AI Cowork", href: "/cowork", icon: Bot },
             { label: "Tasks", href: "/tasks", icon: CheckSquare },
@@ -139,9 +139,9 @@ export default function ProjectsPage() {
             <Link
               key={item.href}
               href={item.href}
-              className="w-full h-[34px] px-3 rounded-xl border border-transparent hover:border-[#1e1e24] hover:bg-[#141418]/30 flex items-center gap-2.5 text-[12px] text-[#63637a] hover:text-[#fafafa] transition-all"
+              className="w-full h-[34px] px-3 rounded-xl border border-transparent hover:border-line-subtle hover:bg-surface-raised/30 flex items-center gap-2.5 text-[12px] text-content-muted hover:text-content-primary transition-all"
             >
-              <item.icon size={13} className="text-[#8b5cf6]" />
+              <item.icon size={13} className="text-accent-text" />
               <span>{item.label}</span>
             </Link>
           ))}
@@ -152,26 +152,26 @@ export default function ProjectsPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
-        <header className="h-[76px] border-b border-[#1a1a22] flex items-center justify-between px-8 bg-[#050505] shrink-0 z-20">
+        <header className="h-[76px] border-b border-line-subtle flex items-center justify-between px-8 bg-surface-page shrink-0 z-20">
           <div className="flex-1 max-w-[420px]">
             <div className="relative group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#55556a] group-focus-within:text-[#8b5cf6] transition-colors" size={15} />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-content-muted group-focus-within:text-accent-text transition-colors" size={15} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search notes, sessions, history..."
-                className="w-full h-[38px] bg-[#0c0c0f]/80 border border-[#23232c] focus:border-[#8b5cf6]/50 rounded-xl pl-10 pr-10 text-[13px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none transition-all"
+                className="w-full h-[38px] bg-surface-panel/80 border border-line focus:border-accent/50 rounded-xl pl-10 pr-10 text-[13px] text-content-primary placeholder:text-content-muted focus:outline-none transition-all"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#55556a] hover:text-[#fafafa]">
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-content-muted hover:text-content-primary">
                   <X size={13} />
                 </button>
               )}
             </div>
           </div>
           <div className="flex items-center gap-6">
-            <Link href="/notification" className="text-[#63637a] hover:text-[#fafafa] relative p-1.5 rounded-lg hover:bg-[#141418] transition-colors">
+            <Link href="/notification" className="text-content-muted hover:text-content-primary relative p-1.5 rounded-lg hover:bg-surface-raised transition-colors">
               <Bell size={18} />
             </Link>
             <UserMenu />
@@ -179,17 +179,17 @@ export default function ProjectsPage() {
         </header>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-8 relative bg-[#050505]">
+        <div className="flex-1 overflow-y-auto p-8 relative bg-surface-page">
           <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(139,92,246,0.04),transparent_60%)] rounded-full pointer-events-none blur-3xl" />
 
           <div className="flex items-center justify-between mb-6 relative z-10">
             <div>
-              <h2 className="text-[20px] font-extrabold text-[#fafafa] tracking-tight">Memory Browser</h2>
-              <p className="text-[12px] text-[#63637a] mt-0.5">All your notes, AI sessions and work history in one place.</p>
+              <h2 className="text-[20px] font-extrabold text-content-primary tracking-tight">Memory Browser</h2>
+              <p className="text-[12px] text-content-muted mt-0.5">All your notes, AI sessions and work history in one place.</p>
             </div>
 
             {/* Tab switcher */}
-            <div className="flex bg-[#0c0c0f] border border-[#1e1e24] rounded-xl p-0.5 select-none shrink-0">
+            <div className="flex bg-surface-panel border border-line-subtle rounded-xl p-0.5 select-none shrink-0">
               {([
                 { id: "cowork", label: "Cowork", icon: Bot },
                 { id: "notes",  label: "Notes",  icon: FileText },
@@ -198,10 +198,10 @@ export default function ProjectsPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     activeTab === tab.id
-                      ? "bg-[#120e20] border border-[#8b5cf6]/35 text-[#fafafa]"
-                      : "text-[#63637a] hover:text-[#fafafa]"
+                      ? "bg-accent/10 border border-accent/40 text-content-primary"
+                      : "text-content-muted hover:text-content-primary"
                   }`}
                 >
                   <tab.icon size={12} />
@@ -213,7 +213,7 @@ export default function ProjectsPage() {
 
           {/* Error */}
           {error && (
-            <div className="mb-4 flex items-center gap-2 text-red-400 text-[12px] bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-2.5">
+            <div className="mb-4 flex items-center gap-2 text-status-error text-[12px] bg-status-error/5 border border-status-error/20 rounded-xl px-4 py-2.5">
               <AlertTriangle size={13} />
               <span>{error}</span>
             </div>
@@ -224,7 +224,7 @@ export default function ProjectsPage() {
             <div className="flex flex-col gap-3 relative z-10">
               {filteredSessions.length === 0 ? (
                 <EmptyState
-                  icon={<Bot className="w-10 h-10 text-[#2a2a35]" />}
+                  icon={<Bot className="w-10 h-10 text-content-muted" />}
                   title="No cowork sessions yet"
                   desc="Sessions created via MCP tools or the Cowork page appear here."
                   href="/cowork"
@@ -234,23 +234,23 @@ export default function ProjectsPage() {
                 <Link
                   key={s._id || s.id}
                   href={`/cowork/${s._id || s.id}`}
-                  className="bg-[#0c0c0f]/60 border border-[#1e1e24] hover:border-[#8b5cf6]/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
+                  className="bg-surface-panel/60 border border-line-subtle hover:border-accent/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center shrink-0">
-                    <Bot size={16} className="text-[#a855f7]" />
+                  <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                    <Bot size={16} className="text-accent-text" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[13px] font-bold text-[#fafafa] truncate">{s.title}</h3>
+                    <h3 className="text-[13px] font-bold text-content-primary truncate">{s.title}</h3>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[10px] text-[#55556a] font-medium capitalize">{s.source}</span>
-                      <span className="text-[10px] text-[#55556a]">•</span>
-                      <span className="text-[10px] text-[#55556a]">{timeAgo(s.createdAt)}</span>
+                      <span className="text-xs text-content-muted font-medium capitalize">{s.source}</span>
+                      <span className="text-xs text-content-muted">•</span>
+                      <span className="text-xs text-content-muted">{timeAgo(s.createdAt)}</span>
                       {s.tags?.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1e24] border border-[#2a2a35] text-[#63637a] font-mono">{tag}</span>
+                        <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-surface-hover border border-line text-content-muted font-mono">{tag}</span>
                       ))}
                     </div>
                   </div>
-                  <ArrowRight size={14} className="text-[#55556a] shrink-0 mt-1" />
+                  <ArrowRight size={14} className="text-content-muted shrink-0 mt-1" />
                 </Link>
               ))}
             </div>
@@ -261,7 +261,7 @@ export default function ProjectsPage() {
             <div className="flex flex-col gap-3 relative z-10">
               {!activeSpaceId ? (
                 <EmptyState
-                  icon={<BookOpen className="w-10 h-10 text-[#2a2a35]" />}
+                  icon={<BookOpen className="w-10 h-10 text-content-muted" />}
                   title="No spaces yet"
                   desc="Create a space in the Notebook to organize your notes."
                   href="/spaces"
@@ -269,7 +269,7 @@ export default function ProjectsPage() {
                 />
               ) : filteredNotes.length === 0 ? (
                 <EmptyState
-                  icon={<FileText className="w-10 h-10 text-[#2a2a35]" />}
+                  icon={<FileText className="w-10 h-10 text-content-muted" />}
                   title="No notes in this space"
                   desc="Start writing in the Notebook to see your notes here."
                   href="/spaces"
@@ -279,26 +279,26 @@ export default function ProjectsPage() {
                 <Link
                   key={n._id}
                   href="/spaces"
-                  className="bg-[#0c0c0f]/60 border border-[#1e1e24] hover:border-[#8b5cf6]/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
+                  className="bg-surface-panel/60 border border-line-subtle hover:border-accent/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-status-success/10 border border-status-success/20 flex items-center justify-center shrink-0">
                     {n.isStarred
-                      ? <Star size={16} className="text-[#f59e0b]" fill="currentColor" />
-                      : <FileText size={16} className="text-[#10b981]" />
+                      ? <Star size={16} className="text-status-warning" fill="currentColor" />
+                      : <FileText size={16} className="text-status-success" />
                     }
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[13px] font-bold text-[#fafafa] truncate">{n.title}</h3>
+                    <h3 className="text-[13px] font-bold text-content-primary truncate">{n.title}</h3>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[10px] text-[#55556a]">{timeAgo(n.updatedAt)}</span>
+                      <span className="text-xs text-content-muted">{timeAgo(n.updatedAt)}</span>
                       {n.tags?.slice(0, 3).map((tag, i) => (
-                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1e24] border border-[#2a2a35] text-[#63637a] font-mono flex items-center gap-0.5">
+                        <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-surface-hover border border-line text-content-muted font-mono flex items-center gap-0.5">
                           <Tag size={8} />{tag}
                         </span>
                       ))}
                     </div>
                   </div>
-                  <ArrowRight size={14} className="text-[#55556a] shrink-0 mt-1" />
+                  <ArrowRight size={14} className="text-content-muted shrink-0 mt-1" />
                 </Link>
               ))}
             </div>
@@ -309,7 +309,7 @@ export default function ProjectsPage() {
             <div className="flex flex-col gap-3 relative z-10">
               {filteredHistory.length === 0 ? (
                 <EmptyState
-                  icon={<Activity className="w-10 h-10 text-[#2a2a35]" />}
+                  icon={<Activity className="w-10 h-10 text-content-muted" />}
                   title="No history entries yet"
                   desc="Sync GitHub or Azure DevOps in History to populate your work timeline."
                   href="/history"
@@ -319,19 +319,19 @@ export default function ProjectsPage() {
                 <Link
                   key={h._id}
                   href="/history"
-                  className="bg-[#0c0c0f]/60 border border-[#1e1e24] hover:border-[#8b5cf6]/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
+                  className="bg-surface-panel/60 border border-line-subtle hover:border-accent/40 rounded-2xl p-4 flex items-start gap-4 transition-all hover:-translate-y-0.5"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-[#3b82f6]/10 border border-[#3b82f6]/20 flex items-center justify-center shrink-0">
-                    <Activity size={16} className="text-[#3b82f6]" />
+                  <div className="w-9 h-9 rounded-xl bg-status-info/10 border border-status-info/20 flex items-center justify-center shrink-0">
+                    <Activity size={16} className="text-status-info" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[13px] font-bold text-[#fafafa] truncate">{h.title}</h3>
+                    <h3 className="text-[13px] font-bold text-content-primary truncate">{h.title}</h3>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1e1e24] border border-[#2a2a35] text-[#63637a] capitalize font-mono">{h.category}</span>
-                      <span className="text-[10px] text-[#55556a]">{timeAgo(h.createdAt)}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-surface-hover border border-line text-content-muted capitalize font-mono">{h.category}</span>
+                      <span className="text-xs text-content-muted">{timeAgo(h.createdAt)}</span>
                     </div>
                   </div>
-                  <ArrowRight size={14} className="text-[#55556a] shrink-0 mt-1" />
+                  <ArrowRight size={14} className="text-content-muted shrink-0 mt-1" />
                 </Link>
               ))}
             </div>
@@ -346,11 +346,11 @@ function EmptyState({ icon, title, desc, href, linkLabel }: {
   icon: React.ReactNode; title: string; desc: string; href: string; linkLabel: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-[#1a1a22] rounded-3xl bg-[#0c0c0f]/20">
+    <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-line-subtle rounded-3xl bg-surface-panel/20">
       <div className="mb-4">{icon}</div>
-      <h3 className="text-[14px] font-bold text-[#fafafa] mb-1">{title}</h3>
-      <p className="text-[12px] text-[#63637a] max-w-xs mb-4">{desc}</p>
-      <Link href={href} className="text-[12px] text-[#8b5cf6] hover:text-[#fafafa] transition-colors font-semibold">
+      <h3 className="text-[14px] font-bold text-content-primary mb-1">{title}</h3>
+      <p className="text-[12px] text-content-muted max-w-xs mb-4">{desc}</p>
+      <Link href={href} className="text-[12px] text-accent-text hover:text-content-primary transition-colors font-semibold">
         {linkLabel}
       </Link>
     </div>

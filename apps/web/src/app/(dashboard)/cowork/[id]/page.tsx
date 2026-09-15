@@ -18,12 +18,12 @@ const MarkdownViewer = dynamic(() => import("@/components/MarkdownViewer"), { ss
 // ─── Source helpers ───────────────────────────────────────────────────────────
 
 const SOURCE_MAP: Record<string, { icon: React.ReactNode; bgClass: string; borderClass: string; textClass: string; label: string }> = {
-  "antigravity": { icon: <Bot className="w-5 h-5" />,          bgClass: "bg-purple-500/10", borderClass: "border-purple-500/20", textClass: "text-[#a855f7]", label: "Antigravity" },
-  "claude-code": { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-orange-500/10", borderClass: "border-orange-500/20", textClass: "text-orange-400", label: "Claude Code" },
-  "codex":       { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-emerald-500/10", borderClass: "border-emerald-500/20", textClass: "text-emerald-400", label: "Codex" },
-  "cursor":      { icon: <Code2 className="w-5 h-5" />,         bgClass: "bg-blue-500/10",   borderClass: "border-blue-500/20",   textClass: "text-[#3b82f6]", label: "Cursor" },
+  "antigravity": { icon: <Bot className="w-5 h-5" />,          bgClass: "bg-accent/10", borderClass: "border-accent/20", textClass: "text-accent-text", label: "Antigravity" },
+  "claude-code": { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-status-warning/10", borderClass: "border-status-warning/20", textClass: "text-status-warning", label: "Claude Code" },
+  "codex":       { icon: <TerminalSquare className="w-5 h-5" />,bgClass: "bg-status-success/10", borderClass: "border-status-success/20", textClass: "text-status-success", label: "Codex" },
+  "cursor":      { icon: <Code2 className="w-5 h-5" />,         bgClass: "bg-status-info/10",   borderClass: "border-status-info/20",   textClass: "text-status-info", label: "Cursor" },
 };
-const defaultSource = { icon: <ShieldCheck className="w-5 h-5" />, bgClass: "bg-slate-500/10", borderClass: "border-slate-500/20", textClass: "text-slate-400", label: "System" };
+const defaultSource = { icon: <ShieldCheck className="w-5 h-5" />, bgClass: "bg-surface-raised", borderClass: "border-line-subtle", textClass: "text-content-muted", label: "System" };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -135,8 +135,8 @@ export default function CoworkDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-[#55556a]">
-        <Loader2 className="w-5 h-5 animate-spin mr-2.5 text-[#8b5cf6]" />
+      <div className="flex-1 flex items-center justify-center text-content-muted">
+        <Loader2 className="w-5 h-5 animate-spin mr-2.5 text-accent-text" />
         <span className="text-[12px] font-mono">Retrieving session…</span>
       </div>
     );
@@ -144,9 +144,9 @@ export default function CoworkDetailPage() {
 
   if (error && !session) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-[#55556a] gap-4">
-        <p className="text-red-400 text-sm">{error}</p>
-        <button onClick={() => router.push("/cowork")} className="flex items-center gap-1.5 text-xs text-[#8b5cf6] hover:underline">
+      <div className="flex-1 flex flex-col items-center justify-center text-content-muted gap-4">
+        <p className="text-status-error text-sm">{error}</p>
+        <button onClick={() => router.push("/cowork")} className="flex items-center gap-1.5 text-xs text-accent-text hover:underline">
           <ArrowLeft size={14} /> Back to Cowork
         </button>
       </div>
@@ -155,9 +155,9 @@ export default function CoworkDetailPage() {
 
   if (!session) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-[#55556a] gap-4">
-        <p className="text-red-400 text-sm">Session not found</p>
-        <button onClick={() => router.push("/cowork")} className="flex items-center gap-1.5 text-xs text-[#8b5cf6] hover:underline">
+      <div className="flex-1 flex flex-col items-center justify-center text-content-muted gap-4">
+        <p className="text-status-error text-sm">Session not found</p>
+        <button onClick={() => router.push("/cowork")} className="flex items-center gap-1.5 text-xs text-accent-text hover:underline">
           <ArrowLeft size={14} /> Back to Cowork
         </button>
       </div>
@@ -169,7 +169,7 @@ export default function CoworkDetailPage() {
   const time = new Date(session.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="flex-1 bg-[#050505] overflow-y-auto relative select-none">
+    <div className="flex-1 bg-surface-page overflow-y-auto relative select-none">
       <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(139,92,246,0.02),transparent_60%)] rounded-full pointer-events-none blur-3xl" />
 
       <div className="max-w-4xl mx-auto w-full p-6 md:p-8 flex flex-col gap-6 relative z-10">
@@ -178,7 +178,7 @@ export default function CoworkDetailPage() {
         <div className="flex items-center justify-between">
           <button
             onClick={() => router.push("/cowork")}
-            className="flex items-center gap-2 text-[12px] font-semibold text-[#63637a] hover:text-[#fafafa] transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-[12px] font-semibold text-content-muted hover:text-content-primary transition-colors cursor-pointer"
           >
             <ArrowLeft size={14} />
             <span>Back to Cowork</span>
@@ -186,7 +186,7 @@ export default function CoworkDetailPage() {
           {session.isOwn && (
             <button
               onClick={() => setShowDeleteModal(true)}
-              className="flex items-center gap-1.5 text-[11px] text-[#63637a] hover:text-red-400 px-3 py-1.5 rounded-xl border border-[#2a2a35] hover:border-red-500/30 hover:bg-red-500/5 transition-all"
+              className="flex items-center gap-1.5 text-xs text-content-muted hover:text-status-error px-3 py-1.5 rounded-xl border border-line hover:border-status-error/30 hover:bg-status-error/5 transition-all"
             >
               <Trash2 size={12} />
               Delete
@@ -195,14 +195,14 @@ export default function CoworkDetailPage() {
         </div>
 
         {/* Header Block */}
-        <div className="bg-[#0c0c0f]/50 border border-[#1e1e24] rounded-2xl p-6 flex items-start gap-4">
+        <div className="bg-surface-panel/50 border border-line-subtle rounded-2xl p-6 flex items-start gap-4">
           <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${sourceData.bgClass} ${sourceData.borderClass} ${sourceData.textClass}`}>
             {sourceData.icon}
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-[#fafafa] leading-snug">{session.title}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#55556a] mt-2.5 font-medium">
-              <span className="flex items-center gap-1 text-[#a1a1aa]">
+            <h1 className="text-lg font-bold text-content-primary leading-snug">{session.title}</h1>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-content-muted mt-2.5 font-medium">
+              <span className="flex items-center gap-1 text-content-secondary">
                 <User size={11} />
                 <span>{session.author?.name ?? "Unknown"}</span>
               </span>
@@ -223,12 +223,12 @@ export default function CoworkDetailPage() {
                       <span>•</span>
                       {branchHref ? (
                         <a href={branchHref} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 font-mono text-[#a855f7] hover:text-[#c4b5fd] hover:underline transition-colors" title={r.repoKey}>
+                          className="flex items-center gap-1 font-mono text-accent-text hover:text-accent-text hover:underline transition-colors" title={r.repoKey}>
                           <GitBranch size={11} />
                           <span>{label}</span>
                         </a>
                       ) : (
-                        <span className="flex items-center gap-1 font-mono text-[#a855f7]" title={r.repoKey}>
+                        <span className="flex items-center gap-1 font-mono text-accent-text" title={r.repoKey}>
                           <GitBranch size={11} />
                           <span>{label}</span>
                         </span>
@@ -236,12 +236,12 @@ export default function CoworkDetailPage() {
                       {r.commitSha && (
                         commitHref ? (
                           <a href={commitHref} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 font-mono text-slate-400 hover:text-slate-200 hover:underline transition-colors">
+                            className="flex items-center gap-1 font-mono text-content-muted hover:text-content-secondary hover:underline transition-colors">
                             <GitCommit size={11} />
                             <span>{r.commitSha.substring(0, 7)}</span>
                           </a>
                         ) : (
-                          <span className="flex items-center gap-1 font-mono text-slate-400">
+                          <span className="flex items-center gap-1 font-mono text-content-muted">
                             <GitCommit size={11} />
                             <span>{r.commitSha.substring(0, 7)}</span>
                           </span>
@@ -249,7 +249,7 @@ export default function CoworkDetailPage() {
                       )}
                       {r.prUrl && (
                         <a href={r.prUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 font-mono text-[#22c55e] hover:text-[#4ade80] hover:underline transition-colors">
+                          className="flex items-center gap-1 font-mono text-status-success hover:text-status-success hover:underline transition-colors">
                           <GitPullRequest size={11} />
                           <span>PR</span>
                         </a>
@@ -262,7 +262,7 @@ export default function CoworkDetailPage() {
                   {session.branch && (
                     <>
                       <span>•</span>
-                      <span className="flex items-center gap-1 font-mono text-[#a855f7]">
+                      <span className="flex items-center gap-1 font-mono text-accent-text">
                         <GitBranch size={11} />
                         <span>{session.branch}</span>
                       </span>
@@ -271,7 +271,7 @@ export default function CoworkDetailPage() {
                   {session.commitSha && (
                     <>
                       <span>•</span>
-                      <span className="flex items-center gap-1 font-mono text-slate-400">
+                      <span className="flex items-center gap-1 font-mono text-content-muted">
                         <GitCommit size={11} />
                         <span>{session.commitSha.substring(0, 7)}</span>
                       </span>
@@ -285,7 +285,7 @@ export default function CoworkDetailPage() {
             {session.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {session.tags.map((tag, i) => (
-                  <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded bg-[#1e1e24]/60 border border-[#2a2a35]/40 text-[#63637a] uppercase tracking-wider">
+                  <span key={i} className="text-xs font-bold px-2 py-0.5 rounded bg-surface-hover/60 border border-line/40 text-content-muted uppercase tracking-wider">
                     {tag}
                   </span>
                 ))}
@@ -296,15 +296,15 @@ export default function CoworkDetailPage() {
             {(session.intent || session.outcome) && (
               <div className="flex gap-2 mt-2.5">
                 {session.intent && (
-                  <span className="text-[9px] px-2 py-0.5 rounded font-mono bg-[#8b5cf6]/10 text-[#a78bfa] border border-[#8b5cf6]/20">{session.intent}</span>
+                  <span className="text-xs px-2 py-0.5 rounded font-mono bg-accent/10 text-accent-text border border-accent/20">{session.intent}</span>
                 )}
                 {session.outcome && (
-                  <span className={`text-[9px] px-2 py-0.5 rounded font-mono border ${
+                  <span className={`text-xs px-2 py-0.5 rounded font-mono border ${
                     session.outcome === "fixed" || session.outcome === "implemented"
-                      ? "bg-green-500/10 text-green-400 border-green-500/20"
+                      ? "bg-status-success/10 text-status-success border-status-success/20"
                       : session.outcome === "blocked" || session.outcome === "abandoned"
-                      ? "bg-red-500/10 text-red-400 border-red-500/20"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      ? "bg-status-error/10 text-status-error border-status-error/20"
+                      : "bg-status-warning/10 text-status-warning border-status-warning/20"
                   }`}>
                     {session.outcome}
                   </span>
@@ -315,19 +315,19 @@ export default function CoworkDetailPage() {
         </div>
 
         {/* Summary Card */}
-        <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-6 min-w-0 overflow-hidden">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-[#55556a] mb-4">Summary</h2>
+        <div className="bg-surface-panel/40 border border-line-subtle rounded-2xl p-6 min-w-0 overflow-hidden">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-content-muted mb-4">Summary</h2>
           <div className="select-text">
             <MarkdownViewer content={session.summary} />
           </div>
         </div>
 
         {/* Helpful Feedback Widget */}
-        <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 select-none">
-          <div className="flex items-center gap-2 text-[12px] text-[#a1a1aa] font-medium">
+        <div className="bg-surface-panel/40 border border-line-subtle rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 select-none">
+          <div className="flex items-center gap-2 text-[12px] text-content-secondary font-medium">
             <span>Was this session useful?</span>
             {(helpfulCount > 0 || notHelpfulCount > 0) && (
-              <span className="text-[10px] text-[#55556a] font-mono">
+              <span className="text-xs text-content-muted font-mono">
                 👍 {helpfulCount} · 👎 {notHelpfulCount}
               </span>
             )}
@@ -336,10 +336,10 @@ export default function CoworkDetailPage() {
             <button
               onClick={() => handleVote("up")}
               disabled={votePending}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer disabled:opacity-60 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 ${
                 helpfulVote === "up"
-                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.1)]"
-                  : "bg-[#0c0c0f] border-[#1e1e24] text-[#63637a] hover:text-emerald-300 hover:border-emerald-500/35"
+                  ? "bg-status-success/20 border-status-success/40 text-status-success shadow-[0_0_12px_rgba(16,185,129,0.1)]"
+                  : "bg-surface-panel border-line-subtle text-content-muted hover:text-status-success hover:border-status-success/40"
               }`}
             >
               <ThumbsUp size={11} />
@@ -348,10 +348,10 @@ export default function CoworkDetailPage() {
             <button
               onClick={() => handleVote("down")}
               disabled={votePending}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer disabled:opacity-60 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer disabled:opacity-60 ${
                 helpfulVote === "down"
-                  ? "bg-red-500/20 border-red-500/40 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.1)]"
-                  : "bg-[#0c0c0f] border-[#1e1e24] text-[#63637a] hover:text-red-300 hover:border-red-500/35"
+                  ? "bg-status-error/20 border-status-error/40 text-status-error shadow-[0_0_12px_rgba(239,68,68,0.1)]"
+                  : "bg-surface-panel border-line-subtle text-content-muted hover:text-status-error hover:border-status-error/40"
               }`}
             >
               <ThumbsDown size={11} />
@@ -361,35 +361,35 @@ export default function CoworkDetailPage() {
         </div>
 
         {/* AI Chat Panel */}
-        <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl overflow-hidden">
+        <div className="bg-surface-panel/40 border border-line-subtle rounded-2xl overflow-hidden">
           <button
             onClick={() => setShowChat(v => !v)}
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#111115] transition-colors"
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-surface-raised transition-colors"
           >
             <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-[#8b5cf6]" />
-              <span className="text-[11px] font-bold uppercase tracking-widest text-[#55556a]">Ask AI about this session</span>
+              <Sparkles size={14} className="text-accent-text" />
+              <span className="text-xs font-bold uppercase tracking-widest text-content-muted">Ask AI about this session</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-[#3a3a4a]">Powered by Gemini</span>
-              {showChat ? <ChevronDown size={12} className="text-[#55556a]" /> : <ChevronRight size={12} className="text-[#55556a]" />}
+              <span className="text-xs text-content-muted">Powered by Gemini</span>
+              {showChat ? <ChevronDown size={12} className="text-content-muted" /> : <ChevronRight size={12} className="text-content-muted" />}
             </div>
           </button>
 
           {showChat && (
-            <div className="border-t border-[#1e1e24]">
+            <div className="border-t border-line-subtle">
               {/* Messages */}
               <div className="h-72 overflow-y-auto p-4 space-y-3">
                 {chatMsgs.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-center">
-                    <MessageSquare size={24} className="text-[#2a2a35] mb-2" />
-                    <p className="text-[#3a3a4a] text-xs">Ask anything about this session or related past work</p>
+                    <MessageSquare size={24} className="text-content-muted mb-2" />
+                    <p className="text-content-muted text-xs">Ask anything about this session or related past work</p>
                     <div className="flex flex-wrap gap-2 mt-3 justify-center">
                       {["What was fixed here?", "Any related issues?", "Summarize the key decisions"].map(q => (
                         <button
                           key={q}
                           onClick={() => { setChatInput(q); }}
-                          className="text-[10px] text-[#8b5cf6] border border-[#8b5cf6]/20 bg-[#8b5cf6]/5 px-2.5 py-1 rounded-lg hover:bg-[#8b5cf6]/15 transition-colors"
+                          className="text-xs text-accent-text border border-accent/20 bg-accent/5 px-2.5 py-1 rounded-lg hover:bg-accent/20 transition-colors"
                         >
                           {q}
                         </button>
@@ -402,15 +402,15 @@ export default function CoworkDetailPage() {
                     <div
                       className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-[#8b5cf6]/20 border border-[#8b5cf6]/25 text-[#e2e0ff]"
-                          : "bg-[#111115] border border-[#1a1a22] text-[#c4c4d4]"
+                          ? "bg-accent/20 border border-accent/25 text-content-primary"
+                          : "bg-surface-raised border border-line-subtle text-content-secondary"
                       }`}
                     >
                       {msg.role === "model" ? (
                         <>
                           <div className="flex items-center gap-1.5 mb-1.5">
-                            <Sparkles size={10} className="text-[#8b5cf6]" />
-                            <span className="text-[10px] text-[#8b5cf6] font-medium">Operium AI</span>
+                            <Sparkles size={10} className="text-accent-text" />
+                            <span className="text-xs text-accent-text font-medium">Operium AI</span>
                           </div>
                           <div className="select-text">
                             <MarkdownViewer content={msg.content} />
@@ -424,9 +424,9 @@ export default function CoworkDetailPage() {
                 ))}
                 {chatLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-[#111115] border border-[#1a1a22] rounded-xl px-4 py-3 flex items-center gap-2">
-                      <Loader2 size={12} className="text-[#8b5cf6] animate-spin" />
-                      <span className="text-xs text-[#63637a]">Thinking…</span>
+                    <div className="bg-surface-raised border border-line-subtle rounded-xl px-4 py-3 flex items-center gap-2">
+                      <Loader2 size={12} className="text-accent-text animate-spin" />
+                      <span className="text-xs text-content-muted">Thinking…</span>
                     </div>
                   </div>
                 )}
@@ -434,20 +434,20 @@ export default function CoworkDetailPage() {
               </div>
 
               {/* Input */}
-              <div className="border-t border-[#1e1e24] p-4 flex gap-3">
+              <div className="border-t border-line-subtle p-4 flex gap-3">
                 <input
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
                   placeholder="Ask about this session, related issues, next steps…"
-                  className="flex-1 bg-[#111115] border border-[#1a1a22] rounded-xl px-4 py-2.5 text-xs text-[#fafafa] placeholder-[#3a3a4a] outline-none focus:border-[#8b5cf6]/40 transition-colors"
+                  className="flex-1 bg-surface-raised border border-line-control rounded-xl px-4 py-2.5 text-xs text-content-primary placeholder:text-content-muted focus:border-accent focus:ring-2 focus:ring-[var(--accent-ring)] transition-colors"
                 />
                 <button
                   onClick={sendChat}
                   disabled={!chatInput.trim() || chatLoading}
-                  className="w-10 h-10 rounded-xl bg-[#8b5cf6] hover:bg-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                  className="w-10 h-10 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
                 >
-                  <Send size={14} className="text-white" />
+                  <Send size={14} className="text-content-primary" />
                 </button>
               </div>
             </div>
@@ -461,43 +461,43 @@ export default function CoworkDetailPage() {
 
       {/* ── Error toast ── */}
       {error && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/30 text-red-400 text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-status-error/10 border border-status-error/30 text-status-error text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
           <AlertTriangle size={13} />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 hover:text-red-300"><X size={13} /></button>
+          <button onClick={() => setError(null)} className="ml-2 hover:text-status-error"><X size={13} /></button>
         </div>
       )}
 
       {/* ── Delete confirm modal ── */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-[#000000]/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0c0c0f] border border-[#2a2a35] w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7)]">
+        <div className="fixed inset-0 bg-overlay/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-panel border border-line w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7)]">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                <Trash2 size={18} className="text-red-400" />
+              <div className="w-10 h-10 rounded-xl bg-status-error/10 border border-status-error/20 flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-status-error" />
               </div>
               <div>
-                <h3 className="text-[15px] font-bold text-[#fafafa]">Delete Session</h3>
-                <p className="text-[11px] text-[#63637a]">This cannot be undone</p>
+                <h3 className="text-[15px] font-bold text-content-primary">Delete Session</h3>
+                <p className="text-xs text-content-muted">This cannot be undone</p>
               </div>
             </div>
-            <div className="bg-[#141418] border border-[#1e1e24] rounded-xl p-3.5 mb-4">
-              <p className="text-[13px] text-[#a1a1aa]">
-                Delete <span className="font-semibold text-[#fafafa]">&ldquo;{session.title}&rdquo;</span>? All chunks will be permanently removed.
+            <div className="bg-surface-raised border border-line-subtle rounded-xl p-3.5 mb-4">
+              <p className="text-[13px] text-content-secondary">
+                Delete <span className="font-semibold text-content-primary">&ldquo;{session.title}&rdquo;</span>? All chunks will be permanently removed.
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="flex-1 h-[38px] rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] text-[13px] font-semibold transition-all disabled:opacity-50"
+                className="flex-1 h-[38px] rounded-xl border border-line text-content-secondary hover:text-content-primary text-[13px] font-semibold transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex-1 h-[38px] rounded-xl bg-red-600 hover:bg-red-500 text-white text-[13px] font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                className="flex-1 h-[38px] rounded-xl bg-red-600 hover:bg-red-700 text-content-inverse text-[13px] font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
               >
                 {deleting ? <><Loader2 size={13} className="animate-spin" />Deleting…</> : "Delete"}
               </button>

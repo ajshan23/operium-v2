@@ -321,24 +321,24 @@ export default function HistoryPage() {
     <div className="flex h-full w-full overflow-hidden relative">
 
       {/* ── COLUMN 1: TIMELINE FILTERS SIDEBAR ── */}
-      <div className="w-[260px] border-r border-[var(--border-subtle)] bg-[var(--s0)] flex flex-col shrink-0 overflow-y-auto select-none">
+      <div className="w-[260px] border-r border-line-subtle bg-surface-page flex flex-col shrink-0 overflow-y-auto select-none">
 
-        <div className="p-4 border-b border-[var(--border-subtle)]">
+        <div className="p-4 border-b border-line-subtle">
           <button
             onClick={() => setShowSaveMemoryModal(true)}
-            className="w-full h-[40px] px-4 rounded-xl border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.5)] bg-[var(--s1)] hover:bg-[var(--s2)] text-[13px] font-semibold text-[var(--text-primary)] flex items-center justify-between transition-all duration-300 group"
+            className="w-full h-[40px] px-4 rounded-xl border border-line hover:border-accent/50 bg-surface-panel hover:bg-surface-raised text-[13px] font-semibold text-content-primary flex items-center justify-between transition-all duration-300 group"
           >
             <span>Add History</span>
-            <Plus size={16} className="text-[var(--accent)] group-hover:rotate-90 transition-transform duration-300" />
+            <Plus size={16} className="text-accent-text group-hover:rotate-90 transition-transform duration-300" />
           </button>
         </div>
 
-        <div className="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
-          <span className="text-[12px] font-extrabold text-[var(--text-primary)] tracking-wider uppercase">Timeline Filters</span>
+        <div className="p-4 border-b border-line-subtle flex items-center justify-between">
+          <span className="text-[12px] font-extrabold text-content-primary tracking-wider uppercase">Timeline Filters</span>
           {(filterHighlight !== "all" || selectedSource !== "all" || selectedTimeframe !== "all" || selectedCategory !== "All" || searchQuery !== "") && (
             <button
               onClick={() => { setFilterHighlight("all"); setSelectedSource("all"); setSelectedTimeframe("all"); setSelectedCategory("All"); setSearchQuery(""); }}
-              className="text-[10px] text-[var(--accent)] hover:text-[#a78bfa] font-bold flex items-center gap-1 transition-colors"
+              className="text-xs text-accent-text hover:text-accent-text font-bold flex items-center gap-1 transition-colors"
             >
               <RotateCcw size={11} /> Reset
             </button>
@@ -348,13 +348,13 @@ export default function HistoryPage() {
         {/* Highlights Filter Group */}
         <div className="p-4 flex flex-col gap-1.5">
           <div className="flex items-center justify-between px-2 mb-1">
-            <span className="text-[10px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Highlights</span>
+            <span className="text-xs font-bold text-content-muted tracking-wider uppercase">Highlights</span>
           </div>
           {[
-            { id: "all",       label: "All Memories", icon: Bookmark,      color: "text-[var(--accent)]", count: totalEntries },
-            { id: "milestone", label: "Milestones",   icon: Rocket,        color: "text-purple-400", count: memories.filter(m => m.isMilestone).length },
-            { id: "blocker",   label: "Blockers",     icon: AlertTriangle, color: "text-red-400",    count: memories.filter(m => m.isBlocker).length },
-            { id: "important", label: "Important",    icon: Star,          color: "text-amber-400",  count: memories.filter(m => m.isImportant).length },
+            { id: "all",       label: "All Memories", icon: Bookmark,      color: "text-accent-text", count: totalEntries },
+            { id: "milestone", label: "Milestones",   icon: Rocket,        color: "text-accent-text", count: memories.filter(m => m.isMilestone).length },
+            { id: "blocker",   label: "Blockers",     icon: AlertTriangle, color: "text-status-error",    count: memories.filter(m => m.isBlocker).length },
+            { id: "important", label: "Important",    icon: Star,          color: "text-status-warning",  count: memories.filter(m => m.isImportant).length },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = filterHighlight === item.id;
@@ -362,16 +362,16 @@ export default function HistoryPage() {
               <button key={item.id} onClick={() => setFilterHighlight(item.id as any)}
                 className={`w-full h-[38px] px-3 rounded-xl border flex items-center justify-between text-[13px] font-medium transition-all ${
                   isActive
-                    ? "bg-[rgba(var(--accent-rgb),0.1)] border-[rgba(var(--accent-rgb),0.45)] text-[var(--text-primary)] shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
-                    : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--s2)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "bg-accent/10 border-accent/50 text-content-primary shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
+                    : "border-transparent hover:border-line-subtle hover:bg-surface-raised text-content-muted hover:text-content-primary"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon size={15} className={item.color} />
                   <span>{item.label}</span>
                 </div>
-                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                  isActive ? "bg-[rgba(var(--accent-rgb),0.15)] border-[rgba(var(--accent-rgb),0.3)] text-[var(--accent)]" : "bg-[var(--s2)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+                  isActive ? "bg-accent/20 border-accent/30 text-accent-text" : "bg-surface-raised border-line-subtle text-content-muted"
                 }`}>
                   {item.count}
                 </span>
@@ -381,17 +381,17 @@ export default function HistoryPage() {
         </div>
 
         {/* Sources Filter Group */}
-        <div className="p-4 flex flex-col gap-1.5 border-t border-[var(--border-subtle)]">
+        <div className="p-4 flex flex-col gap-1.5 border-t border-line-subtle">
           <div className="flex items-center justify-between px-2 mb-1">
-            <span className="text-[10px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Sources</span>
+            <span className="text-xs font-bold text-content-muted tracking-wider uppercase">Sources</span>
           </div>
           {[
-            { id: "all",    label: "All Sources",  icon: Layers,        color: "text-[var(--accent)]",  count: memories.length },
-            { id: "manual", label: "Manual",       icon: FileText,      color: "text-blue-400",   count: memories.filter(m => m.source === "manual").length },
-            { id: "git",    label: "Git Commits",  icon: GitCommit,     color: "text-emerald-400", count: memories.filter(m => m.source === "git").length },
-            { id: "pr",     label: "PR Reviews",   icon: GitPullRequest, color: "text-[#a855f7]", count: memories.filter(m => m.source === "pr").length },
+            { id: "all",    label: "All Sources",  icon: Layers,        color: "text-accent-text",  count: memories.length },
+            { id: "manual", label: "Manual",       icon: FileText,      color: "text-status-info",   count: memories.filter(m => m.source === "manual").length },
+            { id: "git",    label: "Git Commits",  icon: GitCommit,     color: "text-status-success", count: memories.filter(m => m.source === "git").length },
+            { id: "pr",     label: "PR Reviews",   icon: GitPullRequest, color: "text-accent-text", count: memories.filter(m => m.source === "pr").length },
             { id: "deploy", label: "Deployments",  icon: Rocket,        color: "text-pink-400",   count: memories.filter(m => m.source === "deploy" || m.source === "build").length },
-            { id: "azure",  label: "Azure DevOps", icon: Activity,      color: "text-blue-300",   count: memories.filter(m => m.isAzure).length },
+            { id: "azure",  label: "Azure DevOps", icon: Activity,      color: "text-status-info",   count: memories.filter(m => m.isAzure).length },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = selectedSource === item.id;
@@ -399,16 +399,16 @@ export default function HistoryPage() {
               <button key={item.id} onClick={() => setSelectedSource(item.id as any)}
                 className={`w-full h-[38px] px-3 rounded-xl border flex items-center justify-between text-[13px] font-medium transition-all ${
                   isActive
-                    ? "bg-[rgba(var(--accent-rgb),0.1)] border-[rgba(var(--accent-rgb),0.45)] text-[var(--text-primary)] shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
-                    : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--s2)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "bg-accent/10 border-accent/50 text-content-primary shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
+                    : "border-transparent hover:border-line-subtle hover:bg-surface-raised text-content-muted hover:text-content-primary"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon size={15} className={item.color} />
                   <span>{item.label}</span>
                 </div>
-                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
-                  isActive ? "bg-[rgba(var(--accent-rgb),0.15)] border-[rgba(var(--accent-rgb),0.3)] text-[var(--accent)]" : "bg-[var(--s2)] border-[var(--border-subtle)] text-[var(--text-muted)]"
+                <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${
+                  isActive ? "bg-accent/20 border-accent/30 text-accent-text" : "bg-surface-raised border-line-subtle text-content-muted"
                 }`}>
                   {item.count}
                 </span>
@@ -418,9 +418,9 @@ export default function HistoryPage() {
         </div>
 
         {/* Timeframes Filter Group */}
-        <div className="p-4 flex flex-col gap-1.5 border-t border-[var(--border-subtle)] flex-1">
+        <div className="p-4 flex flex-col gap-1.5 border-t border-line-subtle flex-1">
           <div className="flex items-center justify-between px-2 mb-1">
-            <span className="text-[10px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Timeframe</span>
+            <span className="text-xs font-bold text-content-muted tracking-wider uppercase">Timeframe</span>
           </div>
           {[
             { id: "all",       label: "All Time",   icon: Calendar },
@@ -434,12 +434,12 @@ export default function HistoryPage() {
               <button key={item.id} onClick={() => setSelectedTimeframe(item.id as any)}
                 className={`w-full h-[38px] px-3 rounded-xl border flex items-center justify-between text-[13px] font-medium transition-all ${
                   isActive
-                    ? "bg-[rgba(var(--accent-rgb),0.1)] border-[rgba(var(--accent-rgb),0.45)] text-[var(--text-primary)] shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
-                    : "border-transparent hover:border-[var(--border-subtle)] hover:bg-[var(--s2)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    ? "bg-accent/10 border-accent/50 text-content-primary shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
+                    : "border-transparent hover:border-line-subtle hover:bg-surface-raised text-content-muted hover:text-content-primary"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon size={15} className={isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]"} />
+                  <Icon size={15} className={isActive ? "text-accent-text" : "text-content-muted"} />
                   <span>{item.label}</span>
                 </div>
               </button>
@@ -453,24 +453,24 @@ export default function HistoryPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* ── HEADER ── */}
-        <header className="h-[76px] border-b border-[var(--border-subtle)] flex items-center justify-between px-8 bg-[var(--s0)] shrink-0 z-20">
+        <header className="h-[76px] border-b border-line-subtle flex items-center justify-between px-8 bg-surface-page shrink-0 z-20">
           <div className="flex-1 max-w-[420px]">
             <div className="relative group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors" size={15} />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-content-muted group-focus-within:text-accent-text transition-colors" size={15} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search history..."
-                className="w-full h-[38px] bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl pl-10 pr-10 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:shadow-[0_0_15px_rgba(139,92,246,0.1)] transition-all"
+                className="w-full h-[38px] bg-surface-panel border border-line-subtle focus:border-accent/50 rounded-xl pl-10 pr-10 text-[13px] text-content-primary placeholder:text-content-muted focus:outline-none focus:shadow-[0_0_15px_rgba(139,92,246,0.1)] transition-all"
               />
-              {loading && <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--accent)] animate-spin" size={14} />}
+              {loading && <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-accent-text animate-spin" size={14} />}
             </div>
           </div>
           <div className="flex items-center gap-6">
-            <button className="text-[var(--text-muted)] hover:text-[var(--text-primary)] relative p-1.5 rounded-lg hover:bg-[var(--s2)]">
+            <button className="text-content-muted hover:text-content-primary relative p-1.5 rounded-lg hover:bg-surface-raised">
               <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[var(--error)] rounded-full shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-status-error rounded-full shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
             </button>
           </div>
         </header>
@@ -479,26 +479,26 @@ export default function HistoryPage() {
         <div className="flex-1 flex overflow-hidden">
 
           {/* ── COLUMN 2: HISTORY FEED ── */}
-          <div className="flex-1 overflow-y-auto p-8 relative bg-[var(--s0)] flex flex-col min-w-0">
+          <div className="flex-1 overflow-y-auto p-8 relative bg-surface-page flex flex-col min-w-0">
             <div className="dash-glow-purple absolute top-[10%] left-[20%] w-[600px] h-[600px] rounded-full pointer-events-none blur-3xl" />
 
             {/* Error banner */}
             {fetchError && (
-              <div className="mb-4 shrink-0 text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
+              <div className="mb-4 shrink-0 text-[12px] text-status-error bg-status-error/10 border border-status-error/20 rounded-xl px-4 py-3 flex items-center gap-2">
                 <AlertTriangle size={14} className="shrink-0" />
                 <span>{fetchError}</span>
-                <button onClick={() => fetchHistory(1)} className="ml-auto text-[11px] font-semibold text-red-300 hover:text-red-200 transition-colors">Retry</button>
+                <button onClick={() => fetchHistory(1)} className="ml-auto text-xs font-semibold text-status-error hover:text-status-error transition-colors">Retry</button>
               </div>
             )}
 
             {/* Timeline Feed */}
             {loading && memories.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
-                <Loader2 size={40} className="stroke-1 mb-3 animate-spin text-[var(--accent)]" />
+              <div className="flex flex-col items-center justify-center py-20 text-content-muted">
+                <Loader2 size={40} className="stroke-1 mb-3 animate-spin text-accent-text" />
                 <p className="text-[13px]">Loading history…</p>
               </div>
             ) : !fetchError && memories.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-[var(--text-muted)]">
+              <div className="flex flex-col items-center justify-center py-20 text-content-muted">
                 <Bookmark size={40} className="stroke-1 mb-3" />
                 <p className="text-[13px]">No history found. Add your first entry or sync an integration.</p>
               </div>
@@ -509,34 +509,34 @@ export default function HistoryPage() {
                 {Object.entries(groupedMemories).map(([dateLabel, items]) => (
                   <div key={dateLabel} className="flex flex-col gap-5 relative">
                     <div className="relative pl-6 z-10 select-none">
-                      <div className="absolute left-[8px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[var(--accent)] border border-[var(--s0)] shadow-[0_0_8px_rgba(139,92,246,0.6)]" />
-                      <span className="text-[11px] font-bold text-[var(--accent)] uppercase tracking-wider">{dateLabel}</span>
+                      <div className="absolute left-[8px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-accent border border-[var(--surface-page)] shadow-[0_0_8px_rgba(139,92,246,0.6)]" />
+                      <span className="text-xs font-bold text-accent-text uppercase tracking-wider">{dateLabel}</span>
                     </div>
 
                     {items.map((m) => {
                       const Icon = CATEGORY_ICONS[m.category] || FileText;
 
-                      let glowBorderClass = "border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] shadow-sm";
+                      let glowBorderClass = "border-line-subtle hover:border-accent/40 shadow-sm";
                       let headerBadge: React.ReactNode = null;
 
                       if (m.isMilestone) {
-                        glowBorderClass = "border-purple-500/50 bg-purple-500/5 shadow-[0_0_15px_rgba(139,92,246,0.1)]";
+                        glowBorderClass = "border-accent/50 bg-accent/5 shadow-[0_0_15px_rgba(139,92,246,0.1)]";
                         headerBadge = (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/20 text-purple-500 border border-purple-500/30 font-bold uppercase tracking-wide flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-accent/20 text-accent-text border border-accent/30 font-bold uppercase tracking-wide flex items-center gap-1">
                             <Rocket size={10} /> Milestone
                           </span>
                         );
                       } else if (m.isBlocker) {
-                        glowBorderClass = "border-red-500/40 bg-red-500/5 shadow-[0_0_15px_rgba(239,68,68,0.08)]";
+                        glowBorderClass = "border-status-error/40 bg-status-error/5 shadow-[0_0_15px_rgba(239,68,68,0.08)]";
                         headerBadge = (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-red-500/20 text-red-500 border border-red-500/30 font-bold uppercase tracking-wide flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-status-error/20 text-status-error border border-status-error/30 font-bold uppercase tracking-wide flex items-center gap-1">
                             <AlertTriangle size={10} /> Blocker
                           </span>
                         );
                       } else if (m.isImportant) {
-                        glowBorderClass = "border-amber-500/40 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.08)]";
+                        glowBorderClass = "border-status-warning/40 bg-status-warning/5 shadow-[0_0_15px_rgba(245,158,11,0.08)]";
                         headerBadge = (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-600 border border-amber-500/30 font-bold uppercase tracking-wide flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-status-warning/20 text-amber-600 border border-status-warning/30 font-bold uppercase tracking-wide flex items-center gap-1">
                             <Star size={10} className="fill-amber-500" /> Important
                           </span>
                         );
@@ -546,86 +546,86 @@ export default function HistoryPage() {
                         <div key={m.id} className="relative pl-6">
                           <div className={`absolute left-[-22px] top-3.5 w-6 h-6 rounded-full flex items-center justify-center z-10 shadow-sm ${
                             m.isMilestone
-                              ? "bg-purple-500/10 border border-purple-500/50 text-[var(--accent)] shadow-[0_0_8px_rgba(139,92,246,0.3)]"
+                              ? "bg-accent/10 border border-accent/50 text-accent-text shadow-[0_0_8px_rgba(139,92,246,0.3)]"
                               : m.isBlocker
-                                ? "bg-red-500/10 border border-red-500/50 text-[var(--error)]"
-                                : "bg-[var(--s1)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+                                ? "bg-status-error/10 border border-status-error/50 text-status-error"
+                                : "bg-surface-panel border border-line text-content-secondary"
                           }`}>
                             <Icon size={12} strokeWidth={2.2} />
                           </div>
 
-                          <div className={`group bg-[var(--s1)] backdrop-blur-md border rounded-2xl p-5 hover:shadow-[0_4px_30px_rgba(139,92,246,0.06)] transition-all duration-300 ${glowBorderClass}`}>
+                          <div className={`group bg-surface-panel backdrop-blur-md border rounded-2xl p-5 hover:shadow-[0_4px_30px_rgba(139,92,246,0.06)] transition-all duration-300 ${glowBorderClass}`}>
                             <div className="flex items-start justify-between gap-4 mb-2">
                               <div className="flex flex-col gap-1">
-                                <h4 className="text-[14px] font-semibold text-[var(--text-primary)] flex flex-wrap items-center gap-2">
+                                <h4 className="text-[14px] font-semibold text-content-primary flex flex-wrap items-center gap-2">
                                   <span>{m.title}</span>
                                   {headerBadge}
                                 </h4>
-                                <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] font-medium">
+                                <div className="flex items-center gap-2 text-xs text-content-muted font-medium">
                                   <span>{m.category}</span>
                                   {m.repo && <><span>•</span><span>{m.repo}</span></>}
                                   {m.prRole && (
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border ${
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide border ${
                                       m.prRole === "author"
-                                        ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
-                                        : "bg-sky-500/15 text-sky-500 border-sky-500/30"
+                                        ? "bg-status-success/20 text-status-success border-status-success/30"
+                                        : "bg-status-info/20 text-status-info border-status-info/30"
                                     }`}>
                                       {m.prRole === "author" ? "Opened by you" : "You reviewed"}
                                     </span>
                                   )}
                                   {m.prRole === "reviewer" && voteLabel(m.myVote) && (
-                                    <span className="text-[10px] italic">({voteLabel(m.myVote)})</span>
+                                    <span className="text-xs italic">({voteLabel(m.myVote)})</span>
                                   )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[11px] text-[var(--text-muted)] font-semibold">
+                                <span className="text-xs text-content-muted font-semibold">
                                   {new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                                 <button
                                   onClick={() => handleDeleteEntry(m.id)}
                                   title="Delete entry"
-                                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-all">
+                                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-content-muted hover:text-status-error hover:bg-status-error/10 transition-all">
                                   <Trash2 size={13} />
                                 </button>
                               </div>
                             </div>
 
                             {m.description && (
-                              <MarkdownViewer content={m.description} className="text-[13px] text-[var(--text-secondary)] mt-2 mb-3" />
+                              <MarkdownViewer content={m.description} className="text-[13px] text-content-secondary mt-2 mb-3" />
                             )}
 
                             {m.type === "code" && m.codeSnippet && (
-                              <div className="mt-3 bg-[var(--s0)] border border-[var(--border-subtle)] rounded-xl overflow-hidden font-mono text-[12px] text-[var(--text-secondary)] shadow-inner select-text">
-                                <div className="flex items-center justify-between px-4 py-2 bg-[var(--s1)] border-b border-[var(--border-subtle)]">
-                                  <span className="text-[var(--text-muted)] text-[11px] truncate">{m.codeSnippet.filename || "snippet"}</span>
+                              <div className="mt-3 bg-surface-page border border-line-subtle rounded-xl overflow-hidden font-mono text-[12px] text-content-secondary shadow-inner select-text">
+                                <div className="flex items-center justify-between px-4 py-2 bg-surface-panel border-b border-line-subtle">
+                                  <span className="text-content-muted text-xs truncate">{m.codeSnippet.filename || "snippet"}</span>
                                   <div className="flex items-center gap-3">
-                                    <span className="text-[10px] text-[var(--accent)] uppercase font-bold">{m.codeSnippet.language}</span>
-                                    <button onClick={() => handleCopy(m.id, m.codeSnippet!.code)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="Copy code">
-                                      {copiedId === m.id ? <Check size={13} className="text-[var(--success)]" /> : <Copy size={13} />}
+                                    <span className="text-xs text-accent-text uppercase font-bold">{m.codeSnippet.language}</span>
+                                    <button onClick={() => handleCopy(m.id, m.codeSnippet!.code)} className="text-content-muted hover:text-content-primary transition-colors" title="Copy code">
+                                      {copiedId === m.id ? <Check size={13} className="text-status-success" /> : <Copy size={13} />}
                                     </button>
                                   </div>
                                 </div>
-                                <pre className="p-4 overflow-x-auto leading-relaxed whitespace-pre font-mono bg-[var(--s0)] text-[var(--text-secondary)]">
+                                <pre className="p-4 overflow-x-auto leading-relaxed whitespace-pre font-mono bg-surface-page text-content-secondary">
                                   <code>{m.codeSnippet.code}</code>
                                 </pre>
                               </div>
                             )}
 
                             {m.type === "checklist" && m.checklistItems && (
-                              <div className="flex flex-col gap-2 mt-3 p-3 bg-[var(--s0)] border border-[var(--border-subtle)] rounded-xl select-none">
+                              <div className="flex flex-col gap-2 mt-3 p-3 bg-surface-page border border-line-subtle rounded-xl select-none">
                                 {m.checklistItems.map((check, idx) => (
                                   <div key={idx} className="flex items-start gap-2.5 group/item">
                                     <button
                                       type="button"
                                       onClick={() => handleToggleChecklistItem(m.id, idx)}
                                       className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                        check.completed ? "bg-green-500/20 border-[var(--success)]" : "border-[var(--border-default)] bg-[var(--s2)] hover:border-[var(--text-muted)]"
+                                        check.completed ? "bg-status-success/20 border-status-success" : "border-line bg-surface-raised hover:border-line-control"
                                       }`}
                                     >
-                                      {check.completed && <Check size={10} className="text-[var(--success)] stroke-[3]" />}
+                                      {check.completed && <Check size={10} className="text-status-success stroke-[3]" />}
                                     </button>
-                                    <span className={`text-[12px] transition-colors ${check.completed ? "text-[var(--text-muted)] line-through" : "text-[var(--text-secondary)]"}`}>
+                                    <span className={`text-[12px] transition-colors ${check.completed ? "text-content-muted line-through" : "text-content-secondary"}`}>
                                       {check.text}
                                     </span>
                                   </div>
@@ -633,16 +633,16 @@ export default function HistoryPage() {
                               </div>
                             )}
 
-                            <div className="flex items-center justify-between border-t border-[var(--border-subtle)] mt-4 pt-3">
-                              <span className="text-[10px] font-mono text-[var(--text-muted)] uppercase flex items-center gap-1.5">
+                            <div className="flex items-center justify-between border-t border-line-subtle mt-4 pt-3">
+                              <span className="text-xs font-mono text-content-muted uppercase flex items-center gap-1.5">
                                 {(() => {
                                   switch (m.source) {
-                                    case "git":   return <GitCommit     size={11} className="text-[#3b82f6]"  />;
-                                    case "pr":    return <GitPullRequest size={11} className="text-[#a855f7]" />;
+                                    case "git":   return <GitCommit     size={11} className="text-status-info"  />;
+                                    case "pr":    return <GitPullRequest size={11} className="text-accent-text" />;
                                     case "deploy":
-                                    case "build": return <Rocket         size={11} className="text-[var(--success)]" />;
-                                    case "azure": return <Activity       size={11} className="text-[#0078d4]" />;
-                                    default:      return <FileText       size={11} className="text-[var(--text-muted)]"  />;
+                                    case "build": return <Rocket         size={11} className="text-status-success" />;
+                                    case "azure": return <Activity       size={11} className="text-status-info" />;
+                                    default:      return <FileText       size={11} className="text-content-muted"  />;
                                   }
                                 })()}
                                 <span>Source: {m.source || "manual"}{m.isAzure ? " · Azure DevOps" : ""}</span>
@@ -660,7 +660,7 @@ export default function HistoryPage() {
                   <button
                     onClick={() => fetchHistory(page + 1, true)}
                     disabled={loading}
-                    className="self-center mt-2 h-[36px] px-6 rounded-xl border border-[var(--border-default)] text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[rgba(var(--accent-rgb),0.4)] transition-all disabled:opacity-50"
+                    className="self-center mt-2 h-[36px] px-6 rounded-xl border border-line text-[12px] text-content-secondary hover:text-content-primary hover:border-accent/40 transition-all disabled:opacity-50"
                   >
                     {loading ? "Loading…" : "Load more"}
                   </button>
@@ -670,34 +670,34 @@ export default function HistoryPage() {
           </div>
 
           {/* ── COLUMN 3: ACTIVITY PULSE & SYNC ── */}
-          <div className="w-[280px] border-l border-[var(--border-subtle)] bg-[var(--s0)] overflow-y-auto p-6 flex flex-col gap-8 shrink-0 select-none">
+          <div className="w-[280px] border-l border-line-subtle bg-surface-page overflow-y-auto p-6 flex flex-col gap-8 shrink-0 select-none">
 
             {/* Activity Pulse Heatmap */}
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-[var(--text-muted)] tracking-wider uppercase">Activity Pulse</span>
-                <span className="text-[9px] font-mono text-[var(--text-muted)]">16 WEEKS</span>
+                <span className="text-xs font-bold text-content-muted tracking-wider uppercase">Activity Pulse</span>
+                <span className="text-xs font-mono text-content-muted">16 WEEKS</span>
               </div>
-              <div className="grid gap-1 p-2 bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl" style={{ gridTemplateColumns: "repeat(16, minmax(0, 1fr))" }}>
+              <div className="grid gap-1 p-2 bg-surface-panel border border-line-subtle rounded-2xl" style={{ gridTemplateColumns: "repeat(16, minmax(0, 1fr))" }}>
                 {heatmap.map((level, i) => (
                   <div
                     key={i}
                     className={`h-[9px] rounded-sm transition-all duration-300 ${
-                      level === 0 ? "bg-[var(--s2)]" :
-                      level === 1 ? "bg-[rgba(var(--accent-rgb),0.2)]" :
-                      level === 2 ? "bg-[rgba(var(--accent-rgb),0.4)]" :
-                      level === 3 ? "bg-[rgba(var(--accent-rgb),0.65)]" :
-                                    "bg-[var(--accent)] shadow-[0_0_8px_rgba(139,92,246,0.6)]"
+                      level === 0 ? "bg-surface-raised" :
+                      level === 1 ? "bg-accent/20" :
+                      level === 2 ? "bg-accent/40" :
+                      level === 3 ? "bg-accent/70" :
+                                    "bg-accent shadow-[0_0_8px_rgba(139,92,246,0.6)]"
                     }`}
                   />
                 ))}
               </div>
-              <div className="flex items-center justify-between text-[9px] text-[var(--text-muted)] px-1">
+              <div className="flex items-center justify-between text-xs text-content-muted px-1">
                 <span>Less</span>
                 <div className="flex gap-0.5">
                   {[0,1,2,3,4].map(l => (
                     <div key={l} className={`w-2 h-2 rounded-sm ${
-                      l === 0 ? "bg-[var(--s2)]" : l === 1 ? "bg-[rgba(var(--accent-rgb),0.2)]" : l === 2 ? "bg-[rgba(var(--accent-rgb),0.4)]" : l === 3 ? "bg-[rgba(var(--accent-rgb),0.65)]" : "bg-[var(--accent)] shadow-[0_0_4px_rgba(139,92,246,0.6)]"
+                      l === 0 ? "bg-surface-raised" : l === 1 ? "bg-accent/20" : l === 2 ? "bg-accent/40" : l === 3 ? "bg-accent/70" : "bg-accent shadow-[0_0_4px_rgba(139,92,246,0.6)]"
                     }`} />
                   ))}
                 </div>
@@ -706,14 +706,14 @@ export default function HistoryPage() {
             </div>
 
             {/* Integrations & Sync Section */}
-            <div className="flex flex-col gap-4 border-t border-[var(--border-subtle)] pt-6">
-              <span className="text-[10px] font-bold text-[var(--text-muted)] tracking-wider uppercase flex items-center gap-1.5">
-                <Activity size={12} className="text-[var(--accent)]" />
+            <div className="flex flex-col gap-4 border-t border-line-subtle pt-6">
+              <span className="text-xs font-bold text-content-muted tracking-wider uppercase flex items-center gap-1.5">
+                <Activity size={12} className="text-accent-text" />
                 <span>Integrations & Sync</span>
               </span>
 
               {syncError && (
-                <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                <div className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-xl px-3 py-2">
                   {syncError}
                 </div>
               )}
@@ -723,36 +723,36 @@ export default function HistoryPage() {
                 <button
                   onClick={handleSyncGitHub}
                   disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
-                  className="w-full h-[54px] px-4 rounded-xl border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.5)] bg-[var(--s1)] hover:bg-[var(--s2)] transition-all flex items-center justify-between group disabled:opacity-50"
+                  className="w-full h-[54px] px-4 rounded-xl border border-line hover:border-accent/50 bg-surface-panel hover:bg-surface-raised transition-all flex items-center justify-between group disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition-colors">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-content-secondary group-hover:text-accent-text transition-colors">
                       <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
                     </svg>
                     <div className="flex flex-col items-start gap-0.5">
-                      <span className="text-[12px] font-semibold text-[var(--text-primary)]">Sync GitHub</span>
-                      <span className="text-[9px] text-[var(--text-muted)] text-left">Commits & PR Reviews</span>
+                      <span className="text-[12px] font-semibold text-content-primary">Sync GitHub</span>
+                      <span className="text-xs text-content-muted text-left">Commits & PR Reviews</span>
                     </div>
                   </div>
-                  <RefreshCw className={`w-4 h-4 text-[var(--accent)] ${isSyncingGitHub ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+                  <RefreshCw className={`w-4 h-4 text-accent-text ${isSyncingGitHub ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
                 </button>
 
                 {/* Azure DevOps Sync */}
                 <button
                   onClick={() => handleSyncAzure(false)}
                   disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
-                  className="w-full h-[54px] px-4 rounded-xl border border-[var(--border-default)] hover:border-[#0078d4]/50 bg-[var(--s1)] hover:bg-[var(--s2)] transition-all flex items-center justify-between group disabled:opacity-50"
+                  className="w-full h-[54px] px-4 rounded-xl border border-line hover:border-status-info/50 bg-surface-panel hover:bg-surface-raised transition-all flex items-center justify-between group disabled:opacity-50"
                 >
                   <div className="flex items-center gap-3">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-[#0078d4] transition-colors">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-content-secondary group-hover:text-status-info transition-colors">
                       <path d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v15.12l-5.624 4.453-10.18-3.58v3.58L3.16 18.283l14.166 1.86V4.18z" />
                     </svg>
                     <div className="flex flex-col items-start gap-0.5">
-                      <span className="text-[12px] font-semibold text-[var(--text-primary)]">Sync Azure DevOps</span>
-                      <span className="text-[9px] text-[var(--text-muted)] text-left">Repos, PRs & Builds</span>
+                      <span className="text-[12px] font-semibold text-content-primary">Sync Azure DevOps</span>
+                      <span className="text-xs text-content-muted text-left">Repos, PRs & Builds</span>
                     </div>
                   </div>
-                  <RefreshCw className={`w-4 h-4 text-[#0078d4] ${isSyncingAzure ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+                  <RefreshCw className={`w-4 h-4 text-status-info ${isSyncingAzure ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
                 </button>
 
                 {/* Azure Full Sync — backfill entire history */}
@@ -760,12 +760,12 @@ export default function HistoryPage() {
                   onClick={() => handleSyncAzure(true)}
                   disabled={isSyncingGitHub || isSyncingAzure || isAzureFullSyncing}
                   title="Fetch your entire Azure history (up to 10 years). Slower — use to backfill after a sync fix."
-                  className="w-full h-[34px] px-4 rounded-xl border border-dashed border-[var(--border-default)] hover:border-[#0078d4]/50 bg-transparent hover:bg-[var(--s2)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  className="w-full h-[34px] px-4 rounded-xl border border-dashed border-line hover:border-status-info/50 bg-transparent hover:bg-surface-raised transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-xs font-semibold text-content-muted hover:text-content-primary"
                 >
                   {isAzureFullSyncing ? (
-                    <><Loader2 className="w-3.5 h-3.5 animate-spin text-[#0078d4]" /> Full syncing…</>
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin text-status-info" /> Full syncing…</>
                   ) : (
-                    <><RotateCcw className="w-3.5 h-3.5 text-[#0078d4]" /> Full sync (all history)</>
+                    <><RotateCcw className="w-3.5 h-3.5 text-status-info" /> Full sync (all history)</>
                   )}
                 </button>
               </div>
@@ -777,26 +777,26 @@ export default function HistoryPage() {
 
       {/* ── MODAL: SAVE MEMORY ── */}
       {showSaveMemoryModal && (
-        <div className="fixed inset-0 bg-[#000000]/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] select-none">
-          <div className="bg-[var(--s1)] border border-[var(--border-default)] w-full max-w-[500px] rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3),0_0_24px_rgba(139,92,246,0.1)] relative z-50 animate-[zoomIn_0.2s_ease-out] overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 bg-overlay/70 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out] select-none">
+          <div className="bg-surface-panel border border-line w-full max-w-[500px] rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3),0_0_24px_rgba(139,92,246,0.1)] relative z-50 animate-[zoomIn_0.2s_ease-out] overflow-y-auto max-h-[90vh]">
             <div className="absolute top-[-40%] left-[20%] w-[300px] h-[300px] bg-[radial-gradient(circle,rgba(139,92,246,0.08),transparent_70%)] rounded-full pointer-events-none blur-2xl" />
 
             <div className="flex items-center justify-between mb-4 relative z-10">
-              <h3 className="text-[18px] font-bold text-[var(--text-primary)] tracking-tight">Save New Memory</h3>
-              <button onClick={() => setShowSaveMemoryModal(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] transition-colors border border-transparent hover:border-[var(--border-subtle)]">
+              <h3 className="text-[18px] font-bold text-content-primary tracking-tight">Save New Memory</h3>
+              <button onClick={() => setShowSaveMemoryModal(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-raised transition-colors border border-transparent hover:border-line-subtle">
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleSaveMemory} className="flex flex-col gap-4 relative z-10">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Memory Title</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Memory Title</label>
                 <input type="text" required placeholder="e.g. Optimize vector index settings" value={title} onChange={(e) => setTitle(e.target.value)}
-                  className="w-full h-[40px] bg-[var(--s2)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl px-3.5 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all" />
+                  className="w-full h-[40px] bg-surface-raised border border-line focus:border-accent/50 rounded-xl px-3.5 text-[13px] text-content-primary placeholder:text-content-muted focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all" />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Memory Description / Details</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Memory Description / Details</label>
                 <div className="h-[220px]">
                   <TipTapEditor
                     value={description}
@@ -809,16 +809,16 @@ export default function HistoryPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Category</label>
+                  <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Category</label>
                   <select value={category} onChange={(e) => setCategory(e.target.value)}
-                    className="w-full h-[40px] bg-[var(--s2)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl px-2 text-[12px] text-[var(--text-primary)] focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all">
+                    className="w-full h-[40px] bg-surface-raised border border-line focus:border-accent/50 rounded-xl px-2 text-[12px] text-content-primary focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all">
                     {CATEGORIES.filter(c => c !== "All").map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Source</label>
+                  <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Source</label>
                   <select value={source} onChange={(e) => setSource(e.target.value as any)}
-                    className="w-full h-[40px] bg-[var(--s2)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-xl px-2 text-[12px] text-[var(--text-primary)] focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all">
+                    className="w-full h-[40px] bg-surface-raised border border-line focus:border-accent/50 rounded-xl px-2 text-[12px] text-content-primary focus:outline-none focus:shadow-[0_0_12px_rgba(139,92,246,0.1)] transition-all">
                     <option value="manual">Manual</option>
                     <option value="git">Git</option>
                     <option value="pr">PR Review</option>
@@ -828,14 +828,14 @@ export default function HistoryPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Memory Type</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Memory Type</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(["simple", "code", "checklist"] as const).map((t) => (
                     <button key={t} type="button" onClick={() => setType(t)}
                       className={`h-[36px] rounded-xl text-[12px] font-semibold border transition-all ${
                         type === t
-                          ? "bg-[rgba(var(--accent-rgb),0.1)] border-[var(--accent)] text-[var(--text-primary)] shadow-[0_2px_8px_rgba(139,92,246,0.2)]"
-                          : "bg-[var(--s2)] border-[var(--border-default)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]"
+                          ? "bg-accent/10 border-accent text-content-primary shadow-[0_2px_8px_rgba(139,92,246,0.2)]"
+                          : "bg-surface-raised border-line text-content-muted hover:text-content-primary hover:border-line-strong"
                       }`}
                     >
                       {t.toUpperCase()}
@@ -845,32 +845,32 @@ export default function HistoryPage() {
               </div>
 
               {type === "code" && (
-                <div className="flex flex-col gap-3 p-4 bg-[var(--s2)] border border-[var(--border-default)] rounded-2xl">
+                <div className="flex flex-col gap-3 p-4 bg-surface-raised border border-line rounded-2xl">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Filename</label>
+                      <label className="text-xs font-bold text-content-muted uppercase">Filename</label>
                       <input type="text" placeholder="e.g. index.ts" value={codeFilename} onChange={(e) => setCodeFilename(e.target.value)}
-                        className="w-full h-[36px] bg-[var(--s1)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-lg px-3 text-[12px] text-[var(--text-primary)] focus:outline-none" />
+                        className="w-full h-[36px] bg-surface-panel border border-line focus:border-accent/50 rounded-lg px-3 text-[12px] text-content-primary focus:outline-none" />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Language</label>
+                      <label className="text-xs font-bold text-content-muted uppercase">Language</label>
                       <input type="text" placeholder="e.g. typescript" value={codeLang} onChange={(e) => setCodeLang(e.target.value)}
-                        className="w-full h-[36px] bg-[var(--s1)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-lg px-3 text-[12px] text-[var(--text-primary)] focus:outline-none" />
+                        className="w-full h-[36px] bg-surface-panel border border-line focus:border-accent/50 rounded-lg px-3 text-[12px] text-content-primary focus:outline-none" />
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Code</label>
+                    <label className="text-xs font-bold text-content-muted uppercase">Code</label>
                     <textarea required placeholder="Paste code snippet here..." value={codeContent} onChange={(e) => setCodeContent(e.target.value)} rows={3}
-                      className="w-full bg-[var(--s1)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-lg p-3 text-[12px] text-[var(--text-primary)] font-mono focus:outline-none resize-none" />
+                      className="w-full bg-surface-panel border border-line focus:border-accent/50 rounded-lg p-3 text-[12px] text-content-primary font-mono focus:outline-none resize-none" />
                   </div>
                 </div>
               )}
 
               {type === "checklist" && (
-                <div className="flex flex-col gap-3 p-4 bg-[var(--s2)] border border-[var(--border-default)] rounded-2xl">
+                <div className="flex flex-col gap-3 p-4 bg-surface-raised border border-line rounded-2xl">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase">Checklist Items</span>
-                    <button type="button" onClick={addChecklistItem} className="text-[10px] text-[var(--accent)] font-semibold flex items-center gap-1 hover:text-[var(--text-primary)]">
+                    <span className="text-xs font-bold text-content-muted uppercase">Checklist Items</span>
+                    <button type="button" onClick={addChecklistItem} className="text-xs text-accent-text font-semibold flex items-center gap-1 hover:text-content-primary">
                       <Plus size={12} /> Add Item
                     </button>
                   </div>
@@ -878,9 +878,9 @@ export default function HistoryPage() {
                     {checklistItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <input type="text" required placeholder={`Item ${idx + 1}`} value={item.text} onChange={(e) => updateChecklistItemText(idx, e.target.value)}
-                          className="flex-1 h-[34px] bg-[var(--s1)] border border-[var(--border-default)] focus:border-[rgba(var(--accent-rgb),0.5)] rounded-lg px-3 text-[12px] text-[var(--text-primary)] focus:outline-none" />
+                          className="flex-1 h-[34px] bg-surface-panel border border-line focus:border-accent/50 rounded-lg px-3 text-[12px] text-content-primary focus:outline-none" />
                         {checklistItems.length > 1 && (
-                          <button type="button" onClick={() => removeChecklistItem(idx)} className="text-[var(--text-muted)] hover:text-[var(--error)] transition-colors">
+                          <button type="button" onClick={() => removeChecklistItem(idx)} className="text-content-muted hover:text-status-error transition-colors">
                             <Trash2 size={15} />
                           </button>
                         )}
@@ -891,19 +891,19 @@ export default function HistoryPage() {
               )}
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Flags / Highlights</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Flags / Highlights</label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { key: "isMilestone", label: "Milestone", icon: Rocket,        active: isMilestone, set: setIsMilestone, colors: "purple" },
                     { key: "isBlocker",   label: "Blocker",   icon: AlertTriangle, active: isBlocker,   set: setIsBlocker,   colors: "red"    },
                     { key: "isImportant", label: "Important", icon: Star,          active: isImportant, set: setIsImportant, colors: "amber"  },
                   ].map(({ key, label, icon: Icon, active, set, colors }) => (
-                    <label key={key} className={`h-[38px] rounded-xl border flex items-center justify-center gap-1.5 text-[11px] font-bold cursor-pointer transition-all ${
+                    <label key={key} className={`h-[38px] rounded-xl border flex items-center justify-center gap-1.5 text-xs font-bold cursor-pointer transition-all ${
                       active
-                        ? colors === "purple" ? "bg-purple-500/20 border-purple-500/50 text-purple-500 shadow-[0_2px_8px_rgba(168,85,247,0.15)]"
-                          : colors === "red"  ? "bg-red-500/20 border-red-500/50 text-red-500 shadow-[0_2px_8px_rgba(239,68,68,0.15)]"
-                          : "bg-amber-500/20 border-amber-500/50 text-amber-600 shadow-[0_2px_8px_rgba(245,158,11,0.15)]"
-                        : "bg-[var(--s2)] border-[var(--border-default)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                        ? colors === "purple" ? "bg-accent/20 border-accent/50 text-accent-text shadow-[0_2px_8px_rgba(168,85,247,0.15)]"
+                          : colors === "red"  ? "bg-status-error/20 border-status-error/50 text-status-error shadow-[0_2px_8px_rgba(239,68,68,0.15)]"
+                          : "bg-status-warning/20 border-status-warning/50 text-amber-600 shadow-[0_2px_8px_rgba(245,158,11,0.15)]"
+                        : "bg-surface-raised border-line text-content-muted hover:border-line-strong hover:text-content-primary"
                     }`}>
                       <input type="checkbox" checked={active} onChange={() => set(!active)} className="sr-only" />
                       <Icon size={12} /><span>{label}</span>
@@ -912,13 +912,13 @@ export default function HistoryPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 mt-2 border-t border-[var(--border-subtle)] pt-4">
+              <div className="flex items-center gap-3 mt-2 border-t border-line-subtle pt-4">
                 <button type="button" onClick={() => setShowSaveMemoryModal(false)}
-                  className="flex-1 h-[40px] rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] text-[13px] font-semibold transition-all">
+                  className="flex-1 h-[40px] rounded-xl border border-line text-content-secondary hover:text-content-primary hover:bg-surface-raised text-[13px] font-semibold transition-all">
                   Cancel
                 </button>
                 <button type="submit" disabled={isSaving}
-                  className="flex-1 h-[40px] rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[13px] font-semibold shadow-[0_4px_12px_rgba(124,58,237,0.2)] hover:shadow-[0_4px_16px_rgba(124,58,237,0.35)] transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2">
+                  className="flex-1 h-[40px] rounded-xl bg-accent hover:bg-accent-hover text-content-inverse text-[13px] font-semibold shadow-[0_4px_12px_rgba(124,58,237,0.2)] hover:shadow-[0_4px_16px_rgba(124,58,237,0.35)] transition-all active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2">
                   {isSaving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : "Save Memory"}
                 </button>
               </div>

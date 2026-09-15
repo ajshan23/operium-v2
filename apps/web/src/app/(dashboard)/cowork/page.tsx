@@ -203,32 +203,32 @@ export default function CoworkPage() {
       <div className="dash-glow-purple absolute top-[10%] left-[20%] w-[600px] h-[600px] rounded-full pointer-events-none blur-3xl" />
 
       {/* ── LEFT SECTION: SESSION INDEX ── */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-[var(--border-subtle)] bg-[var(--s0)] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 border-r border-line-subtle bg-surface-page overflow-hidden">
 
         {/* Header */}
-        <div className="p-6 border-b border-[var(--border-subtle)] shrink-0 bg-[var(--s0)]">
-          <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight flex items-center gap-2">
-            <Bot className="text-[var(--accent)]" size={22} />
+        <div className="p-6 border-b border-line-subtle shrink-0 bg-surface-page">
+          <h1 className="text-xl font-bold text-content-primary tracking-tight flex items-center gap-2">
+            <Bot className="text-accent-text" size={22} />
             <span>Cowork Knowledge Base</span>
           </h1>
-          <p className="text-[12px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
+          <p className="text-[12px] text-content-muted mt-1.5 leading-relaxed">
             Team-wide AI session history. Search for past solutions and captured decisions.
           </p>
         </div>
 
         {/* Filters Row */}
-        <div className="p-4 border-b border-[var(--border-subtle)] shrink-0 bg-[var(--s0)] flex flex-wrap items-center justify-between gap-3">
+        <div className="p-4 border-b border-line-subtle shrink-0 bg-surface-page flex flex-wrap items-center justify-between gap-3">
 
           <div className="flex items-center gap-3">
             {/* Search Input */}
             <div className="relative group w-[220px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[var(--accent)] transition-colors" size={13} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted group-focus-within:text-accent-text transition-colors" size={13} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search summaries..."
-                className="w-full h-[34px] bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl pl-8 pr-3 text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none transition-all"
+                className="w-full h-[34px] bg-surface-panel border border-line-subtle focus:border-accent/40 rounded-xl pl-8 pr-3 text-[12px] text-content-primary placeholder:text-content-muted focus:outline-none transition-all"
               />
             </div>
 
@@ -237,7 +237,7 @@ export default function CoworkPage() {
               <select
                 value={sourceFilter}
                 onChange={e => setSourceFilter(e.target.value)}
-                className="h-[34px] px-3.5 bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer transition-all hover:bg-[var(--s2)] appearance-none pr-8"
+                className="h-[34px] px-3.5 bg-surface-panel border border-line-subtle focus:border-accent/40 rounded-xl text-[12px] text-content-primary focus:outline-none cursor-pointer transition-all hover:bg-surface-raised appearance-none pr-8"
               >
                 <option value="">All Sources</option>
                 <option value="antigravity">Antigravity</option>
@@ -245,7 +245,7 @@ export default function CoworkPage() {
                 <option value="cursor">Cursor</option>
                 <option value="system">System</option>
               </select>
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]">
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-content-muted">
                 <ChevronDown size={12} />
               </div>
             </div>
@@ -256,14 +256,14 @@ export default function CoworkPage() {
                 <select
                   value={repoFilter}
                   onChange={e => setRepoFilter(e.target.value)}
-                  className="h-[34px] px-3.5 bg-[var(--s1)] border border-[var(--border-subtle)] focus:border-[rgba(var(--accent-rgb),0.4)] rounded-xl text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer transition-all hover:bg-[var(--s2)] appearance-none pr-8 max-w-[180px] truncate"
+                  className="h-[34px] px-3.5 bg-surface-panel border border-line-subtle focus:border-accent/40 rounded-xl text-[12px] text-content-primary focus:outline-none cursor-pointer transition-all hover:bg-surface-raised appearance-none pr-8 max-w-[180px] truncate"
                 >
                   <option value="">All Repos</option>
                   {repoOptions.map(r => (
                     <option key={r.repoKey} value={r.repoKey}>{r.repoName}</option>
                   ))}
                 </select>
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--text-muted)]">
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-content-muted">
                   <ChevronDown size={12} />
                 </div>
               </div>
@@ -271,13 +271,13 @@ export default function CoworkPage() {
           </div>
 
           {/* Scope selection */}
-          <div className="flex bg-[var(--s1)] border border-[var(--border-subtle)] rounded-xl p-0.5 select-none shrink-0">
+          <div className="flex bg-surface-panel border border-line-subtle rounded-xl p-0.5 select-none shrink-0">
             <button
               onClick={() => setScopeFilter("team")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 scopeFilter === "team"
-                  ? "bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.35)] text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  ? "bg-accent/10 border border-accent/40 text-content-primary"
+                  : "text-content-muted hover:text-content-primary"
               }`}
             >
               <Users size={12} />
@@ -285,10 +285,10 @@ export default function CoworkPage() {
             </button>
             <button
               onClick={() => setScopeFilter("personal")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 scopeFilter === "personal"
-                  ? "bg-[rgba(var(--accent-rgb),0.1)] border border-[rgba(var(--accent-rgb),0.35)] text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  ? "bg-accent/10 border border-accent/40 text-content-primary"
+                  : "text-content-muted hover:text-content-primary"
               }`}
             >
               <User size={12} />
@@ -300,14 +300,14 @@ export default function CoworkPage() {
         {/* Sessions List */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
           {!searchQuery && !repoFilter && resumeSessions.length > 0 && (
-            <section className="rounded-2xl border border-[rgba(var(--accent-rgb),0.22)] bg-[rgba(var(--accent-rgb),0.05)] p-4">
+            <section className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
-                  <h2 className="text-[12px] font-bold text-[var(--text-primary)]">Resume work</h2>
-                  <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Private checkpoints saved by your coding agent.</p>
+                  <h2 className="text-[12px] font-bold text-content-primary">Resume work</h2>
+                  <p className="text-xs text-content-muted mt-0.5">Private checkpoints saved by your coding agent.</p>
                 </div>
                 {memoryHealth && (memoryHealth.stale + memoryHealth.missingNextStep + memoryHealth.missingRepo) > 0 && (
-                  <span className="text-[9px] font-mono text-amber-300 bg-amber-500/10 px-2 py-1 rounded">
+                  <span className="text-xs font-mono text-status-warning bg-status-warning/10 px-2 py-1 rounded">
                     {memoryHealth.stale + memoryHealth.missingNextStep + memoryHealth.missingRepo} need attention
                   </span>
                 )}
@@ -316,15 +316,15 @@ export default function CoworkPage() {
                 {resumeSessions.slice(0, 3).map(session => {
                   const id = session._id || session.id;
                   return (
-                    <div key={id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--s1)] px-3 py-2.5">
-                      <Link href={`/cowork/${id}`} className="block hover:text-[var(--accent)] transition-colors">
+                    <div key={id} className="rounded-xl border border-line-subtle bg-surface-panel px-3 py-2.5">
+                      <Link href={`/cowork/${id}`} className="block hover:text-accent-text transition-colors">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="truncate text-[11px] font-semibold text-[var(--text-primary)]">{session.title}</span>
-                          <span className="shrink-0 text-[9px] text-[var(--accent)]">{session.private ? "Private" : "Shared"}</span>
+                          <span className="truncate text-xs font-semibold text-content-primary">{session.title}</span>
+                          <span className="shrink-0 text-xs text-accent-text">{session.private ? "Private" : "Shared"}</span>
                         </div>
-                        <p className="mt-1 text-[10px] text-[var(--text-muted)] truncate">{session.nextStep ? `Next: ${session.nextStep}` : "Open to add the next step"}</p>
+                        <p className="mt-1 text-xs text-content-muted truncate">{session.nextStep ? `Next: ${session.nextStep}` : "Open to add the next step"}</p>
                       </Link>
-                      <button onClick={() => void copyResumeInstruction(session)} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[rgba(var(--accent-rgb),0.22)] px-2 py-1 text-[9px] font-semibold text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)]">
+                      <button onClick={() => void copyResumeInstruction(session)} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-accent/20 px-2 py-1 text-xs font-semibold text-accent-text hover:bg-accent/10">
                         {copiedResumeId === id ? <Check size={10} /> : <Copy size={10} />}
                         {copiedResumeId === id ? "Copied" : "Copy agent resume"}
                       </button>
@@ -335,15 +335,15 @@ export default function CoworkPage() {
             </section>
           )}
           {loading ? (
-            <div className="flex items-center justify-center gap-2 text-[var(--text-muted)] py-20">
-              <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
+            <div className="flex items-center justify-center gap-2 text-content-muted py-20">
+              <Loader2 size={16} className="animate-spin text-accent-text" />
               <span className="text-[12px] font-mono">Loading sessions…</span>
             </div>
           ) : visibleSessions.length === 0 ? (
-            <div className="py-20 text-center border border-dashed border-[var(--border-subtle)] rounded-3xl bg-[var(--s1)] flex flex-col items-center justify-center">
+            <div className="py-20 text-center border border-dashed border-line-subtle rounded-3xl bg-surface-panel flex flex-col items-center justify-center">
               <Bot className="w-12 h-12 text-[var(--border-strong)] mb-4" />
-              <h3 className="text-[14px] font-bold text-[var(--text-primary)] mb-1">No sessions found</h3>
-              <p className="text-[12px] text-[var(--text-muted)] max-w-sm">
+              <h3 className="text-[14px] font-bold text-content-primary mb-1">No sessions found</h3>
+              <p className="text-[12px] text-content-muted max-w-sm">
                 {searchQuery || repoFilter
                   ? "No sessions match your filters. Try a different keyword or repo."
                   : "No cowork sessions yet. Sessions created via MCP or API will appear here."}
@@ -368,11 +368,11 @@ export default function CoworkPage() {
                 <button
                   onClick={loadMore}
                   disabled={loadingMore}
-                  className="px-4 py-2 rounded-lg border border-[var(--border-default)] text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] transition-colors disabled:opacity-50 flex items-center gap-2">
+                  className="px-4 py-2 rounded-lg border border-line text-xs font-semibold text-content-secondary hover:text-content-primary hover:bg-surface-raised transition-colors disabled:opacity-50 flex items-center gap-2">
                   {loadingMore ? <><Loader2 size={13} className="animate-spin" /> Loading…</> : "Load more"}
                 </button>
               )}
-              <p className="text-center text-[10px] text-[var(--text-muted)] font-mono">
+              <p className="text-center text-xs text-content-muted font-mono">
                 {searchQuery ? visibleSessions.length : `${sessions.length} of ${pagination.total}`} session{pagination.total !== 1 ? "s" : ""}
               </p>
             </div>
@@ -381,18 +381,18 @@ export default function CoworkPage() {
       </div>
 
       {/* ── RIGHT SECTION: AI CHAT SIDEBAR ── */}
-      <div className="w-[380px] shrink-0 bg-[var(--s0)] flex flex-col overflow-hidden relative">
+      <div className="w-[380px] shrink-0 bg-surface-page flex flex-col overflow-hidden relative">
         <div className="dash-glow-purple absolute top-[-30%] left-[20%] w-[300px] h-[300px] rounded-full pointer-events-none blur-3xl opacity-30" />
 
         {/* Chat Header */}
-        <div className="h-[64px] border-b border-[var(--border-subtle)] px-6 flex items-center justify-between shrink-0 bg-[var(--s0)]">
+        <div className="h-[64px] border-b border-line-subtle px-6 flex items-center justify-between shrink-0 bg-surface-page">
           <div>
-            <span className="text-[12px] font-mono text-[var(--text-muted)] uppercase">Cowork Assistant</span>
-            <span className="ml-2 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--s2)] px-1.5 py-0.5 rounded">beta</span>
+            <span className="text-[12px] font-mono text-content-muted uppercase">Cowork Assistant</span>
+            <span className="ml-2 text-xs font-mono text-content-muted bg-surface-raised px-1.5 py-0.5 rounded">beta</span>
           </div>
           <button
             onClick={() => setChatMessages([])}
-            className="h-[24px] px-2.5 rounded-md border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.5)] bg-[var(--s1)] hover:bg-[var(--s2)] text-[10px] font-semibold text-[var(--text-primary)] flex items-center justify-center transition-all duration-300"
+            className="h-[24px] px-2.5 rounded-md border border-line hover:border-accent/50 bg-surface-panel hover:bg-surface-raised text-xs font-semibold text-content-primary flex items-center justify-center transition-all duration-300"
           >
             Clear Chat
           </button>
@@ -403,8 +403,8 @@ export default function CoworkPage() {
           {chatMessages.length === 0 && (
             <div className="flex flex-col items-start justify-center h-full space-y-4">
               <div className="space-y-1">
-                <h3 className="text-[13px] font-bold text-[var(--text-primary)]">System Assistant Ready</h3>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                <h3 className="text-[13px] font-bold text-content-primary">System Assistant Ready</h3>
+                <p className="text-xs text-content-muted leading-relaxed">
                   Query cowork memories, active code fixes, or past agent decisions.
                 </p>
               </div>
@@ -413,7 +413,7 @@ export default function CoworkPage() {
                   <button
                     key={q}
                     onClick={() => setChatInput(q)}
-                    className="text-[11px] text-left px-3.5 py-2.5 rounded-xl bg-[var(--s1)] border border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all hover:bg-[var(--s2)]"
+                    className="text-xs text-left px-3.5 py-2.5 rounded-xl bg-surface-panel border border-line-subtle hover:border-accent/40 text-content-secondary hover:text-content-primary transition-all hover:bg-surface-raised"
                   >
                     {q}
                   </button>
@@ -425,13 +425,13 @@ export default function CoworkPage() {
           {chatMessages.map((msg, i) => (
             <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} w-full`}>
               <div className={`relative max-w-[95%] w-full flex flex-col gap-1.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">
+                <span className="text-xs text-content-muted font-mono uppercase tracking-wider">
                   {msg.role === "user" ? "You" : "Operium AI"}
                 </span>
                 <div className={`px-4 py-3 text-[12px] leading-relaxed w-full rounded-2xl border ${
                   msg.role === "user"
-                    ? "bg-[rgba(var(--accent-rgb),0.08)] border-[rgba(var(--accent-rgb),0.25)] text-[var(--text-primary)]"
-                    : "bg-[var(--s1)] border-[var(--border-subtle)] text-[var(--text-secondary)]"
+                    ? "bg-accent/10 border-accent/25 text-content-primary"
+                    : "bg-surface-panel border-line-subtle text-content-secondary"
                 }`}>
                   {msg.role === "user"
                     ? <div className="whitespace-pre-wrap font-medium">{msg.content}</div>
@@ -440,16 +440,16 @@ export default function CoworkPage() {
                 </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-col gap-1.5 w-full mt-2">
-                    <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">Sources</span>
+                    <span className="text-xs text-content-muted font-mono uppercase tracking-wider">Sources</span>
                     {msg.sources.map(src => (
                       <Link
                         key={src.id}
                         href={`/cowork/${src.id}`}
-                        className="flex items-center gap-2 text-[10px] font-medium text-[var(--accent)] hover:text-[var(--text-primary)] bg-[rgba(var(--accent-rgb),0.06)] border border-[rgba(var(--accent-rgb),0.15)] rounded-xl px-3 py-2 transition-all"
+                        className="flex items-center gap-2 text-xs font-medium text-accent-text hover:text-content-primary bg-accent/5 border border-accent/20 rounded-xl px-3 py-2 transition-all"
                       >
                         <ExternalLink size={10} className="shrink-0" />
                         <span className="truncate flex-1">{src.title}</span>
-                        <span className="text-[9px] text-[var(--text-muted)] shrink-0 font-mono">{(src.score * 100).toFixed(0)}%</span>
+                        <span className="text-xs text-content-muted shrink-0 font-mono">{(src.score * 100).toFixed(0)}%</span>
                       </Link>
                     ))}
                   </div>
@@ -460,11 +460,11 @@ export default function CoworkPage() {
 
           {chatLoading && (
             <div className="flex flex-col items-start w-full gap-1.5">
-              <span className="text-[9px] text-[var(--text-muted)] font-mono uppercase tracking-wider">System Bot</span>
-              <div className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-2xl px-4 py-3 w-[80%]">
-                <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--accent)]" />
-                  <span className="text-[11px] font-mono">Querying Operium memory…</span>
+              <span className="text-xs text-content-muted font-mono uppercase tracking-wider">System Bot</span>
+              <div className="bg-surface-panel border border-line-subtle rounded-2xl px-4 py-3 w-[80%]">
+                <div className="flex items-center gap-2 text-content-muted">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-accent-text" />
+                  <span className="text-xs font-mono">Querying Operium memory…</span>
                 </div>
               </div>
             </div>
@@ -473,20 +473,20 @@ export default function CoworkPage() {
         </div>
 
         {/* Input */}
-        <div className="p-4 shrink-0 bg-[var(--s0)] border-t border-[var(--border-subtle)]">
-          <div className="relative flex items-center bg-[var(--s1)] pl-4 pr-2 py-1.5 rounded-xl border border-[var(--border-subtle)] focus-within:border-[rgba(var(--accent-rgb),0.4)] transition-colors">
+        <div className="p-4 shrink-0 bg-surface-page border-t border-line-subtle">
+          <div className="relative flex items-center bg-surface-panel pl-4 pr-2 py-1.5 rounded-xl border border-line-subtle focus-within:border-accent/40 transition-colors">
             <input
               type="text"
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleSendChat(); }}
               placeholder="Query cowork timeline..."
-              className="w-full bg-transparent border-none text-[12px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-0 h-8"
+              className="w-full bg-transparent border-none text-[12px] text-content-primary placeholder:text-content-muted focus:outline-none focus:ring-0 h-8"
             />
             <button
               onClick={handleSendChat}
               disabled={!chatInput.trim() || chatLoading}
-              className="shrink-0 w-8 h-8 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] rounded-lg transition-all disabled:opacity-30 ml-2"
+              className="shrink-0 w-8 h-8 flex items-center justify-center text-content-muted hover:text-accent-text hover:bg-accent/10 rounded-lg transition-all disabled:opacity-30 ml-2"
             >
               <Send className="w-3.5 h-3.5" />
             </button>
@@ -496,43 +496,43 @@ export default function CoworkPage() {
 
       {/* ── Error toast ── */}
       {error && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/30 text-red-400 text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-status-error/10 border border-status-error/30 text-status-error text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
           <AlertTriangle size={13} />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 hover:text-red-300"><X size={13} /></button>
+          <button onClick={() => setError(null)} className="ml-2 hover:text-status-error"><X size={13} /></button>
         </div>
       )}
 
       {/* ── Delete confirm modal ── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-[#000000]/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--s1)] border border-[var(--border-default)] w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+        <div className="fixed inset-0 bg-overlay/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-panel border border-line w-full max-w-[400px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                <Trash2 size={18} className="text-red-400" />
+              <div className="w-10 h-10 rounded-xl bg-status-error/10 border border-status-error/20 flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-status-error" />
               </div>
               <div>
-                <h3 className="text-[15px] font-bold text-[var(--text-primary)]">Delete Session</h3>
-                <p className="text-[11px] text-[var(--text-muted)]">This cannot be undone</p>
+                <h3 className="text-[15px] font-bold text-content-primary">Delete Session</h3>
+                <p className="text-xs text-content-muted">This cannot be undone</p>
               </div>
             </div>
-            <div className="bg-[var(--s2)] border border-[var(--border-subtle)] rounded-xl p-3.5 mb-4">
-              <p className="text-[13px] text-[var(--text-secondary)]">
-                Delete <span className="font-semibold text-[var(--text-primary)]">&ldquo;{deleteConfirm.title}&rdquo;</span>?
+            <div className="bg-surface-raised border border-line-subtle rounded-xl p-3.5 mb-4">
+              <p className="text-[13px] text-content-secondary">
+                Delete <span className="font-semibold text-content-primary">&ldquo;{deleteConfirm.title}&rdquo;</span>?
               </p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
                 disabled={!!deletingId}
-                className="flex-1 h-[38px] rounded-xl border border-[var(--border-default)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-[13px] font-semibold transition-all disabled:opacity-50"
+                className="flex-1 h-[38px] rounded-xl border border-line text-content-secondary hover:text-content-primary text-[13px] font-semibold transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={!!deletingId}
-                className="flex-1 h-[38px] rounded-xl bg-red-600 hover:bg-red-500 text-white text-[13px] font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                className="flex-1 h-[38px] rounded-xl bg-red-600 hover:bg-red-700 text-content-inverse text-[13px] font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-60"
               >
                 {deletingId ? <><Loader2 size={13} className="animate-spin" />Deleting…</> : "Delete"}
               </button>
@@ -555,11 +555,11 @@ interface SessionCardProps {
 
 function getSourceClass(source: string) {
   switch (source) {
-    case "antigravity": return "bg-purple-500/10 border-purple-500/20 text-[#a855f7]";
-    case "claude-code": return "bg-orange-500/10 border-orange-500/20 text-orange-400";
-    case "codex":       return "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-    case "cursor":      return "bg-blue-500/10 border-blue-500/20 text-[#3b82f6]";
-    default:            return "bg-[var(--s2)] border-[var(--border-default)] text-[var(--text-muted)]";
+    case "antigravity": return "bg-accent/10 border-accent/20 text-accent-text";
+    case "claude-code": return "bg-status-warning/10 border-status-warning/20 text-status-warning";
+    case "codex":       return "bg-status-success/10 border-status-success/20 text-status-success";
+    case "cursor":      return "bg-status-info/10 border-status-info/20 text-status-info";
+    default:            return "bg-surface-raised border-line text-content-muted";
   }
 }
 
@@ -576,7 +576,7 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
   const sid = session._id || session.id;
 
   return (
-    <div className="p-5 rounded-2xl bg-[var(--s1)] border border-[var(--border-subtle)] hover:border-[rgba(var(--accent-rgb),0.4)] transition-all overflow-hidden relative group shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)] flex flex-col gap-3 shrink-0">
+    <div className="p-5 rounded-2xl bg-surface-panel border border-line-subtle hover:border-accent/40 transition-all overflow-hidden relative group shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)] flex flex-col gap-3 shrink-0">
 
       {/* Top Details */}
       <div className="flex justify-between items-start gap-4">
@@ -590,20 +590,20 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
             <div className="flex items-center gap-2 min-w-0">
               <Link
                 href={`/cowork/${sid}`}
-                className="text-[var(--text-primary)] font-bold text-[14px] hover:text-[var(--accent)] transition-colors leading-snug cursor-pointer block truncate"
+                className="text-content-primary font-bold text-[14px] hover:text-accent-text transition-colors leading-snug cursor-pointer block truncate"
               >
                 {session.title}
               </Link>
               {isActive && (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-500 text-[9px] font-bold uppercase tracking-wider shrink-0"
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-status-success/10 border border-status-success/30 text-status-success text-xs font-bold uppercase tracking-wider shrink-0"
                   title="Checkpointed recently and not finalized — this session is in progress">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                   live
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-[var(--text-muted)] mt-1 font-medium">
-              <span className="flex items-center gap-1 text-[var(--text-secondary)]">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs text-content-muted mt-1 font-medium">
+              <span className="flex items-center gap-1 text-content-secondary">
                 <User size={10} />
                 <span>{session.author?.name ?? "Unknown"}</span>
               </span>
@@ -621,13 +621,13 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
                       {href ? (
                         <a href={href} target="_blank" rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1 font-mono text-[#a855f7] hover:text-[#c4b5fd] hover:underline transition-colors"
+                          className="flex items-center gap-1 font-mono text-accent-text hover:text-accent-text hover:underline transition-colors"
                           title={r.repoKey}>
                           <GitBranch size={10} />
                           <span>{label}</span>
                         </a>
                       ) : (
-                        <span className="flex items-center gap-1 font-mono text-[#a855f7]" title={r.repoKey}>
+                        <span className="flex items-center gap-1 font-mono text-accent-text" title={r.repoKey}>
                           <GitBranch size={10} />
                           <span>{label}</span>
                         </span>
@@ -638,7 +638,7 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
               ) : session.branch && (
                 <>
                   <span>•</span>
-                  <span className="flex items-center gap-1 font-mono text-[#a855f7]">
+                  <span className="flex items-center gap-1 font-mono text-accent-text">
                     <GitBranch size={10} />
                     <span>{session.branch}</span>
                   </span>
@@ -652,7 +652,7 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <Link
             href={`/cowork/${sid}`}
-            className="p-1.5 bg-[var(--s2)] hover:bg-[rgba(var(--accent-rgb),0.2)] text-[var(--text-muted)] hover:text-[var(--accent)] rounded-lg border border-[var(--border-default)] hover:border-[rgba(var(--accent-rgb),0.25)] transition-colors"
+            className="p-1.5 bg-surface-raised hover:bg-accent/20 text-content-muted hover:text-accent-text rounded-lg border border-line hover:border-accent/25 transition-colors"
           >
             <ExternalLink size={12} />
           </Link>
@@ -660,7 +660,7 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
             <button
               onClick={e => onDelete(sid, session.title, e)}
               disabled={deletingId === sid}
-              className="p-1.5 bg-[var(--s2)] hover:bg-red-500/20 text-[var(--text-muted)] hover:text-red-400 rounded-lg border border-[var(--border-default)] hover:border-red-500/25 transition-colors"
+              className="p-1.5 bg-surface-raised hover:bg-status-error/20 text-content-muted hover:text-status-error rounded-lg border border-line hover:border-status-error/25 transition-colors"
             >
               {deletingId === sid
                 ? <Loader2 size={12} className="animate-spin" />
@@ -675,7 +675,7 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
       {session.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 ml-12">
           {session.tags.map((tag, i) => (
-            <span key={i} className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--s2)] border border-[var(--border-subtle)] text-[var(--text-muted)] uppercase tracking-wider">
+            <span key={i} className="text-xs font-bold px-2 py-0.5 rounded bg-surface-raised border border-line-subtle text-content-muted uppercase tracking-wider">
               {tag}
             </span>
           ))}
@@ -686,17 +686,17 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
       {(session.intent || session.outcome) && (
         <div className="flex gap-2 ml-12">
           {session.intent && (
-            <span className="text-[9px] px-2 py-0.5 rounded font-mono bg-[rgba(var(--accent-rgb),0.1)] text-[#a78bfa] border border-[rgba(var(--accent-rgb),0.2)]">
+            <span className="text-xs px-2 py-0.5 rounded font-mono bg-accent/10 text-accent-text border border-accent/20">
               {session.intent}
             </span>
           )}
           {session.outcome && (
-            <span className={`text-[9px] px-2 py-0.5 rounded font-mono border ${
+            <span className={`text-xs px-2 py-0.5 rounded font-mono border ${
               session.outcome === "fixed" || session.outcome === "implemented"
-                ? "bg-green-500/10 text-green-500 border-green-500/20"
+                ? "bg-status-success/10 text-status-success border-status-success/20"
                 : session.outcome === "blocked" || session.outcome === "abandoned"
-                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                ? "bg-status-error/10 text-status-error border-status-error/20"
+                : "bg-status-warning/10 text-status-warning border-status-warning/20"
             }`}>
               {session.outcome}
             </span>
@@ -706,19 +706,19 @@ const SessionCard = ({ session, isActive = false, onDelete, deletingId }: Sessio
 
       {/* Summary */}
       <div
-        className={`ml-12 text-[12px] leading-relaxed text-[var(--text-secondary)] ${expanded ? "" : "max-h-[76px] overflow-hidden"}`}
+        className={`ml-12 text-[12px] leading-relaxed text-content-secondary ${expanded ? "" : "max-h-[76px] overflow-hidden"}`}
         style={expanded ? undefined : { WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 100%)", maskImage: "linear-gradient(to bottom, black 55%, transparent 100%)" }}
       >
         <MarkdownViewer content={session.summary} />
       </div>
 
       {!expanded && session.summary.length > 180 && (
-        <button onClick={() => setExpanded(true)} className="ml-12 text-[11px] font-bold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors text-left">
+        <button onClick={() => setExpanded(true)} className="ml-12 text-xs font-bold text-accent-text hover:text-content-primary transition-colors text-left">
           Read more
         </button>
       )}
       {expanded && (
-        <button onClick={() => setExpanded(false)} className="ml-12 text-[11px] font-bold text-[var(--accent)] hover:text-[var(--text-primary)] transition-colors text-left mt-1">
+        <button onClick={() => setExpanded(false)} className="ml-12 text-xs font-bold text-accent-text hover:text-content-primary transition-colors text-left mt-1">
           Show less
         </button>
       )}

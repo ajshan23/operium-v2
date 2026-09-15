@@ -5,7 +5,7 @@ import {
   Settings, Database, PenTool, Webhook,
   Sparkles, Clock, Plus, Trash2, Key, Check, Copy, Eye, EyeOff,
   Loader2, AlertTriangle, User, RefreshCw, Bot,
-  Users, Mail, LogOut, X, Shield, GitBranch
+  Users, Mail, LogOut, X, Shield, GitBranch, Monitor, Moon, Sun
 } from "lucide-react";
 import { historyApi } from "@/api/history.api";
 import { orgApi } from "@/api/org.api";
@@ -14,6 +14,7 @@ import { apiClient } from "@/api/client";
 import { getUser } from "@/lib/auth";
 import { getActiveOrgId } from "@/lib/org";
 import { MCP_TOOL_NAMES, MCP_TOOL_COUNT, MCP_TOOL_GROUPS } from "@operium/shared";
+import { useTheme, type ThemePreference } from "@/components/ThemeProvider";
 
 // Grouped tool list for display; anything not in a group renders under "Other"
 // so newly added tools never silently disappear from this screen.
@@ -60,6 +61,7 @@ function formatSyncDate(d: string | null): string {
 }
 
 export default function SettingsPage() {
+  const { preference, setPreference } = useTheme();
 
   // ── Profile ──────────────────────────────────────────────────────────────
   const [profileName,   setProfileName]   = useState("User");
@@ -486,61 +488,99 @@ export default function SettingsPage() {
 
   // ── Shared UI helpers ─────────────────────────────────────────────────
   const Toggle = ({ value, onChange }: { value: boolean; onChange: () => void }) => (
-    <div onClick={onChange} className={`w-9 h-[22px] rounded-full p-0.5 cursor-pointer transition-colors duration-300 flex items-center ${value ? "bg-[#8b5cf6]" : "bg-[#1e1e24]"}`}>
+    <div onClick={onChange} className={`w-9 h-[22px] rounded-full p-0.5 cursor-pointer transition-colors duration-300 flex items-center ${value ? "bg-accent" : "bg-surface-hover"}`}>
       <div className={`w-[18px] h-[18px] rounded-full bg-white shadow-md transform transition-transform duration-300 ${value ? "translate-x-[14px]" : "translate-x-0"}`} />
     </div>
   );
 
-  const inputCls = "w-full bg-[#0c0c0f] border border-[#1e1e24] focus:border-[#8b5cf6]/40 rounded-xl px-3.5 py-2 text-[12px] text-[#fafafa] focus:outline-none transition-all placeholder:text-[#55556a]";
-  const cardCls  = "bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-6 flex flex-col gap-6";
+  const inputCls = "w-full bg-surface-panel border border-line-subtle focus:border-accent/40 rounded-xl px-3.5 py-2 text-[12px] text-content-primary focus:outline-none transition-all placeholder:text-content-muted";
+  const cardCls  = "bg-surface-panel/40 border border-line-subtle rounded-2xl p-6 flex flex-col gap-6";
 
   return (
-    <div className="flex-1 bg-[#050505] overflow-y-auto relative select-none">
+    <div className="flex-1 bg-surface-page overflow-y-auto relative select-none">
       <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(139,92,246,0.02),transparent_60%)] rounded-full pointer-events-none blur-3xl" />
 
       <div className="max-w-4xl mx-auto w-full p-6 md:p-8 flex flex-col gap-8 relative z-10">
 
         {/* Title */}
         <div>
-          <h1 className="text-xl font-bold text-[#fafafa] tracking-tight flex items-center gap-2">
-            <Settings className="text-[#8b5cf6]" size={22} />
+          <h1 className="text-xl font-bold text-content-primary tracking-tight flex items-center gap-2">
+            <Settings className="text-accent-text" size={22} />
             <span>Settings</span>
           </h1>
-          <p className="text-[12px] text-[#63637a] mt-1">
+          <p className="text-[12px] text-content-muted mt-1">
             Manage your account, integrations, and workspace preferences.
           </p>
         </div>
 
         {/* Global integration loading error */}
         {intError && (
-          <div className="text-[12px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center gap-2">
+          <div className="text-[12px] text-status-error bg-status-error/10 border border-status-error/20 rounded-xl px-4 py-3 flex items-center gap-2">
             <AlertTriangle size={14} className="shrink-0" />
             <span>{intError}</span>
-            <button onClick={loadIntegrations} className="ml-auto text-red-300 hover:text-red-200 font-semibold text-[11px]">Retry</button>
+            <button onClick={loadIntegrations} className="ml-auto text-status-error hover:text-status-error font-semibold text-xs">Retry</button>
           </div>
         )}
+
+        {/* ── APPEARANCE ── */}
+        <section className="rounded-2xl border border-line-subtle bg-surface-panel p-6 shadow-soft">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/25 bg-accent/10 text-accent-text">
+              <Sun size={16} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold leading-tight text-content-primary">Appearance</h2>
+              <p className="mt-1 text-xs leading-relaxed text-content-muted">Choose the calmer Soft Operium palette that fits your environment.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Theme preference">
+            {([
+              { value: "system", label: "System", description: "Follow this device", Icon: Monitor },
+              { value: "light", label: "Warm Light", description: "Soft warm neutrals", Icon: Sun },
+              { value: "dark", label: "Soft Dark", description: "Low-glare charcoal", Icon: Moon },
+            ] as const).map(({ value, label, description, Icon }) => {
+              const selected = preference === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setPreference(value as ThemePreference)}
+                  className={`min-h-20 rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-surface-panel ${selected
+                    ? "border-accent bg-accent/10 text-content-primary"
+                    : "border-line-subtle bg-surface-raised/50 text-content-secondary hover:border-line-strong hover:bg-surface-raised"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-[13px] font-semibold"><Icon size={15} className={selected ? "text-accent-text" : "text-content-muted"} />{label}</span>
+                  <span className="mt-1.5 block text-xs text-content-muted">{description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
 
         {/* ── 0. PROFILE ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-[#8b5cf6]/25 bg-[#8b5cf6]/10 text-[#8b5cf6] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-accent/25 bg-accent/10 text-accent-text flex items-center justify-center shrink-0">
               <User size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">Account</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Your logged-in identity.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Account</h2>
+              <p className="text-xs text-content-muted mt-0.5">Your logged-in identity.</p>
             </div>
           </div>
-          <div className="flex items-center gap-4 p-4 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+          <div className="flex items-center gap-4 p-4 rounded-xl border border-line-subtle bg-surface-panel/20">
             {profileAvatar
-              ? <img src={profileAvatar} alt={profileName} referrerPolicy="no-referrer" className="w-12 h-12 rounded-full border border-[#2a2a35] object-cover shrink-0" />
-              : <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#7c3aed] to-[#6366f1] border border-[#2a2a35] flex items-center justify-center shrink-0">
-                  <User size={20} className="text-white" />
+              ? <img src={profileAvatar} alt={profileName} referrerPolicy="no-referrer" className="w-12 h-12 rounded-full border border-line object-cover shrink-0" />
+              : <div className="w-12 h-12 rounded-full bg-accent border border-line flex items-center justify-center shrink-0">
+                  <User size={20} className="text-content-primary" />
                 </div>
             }
             <div className="min-w-0">
-              <p className="text-[14px] font-bold text-[#fafafa] truncate">{profileName}</p>
-              <p className="text-[12px] text-[#63637a] truncate mt-0.5">{profileEmail}</p>
+              <p className="text-[14px] font-bold text-content-primary truncate">{profileName}</p>
+              <p className="text-[12px] text-content-muted truncate mt-0.5">{profileEmail}</p>
             </div>
           </div>
         </div>
@@ -548,47 +588,47 @@ export default function SettingsPage() {
         {/* ── 1. GEMINI AI KEYS ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-purple-500/25 bg-purple-500/10 text-[#a855f7] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-accent/25 bg-accent/10 text-accent-text flex items-center justify-center shrink-0">
               <Sparkles size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">Gemini AI Keys</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Add your own keys to bypass shared rate limits.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Gemini AI Keys</h2>
+              <p className="text-xs text-content-muted mt-0.5">Add your own keys to bypass shared rate limits.</p>
             </div>
           </div>
           <form onSubmit={handleAddGeminiKey} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input type="text" required value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="Key label (e.g. Work Key)" className={inputCls} />
             <div className="relative flex items-center">
               <input type={showKeyText ? "text" : "password"} required value={newKeyValue} onChange={e => setNewKeyValue(e.target.value)} placeholder="AIzaSy..." className={`${inputCls} pr-10`} />
-              <button type="button" onClick={() => setShowKeyText(!showKeyText)} className="absolute right-3 text-[#55556a] hover:text-[#fafafa] transition-colors">
+              <button type="button" onClick={() => setShowKeyText(!showKeyText)} className="absolute right-3 text-content-muted hover:text-content-primary transition-colors">
                 {showKeyText ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
-            <button type="submit" className="h-[38px] bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[12px] font-semibold rounded-xl flex items-center justify-center gap-1.5 hover:opacity-95 transition-all active:scale-[0.98]">
+            <button type="submit" className="h-[38px] bg-accent hover:bg-accent-hover text-content-inverse text-[12px] font-semibold rounded-xl flex items-center justify-center gap-1.5 hover:opacity-95 transition-all active:scale-[0.98]">
               <Plus size={14} /><span>Add API Key</span>
             </button>
           </form>
           {geminiKeys.length > 0 && (
-            <div className="flex flex-col gap-2.5 border-t border-[#1e1e24]/40 pt-4">
-              <span className="text-[10px] font-bold text-[#55556a] uppercase tracking-wider">Registered Keys</span>
+            <div className="flex flex-col gap-2.5 border-t border-line-subtle/40 pt-4">
+              <span className="text-xs font-bold text-content-muted uppercase tracking-wider">Registered Keys</span>
               <div className="flex flex-col gap-2">
                 {geminiKeys.map(key => (
-                  <div key={key.id} className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+                  <div key={key.id} className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
                     <div className="flex items-center gap-3">
                       <div onClick={() => setGeminiKeys(prev => prev.map(k => ({ ...k, isActive: k.id === key.id })))}
-                        className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center cursor-pointer transition-all ${key.isActive ? "border-[#8b5cf6] bg-[#8b5cf6]/20" : "border-[#2a2a35] hover:border-[#8b5cf6]"}`}>
-                        {key.isActive && <div className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]" />}
+                        className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center cursor-pointer transition-all ${key.isActive ? "border-accent bg-accent/20" : "border-line hover:border-accent"}`}>
+                        {key.isActive && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
                       </div>
                       <div>
-                        <span className="text-[12px] font-bold text-[#fafafa]">{key.name}</span>
-                        <p className="text-[10px] font-mono text-[#55556a] mt-0.5">{key.keyPreview}</p>
+                        <span className="text-[12px] font-bold text-content-primary">{key.name}</span>
+                        <p className="text-xs font-mono text-content-muted mt-0.5">{key.keyPreview}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${key.isActive ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-[#1e1e24] text-[#63637a]"}`}>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${key.isActive ? "bg-status-success/10 text-status-success border border-status-success/20" : "bg-surface-hover text-content-muted"}`}>
                         {key.isActive ? "Active" : "Standby"}
                       </span>
-                      <button onClick={() => setGeminiKeys(prev => prev.filter(k => k.id !== key.id))} className="p-1.5 text-[#55556a] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                      <button onClick={() => setGeminiKeys(prev => prev.filter(k => k.id !== key.id))} className="p-1.5 text-content-muted hover:text-status-error hover:bg-status-error/10 rounded-lg transition-colors">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -602,58 +642,58 @@ export default function SettingsPage() {
         {/* ── MCP SETUP INSTRUCTIONS ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-violet-500/25 bg-violet-500/10 text-violet-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-accent/25 bg-accent/10 text-accent-text flex items-center justify-center shrink-0">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C12 2 17 8.5 17 12.5C17 15.26 14.76 17.5 12 17.5C9.24 17.5 7 15.26 7 12.5C7 8.5 12 2 12 2Z"/></svg>
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">MCP: connected work memory</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">One setup gives your coding agent a private startup brief and quiet progress capture.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">MCP: connected work memory</h2>
+              <p className="text-xs text-content-muted mt-0.5">One setup gives your coding agent a private startup brief and quiet progress capture.</p>
             </div>
           </div>
           <div className="space-y-4">
-            <div className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4 space-y-3">
+            <div className="bg-surface-raised rounded-xl border border-line-subtle p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex rounded-lg border border-[#282534] p-0.5">
+                <div className="flex rounded-lg border border-line p-0.5">
                   {(["claude", "codex"] as const).map(client => (
-                    <button key={client} onClick={() => setMcpClient(client)} className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-colors ${mcpClient === client ? "bg-violet-500/20 text-violet-300" : "text-[#77758c] hover:text-white"}`}>
+                    <button key={client} onClick={() => setMcpClient(client)} className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${mcpClient === client ? "bg-accent/20 text-accent-text" : "text-content-muted hover:text-content-primary"}`}>
                       {client === "claude" ? "Claude Code" : "Codex"}
                     </button>
                   ))}
                 </div>
-                <span className={`text-[10px] font-semibold ${mcpStatus?.connected ? "text-emerald-400" : "text-[#8f8da3]"}`}>
+                <span className={`text-xs font-semibold ${mcpStatus?.connected ? "text-status-success" : "text-content-muted"}`}>
                   {mcpStatus?.connected ? `Connected · last call ${formatSyncDate(mcpStatus.lastSuccessfulCallAt)}` : "Not verified yet"}
                 </span>
               </div>
-              <p className="text-[12px] font-semibold text-[#fafafa]">Run this once from the repository root:</p>
+              <p className="text-[12px] font-semibold text-content-primary">Run this once from the repository root:</p>
               <div className="flex gap-2">
-                <code className="min-w-0 flex-1 text-[11px] font-mono text-[#c4b5fd] leading-relaxed overflow-x-auto bg-[#050505] rounded-lg p-3 border border-[#1a1a22]">{`npx @operium/cli init --client ${mcpClient}`}</code>
-                <button onClick={() => navigator.clipboard.writeText(`npx @operium/cli init --client ${mcpClient}`)} className="px-3 text-[#a78bfa] hover:text-white border border-[#332b4a] rounded-lg text-[10px] font-semibold">Copy</button>
+                <code className="min-w-0 flex-1 text-xs font-mono text-accent-text leading-relaxed overflow-x-auto bg-surface-page rounded-lg p-3 border border-line-subtle">{`npx @operium/cli init --client ${mcpClient}`}</code>
+                <button onClick={() => navigator.clipboard.writeText(`npx @operium/cli init --client ${mcpClient}`)} className="px-3 text-accent-text hover:text-content-primary border border-line rounded-lg text-xs font-semibold">Copy</button>
               </div>
-              <div className="grid gap-2 text-[10px] text-[#8f8da3] sm:grid-cols-3">
+              <div className="grid gap-2 text-xs text-content-muted sm:grid-cols-3">
                 <span>1. Detects repo, branch, and worktree</span>
                 <span>2. Verifies MCP with ping</span>
                 <span>3. Enables private capture by default</span>
               </div>
-              <p className="text-[10px] text-[#63637a]">Initialized: {formatSyncDate(mcpStatus?.lastInitializationAt ?? null)} · Startup: {formatSyncDate(mcpStatus?.lastStartupAt ?? null)} · Last checkpoint: {formatSyncDate(mcpStatus?.lastCaptureAt ?? null)}. Capture is private unless you deliberately share a session.</p>
+              <p className="text-xs text-content-muted">Initialized: {formatSyncDate(mcpStatus?.lastInitializationAt ?? null)} · Startup: {formatSyncDate(mcpStatus?.lastStartupAt ?? null)} · Last checkpoint: {formatSyncDate(mcpStatus?.lastCaptureAt ?? null)}. Capture is private unless you deliberately share a session.</p>
             </div>
-            <details className="bg-[#0d0b16] rounded-xl border border-[#1e1e24] p-4">
-              <summary className="cursor-pointer text-[12px] font-semibold text-[#fafafa]">
+            <details className="bg-surface-raised rounded-xl border border-line-subtle p-4">
+              <summary className="cursor-pointer text-[12px] font-semibold text-content-primary">
                 Advanced MCP tools
-                <span className="ml-2 text-[10px] font-mono text-[#63637a] bg-[#1a1a22] px-1.5 py-0.5 rounded">{MCP_TOOL_COUNT}</span>
+                <span className="ml-2 text-xs font-mono text-content-muted bg-surface-hover px-1.5 py-0.5 rounded">{MCP_TOOL_COUNT}</span>
               </summary>
               <div className="space-y-3 mt-3">
                 {mcpToolGroups.map(group => (
                   <div key={group.label}>
-                    <p className="text-[10px] font-bold text-[#63637a] uppercase tracking-wider mb-1.5">{group.label}</p>
+                    <p className="text-xs font-bold text-content-muted uppercase tracking-wider mb-1.5">{group.label}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {group.tools.map(tool => (
-                        <span key={tool} className="text-[10px] font-mono text-[#8b5cf6] bg-[#8b5cf6]/5 px-2 py-0.5 rounded border border-[#8b5cf6]/10">{tool}</span>
+                        <span key={tool} className="text-xs font-mono text-accent-text bg-accent/5 px-2 py-0.5 rounded border border-accent/10">{tool}</span>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-[#63637a] mt-3">
+              <p className="text-xs text-content-muted mt-3">
                 The agent normally needs only startup context and <code>capture_work</code>. All specialized tools remain available when a task needs them.
               </p>
             </details>
@@ -663,39 +703,39 @@ export default function SettingsPage() {
         {/* ── 2. API INTEGRATIONS (Extension tokens) ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-blue-500/25 bg-blue-500/10 text-[#3b82f6] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-status-info/25 bg-status-info/10 text-status-info flex items-center justify-center shrink-0">
               <Key size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">API Integrations</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Generate tokens to connect external dev tools like the VS Code Extension or CLI.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">API Integrations</h2>
+              <p className="text-xs text-content-muted mt-0.5">Generate tokens to connect external dev tools like the VS Code Extension or CLI.</p>
             </div>
           </div>
           <form onSubmit={handleGenerateExtKey} className="flex gap-3">
             <input type="text" required value={newExtName} onChange={e => setNewExtName(e.target.value)} placeholder="Token label (e.g. VS Code)" className={`flex-1 ${inputCls}`} />
-            <button type="submit" className="h-[38px] px-6 bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] hover:text-white text-[12px] font-semibold rounded-xl transition-all active:scale-[0.98] shrink-0">
+            <button type="submit" className="h-[38px] px-6 bg-accent/10 border border-accent/40 hover:border-accent text-accent-text hover:text-content-primary text-[12px] font-semibold rounded-xl transition-all active:scale-[0.98] shrink-0">
               Generate Token
             </button>
           </form>
           {extensionKeys.length > 0 && (
-            <div className="flex flex-col gap-2.5 border-t border-[#1e1e24]/40 pt-4">
-              <span className="text-[10px] font-bold text-[#55556a] uppercase tracking-wider">Access Tokens</span>
+            <div className="flex flex-col gap-2.5 border-t border-line-subtle/40 pt-4">
+              <span className="text-xs font-bold text-content-muted uppercase tracking-wider">Access Tokens</span>
               <div className="flex flex-col gap-2">
                 {extensionKeys.map(token => (
-                  <div key={token.id} className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+                  <div key={token.id} className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
                     <div className="min-w-0">
-                      <span className="text-[12px] font-bold text-[#fafafa]">{token.name}</span>
+                      <span className="text-[12px] font-bold text-content-primary">{token.name}</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-mono text-[#8b5cf6]">{token.keyPreview}</span>
-                        <span className="text-[9px] text-[#55556a]">Created: {token.createdAt}</span>
+                        <span className="text-xs font-mono text-accent-text">{token.keyPreview}</span>
+                        <span className="text-xs text-content-muted">Created: {token.createdAt}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleCopyKey(token.id, token.keyPreview)} className="p-2 bg-[#120e20]/60 border border-[#8b5cf6]/20 text-[#8b5cf6] hover:text-white rounded-lg transition-colors flex items-center gap-1 text-[10px] font-semibold">
-                        {copiedKeyId === token.id ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <button onClick={() => handleCopyKey(token.id, token.keyPreview)} className="p-2 bg-accent/10 border border-accent/20 text-accent-text hover:text-content-primary rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold">
+                        {copiedKeyId === token.id ? <Check size={11} className="text-status-success" /> : <Copy size={11} />}
                         <span>{copiedKeyId === token.id ? "Copied" : "Copy"}</span>
                       </button>
-                      <button onClick={() => setExtensionKeys(prev => prev.filter(k => k.id !== token.id))} className="p-1.5 text-[#55556a] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                      <button onClick={() => setExtensionKeys(prev => prev.filter(k => k.id !== token.id))} className="p-1.5 text-content-muted hover:text-status-error hover:bg-status-error/10 rounded-lg transition-colors">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -709,18 +749,18 @@ export default function SettingsPage() {
         {/* ── COWORK PRIVACY ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-[rgba(var(--accent-rgb),0.25)] bg-[rgba(var(--accent-rgb),0.1)] text-[var(--accent)] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-accent/25 bg-accent/10 text-accent-text flex items-center justify-center shrink-0">
               <Bot size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">Cowork Sharing</h2>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Automatic checkpoints are private. Control sharing for sessions you intentionally publish.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Cowork Sharing</h2>
+              <p className="text-xs text-content-muted mt-0.5">Automatic checkpoints are private. Control sharing for sessions you intentionally publish.</p>
             </div>
           </div>
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--s2)]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-raised">
             <div className="pr-4">
-              <span className="text-[12px] font-bold text-[var(--text-primary)]">Share new sessions with my team</span>
-              <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+              <span className="text-[12px] font-bold text-content-primary">Share new sessions with my team</span>
+              <p className="text-xs text-content-muted mt-0.5 leading-relaxed">
                 {shareCowork
                   ? "On — sessions you deliberately save for team use are added to your organization's knowledge base. Automatic checkpoints still stay private."
                   : "Off — new sessions stay private to you. Existing sessions are unchanged."}
@@ -732,28 +772,28 @@ export default function SettingsPage() {
           </div>
 
           {/* Per-repo overrides */}
-          <div className="border-t border-[var(--border-subtle)] pt-4">
+          <div className="border-t border-line-subtle pt-4">
             <div className="flex items-center gap-2 mb-1">
-              <GitBranch size={13} className="text-[var(--text-muted)]" />
-              <span className="text-[12px] font-bold text-[var(--text-primary)]">Share by project</span>
+              <GitBranch size={13} className="text-content-muted" />
+              <span className="text-[12px] font-bold text-content-primary">Share by project</span>
             </div>
-            <p className="text-[10px] text-[var(--text-muted)] mb-3 leading-relaxed">
+            <p className="text-xs text-content-muted mb-3 leading-relaxed">
               Override sharing per repository. Turning one off keeps that project&apos;s sessions private — and updates existing ones too. Sessions spanning a private repo stay private.
             </p>
 
             {repoLoading ? (
-              <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)] py-2">
+              <div className="flex items-center gap-2 text-xs text-content-muted py-2">
                 <Loader2 size={13} className="animate-spin" /> Loading projects…
               </div>
             ) : repoPrefs.length === 0 ? (
-              <p className="text-[11px] text-[var(--text-muted)] py-2">No projects yet — they appear here once you save cowork sessions with a repo.</p>
+              <p className="text-xs text-content-muted py-2">No projects yet — they appear here once you save cowork sessions with a repo.</p>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {repoPrefs.map(r => (
-                  <div key={r.repoKey} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--s2)]">
+                  <div key={r.repoKey} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-line-subtle bg-surface-raised">
                     <div className="min-w-0">
-                      <p className="text-[12px] font-semibold text-[var(--text-primary)] truncate" title={r.repoKey}>{r.repoName}</p>
-                      <p className="text-[10px] text-[var(--text-muted)]">
+                      <p className="text-[12px] font-semibold text-content-primary truncate" title={r.repoKey}>{r.repoName}</p>
+                      <p className="text-xs text-content-muted">
                         {r.sessionCount} session{r.sessionCount === 1 ? "" : "s"} · {r.shared ? "shared with team" : "private"}
                       </p>
                     </div>
@@ -771,25 +811,25 @@ export default function SettingsPage() {
         {hasOrg && (
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-blue-500/25 bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-status-info/25 bg-status-info/10 text-status-info flex items-center justify-center shrink-0">
               <Users size={16} />
             </div>
             <div className="flex-1">
-              <h2 className="text-[14px] font-bold text-[var(--text-primary)] leading-tight">
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">
                 {orgName || "Team"}
               </h2>
-              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+              <p className="text-xs text-content-muted mt-0.5">
                 {canManage ? "Invite teammates and manage who has access to your organization." : "Members of your organization. Contact an owner or admin to invite others."}
               </p>
             </div>
             <button onClick={() => void loadTeam()} disabled={teamLoading}
-              className="p-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--s2)] transition-colors disabled:opacity-40">
+              className="p-2 rounded-lg border border-line-subtle text-content-muted hover:text-content-primary hover:bg-surface-raised transition-colors disabled:opacity-40">
               <RefreshCw size={13} className={teamLoading ? "animate-spin" : ""} />
             </button>
           </div>
 
           {teamError && (
-            <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+            <div className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
               <AlertTriangle size={13} className="shrink-0" /><span>{teamError}</span>
             </div>
           )}
@@ -797,7 +837,7 @@ export default function SettingsPage() {
           {/* Invite form (owner/admin) */}
           {canManage && (
             <form onSubmit={handleInvite} className="flex flex-col gap-2">
-              {inviteMsg && <p className="text-[11px] text-emerald-400">{inviteMsg}</p>}
+              {inviteMsg && <p className="text-xs text-status-success">{inviteMsg}</p>}
               <div className="flex gap-2">
                 <input
                   type="email" value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteMsg(null); }}
@@ -805,13 +845,13 @@ export default function SettingsPage() {
                 />
                 {myRole === "owner" && (
                   <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "member" | "admin")}
-                    className="bg-[var(--s1)] border border-[var(--border-subtle)] rounded-xl px-3 text-[12px] text-[var(--text-primary)] focus:outline-none cursor-pointer">
+                    className="bg-surface-panel border border-line-subtle rounded-xl px-3 text-[12px] text-content-primary focus:outline-none cursor-pointer">
                     <option value="member">Member</option>
                     <option value="admin">Admin</option>
                   </select>
                 )}
                 <button type="submit" disabled={inviteBusy || !inviteEmail.trim()}
-                  className="px-4 rounded-xl bg-[var(--accent)] text-white text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-opacity">
+                  className="px-4 rounded-xl bg-accent text-content-primary text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-opacity">
                   {inviteBusy ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
                   <span>Invite</span>
                 </button>
@@ -822,7 +862,7 @@ export default function SettingsPage() {
           {/* Member list */}
           <div className="flex flex-col gap-2">
             {teamLoading && members.length === 0 ? (
-              <div className="flex items-center gap-2 text-[var(--text-muted)] text-[12px] py-4 justify-center">
+              <div className="flex items-center gap-2 text-content-muted text-[12px] py-4 justify-center">
                 <Loader2 size={14} className="animate-spin" /> Loading team…
               </div>
             ) : members.map(m => {
@@ -832,29 +872,29 @@ export default function SettingsPage() {
               // Owner removes anyone (except last owner, server-enforced); admin removes only members
               const canRemove = !isSelf && (myRole === "owner" ? true : (myRole === "admin" && m.role === "member"));
               return (
-                <div key={m._id} className="flex items-center justify-between p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--s2)]">
+                <div key={m._id} className="flex items-center justify-between p-3 rounded-xl border border-line-subtle bg-surface-raised">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-[var(--s3)] flex items-center justify-center text-[var(--text-secondary)] shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center text-content-secondary shrink-0">
                       <User size={14} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[12px] font-semibold text-[var(--text-primary)] truncate">
-                        {label}{isSelf && <span className="text-[var(--text-muted)] font-normal"> (you)</span>}
+                      <div className="text-[12px] font-semibold text-content-primary truncate">
+                        {label}{isSelf && <span className="text-content-muted font-normal"> (you)</span>}
                       </div>
-                      <div className="text-[10px] text-[var(--text-muted)] truncate">{m.userId?.email}</div>
+                      <div className="text-xs text-content-muted truncate">{m.userId?.email}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full flex items-center gap-1 ${
-                      m.role === "owner" ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                      : m.role === "admin" ? "bg-[rgba(var(--accent-rgb),0.1)] text-[var(--accent)] border border-[rgba(var(--accent-rgb),0.2)]"
-                      : "bg-[var(--s3)] text-[var(--text-muted)] border border-[var(--border-subtle)]"}`}>
+                    <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-full flex items-center gap-1 ${
+                      m.role === "owner" ? "bg-status-warning/10 text-status-warning border border-status-warning/20"
+                      : m.role === "admin" ? "bg-accent/10 text-accent-text border border-accent/20"
+                      : "bg-surface-hover text-content-muted border border-line-subtle"}`}>
                       {(m.role === "owner" || m.role === "admin") && <Shield size={9} />}{m.role}
                     </span>
                     {canRemove && (
                       <button onClick={() => handleRemoveMember(String(m.userId?._id), label)}
                         title="Remove member"
-                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        className="p-1.5 rounded-lg text-content-muted hover:text-status-error hover:bg-status-error/10 transition-colors">
                         <Trash2 size={13} />
                       </button>
                     )}
@@ -867,19 +907,19 @@ export default function SettingsPage() {
           {/* Pending invites (owner/admin) */}
           {canManage && invites.length > 0 && (
             <div className="flex flex-col gap-2">
-              <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Pending Invites ({invites.length})</span>
+              <span className="text-xs font-bold text-content-muted uppercase tracking-wider">Pending Invites ({invites.length})</span>
               {invites.map(inv => (
-                <div key={inv._id} className="flex flex-col gap-2 p-3 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--s1)]">
+                <div key={inv._id} className="flex flex-col gap-2 p-3 rounded-xl border border-dashed border-line-subtle bg-surface-panel">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Mail size={13} className="text-[var(--text-muted)] shrink-0" />
+                      <Mail size={13} className="text-content-muted shrink-0" />
                       <div className="min-w-0">
-                        <div className="text-[12px] text-[var(--text-primary)] truncate">{inv.email}</div>
-                        <div className="text-[10px] text-[var(--text-muted)]">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
+                        <div className="text-[12px] text-content-primary truncate">{inv.email}</div>
+                        <div className="text-xs text-content-muted">{inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}</div>
                       </div>
                     </div>
                     <button onClick={() => handleRevokeInvite(inv._id)} title="Revoke invite"
-                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
+                      className="p-1.5 rounded-lg text-content-muted hover:text-status-error hover:bg-status-error/10 transition-colors shrink-0">
                       <X size={14} />
                     </button>
                   </div>
@@ -888,21 +928,21 @@ export default function SettingsPage() {
                       either the code or the link on the join screen after signing up. */}
                   {inv.token && (
                     <div className="flex items-center gap-1.5">
-                      <code className="flex-1 min-w-0 truncate select-all text-[10px] font-mono text-[var(--text-secondary)] bg-[var(--s2)] border border-[var(--border-subtle)] rounded-md px-2 py-1.5"
+                      <code className="flex-1 min-w-0 truncate select-all text-xs font-mono text-content-secondary bg-surface-raised border border-line-subtle rounded-md px-2 py-1.5"
                         title="Invite code — they paste this on the join screen">
                         {inv.token}
                       </code>
                       <button
                         onClick={() => handleCopyKey(`${inv._id}:code`, inv.token!)}
                         title="Copy the join code"
-                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold shrink-0">
-                        {copiedKeyId === `${inv._id}:code` ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Code</>}
+                        className="p-1.5 rounded-lg text-content-muted hover:text-accent-text hover:bg-accent/10 transition-colors flex items-center gap-1 text-xs font-semibold shrink-0">
+                        {copiedKeyId === `${inv._id}:code` ? <><Check size={13} className="text-status-success" /> Copied</> : <><Copy size={13} /> Code</>}
                       </button>
                       <button
                         onClick={() => handleCopyKey(`${inv._id}:link`, `${window.location.origin}/public-onboarding?invite=${inv.token}`)}
                         title="Copy the invite link"
-                        className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[rgba(var(--accent-rgb),0.1)] transition-colors flex items-center gap-1 text-[10px] font-semibold shrink-0">
-                        {copiedKeyId === `${inv._id}:link` ? <><Check size={13} className="text-emerald-400" /> Copied</> : <><Copy size={13} /> Link</>}
+                        className="p-1.5 rounded-lg text-content-muted hover:text-accent-text hover:bg-accent/10 transition-colors flex items-center gap-1 text-xs font-semibold shrink-0">
+                        {copiedKeyId === `${inv._id}:link` ? <><Check size={13} className="text-status-success" /> Copied</> : <><Copy size={13} /> Link</>}
                       </button>
                     </div>
                   )}
@@ -914,7 +954,7 @@ export default function SettingsPage() {
           {/* Leave org */}
           <div className="pt-1">
             <button onClick={handleLeaveOrg}
-              className="text-[11px] font-semibold text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-colors">
+              className="text-xs font-semibold text-status-error hover:text-status-error flex items-center gap-1.5 transition-colors">
               <LogOut size={13} /> Leave this organization
             </button>
           </div>
@@ -924,26 +964,26 @@ export default function SettingsPage() {
         {/* ── 3. CANVAS PREFERENCES ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-status-success/25 bg-status-success/10 text-status-success flex items-center justify-center shrink-0">
               <PenTool size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">Canvas Preferences</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Customize default settings for drawing whiteboards and visual layouts.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Canvas Preferences</h2>
+              <p className="text-xs text-content-muted mt-0.5">Customize default settings for drawing whiteboards and visual layouts.</p>
             </div>
           </div>
           <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
               <div>
-                <span className="text-[12px] font-bold text-[#fafafa]">Snap to Grid</span>
-                <p className="text-[10px] text-[#55556a] mt-0.5">Align whiteboard elements automatically.</p>
+                <span className="text-[12px] font-bold text-content-primary">Snap to Grid</span>
+                <p className="text-xs text-content-muted mt-0.5">Align whiteboard elements automatically.</p>
               </div>
               <Toggle value={gridSnapping} onChange={() => setGridSnapping(!gridSnapping)} />
             </div>
-            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
               <div>
-                <span className="text-[12px] font-bold text-[#fafafa]">Default Stroke Color</span>
-                <p className="text-[10px] text-[#55556a] mt-0.5">Initial color applied when starting a drawing session.</p>
+                <span className="text-[12px] font-bold text-content-primary">Default Stroke Color</span>
+                <p className="text-xs text-content-muted mt-0.5">Initial color applied when starting a drawing session.</p>
               </div>
               <div className="flex items-center gap-1.5">
                 {["#8b5cf6","#3b82f6","#10b981","#f59e0b","#f43f5e"].map(color => (
@@ -954,22 +994,22 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
               <div>
-                <span className="text-[12px] font-bold text-[#fafafa]">Export Drawing Resolution</span>
-                <p className="text-[10px] text-[#55556a] mt-0.5">File quality settings when downloading canvas whiteboards.</p>
+                <span className="text-[12px] font-bold text-content-primary">Export Drawing Resolution</span>
+                <p className="text-xs text-content-muted mt-0.5">File quality settings when downloading canvas whiteboards.</p>
               </div>
-              <select value={exportQuality} onChange={e => setExportQuality(e.target.value)} className="h-[32px] px-3 bg-[#0c0c0f] border border-[#1e1e24] rounded-lg text-[11px] font-semibold text-white focus:outline-none cursor-pointer">
+              <select value={exportQuality} onChange={e => setExportQuality(e.target.value)} className="h-[32px] px-3 bg-surface-panel border border-line-subtle rounded-lg text-xs font-semibold text-content-primary focus:outline-none cursor-pointer">
                 <option value="standard">Standard (1x)</option>
                 <option value="high">High Definition (2x)</option>
                 <option value="ultra">Ultra-HQ Print (4x)</option>
               </select>
             </div>
           </div>
-          <div className="flex items-center justify-end border-t border-[#1e1e24]/40 pt-4 gap-3">
-            {canvasSaveSuccess && <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1"><Check size={12} /> Saved</span>}
+          <div className="flex items-center justify-end border-t border-line-subtle/40 pt-4 gap-3">
+            {canvasSaveSuccess && <span className="text-xs text-status-success font-semibold flex items-center gap-1"><Check size={12} /> Saved</span>}
             <button onClick={() => { setCanvasSaveSuccess(true); setTimeout(() => setCanvasSaveSuccess(false), 2500); }}
-              className="h-[36px] px-6 bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[12px] font-semibold rounded-xl transition-all">
+              className="h-[36px] px-6 bg-accent hover:bg-accent-hover text-content-inverse text-[12px] font-semibold rounded-xl transition-all">
               Save Preferences
             </button>
           </div>
@@ -978,24 +1018,24 @@ export default function SettingsPage() {
         {/* ── 4. WORK HISTORY PREFERENCES ── */}
         <div className={cardCls}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-status-warning/25 bg-status-warning/10 text-status-warning flex items-center justify-center shrink-0">
               <Clock size={16} />
             </div>
             <div>
-              <h2 className="text-[14px] font-bold text-white leading-tight">Work History Preferences</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Set edit/delete restrictions for timeline entries.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Work History Preferences</h2>
+              <p className="text-xs text-content-muted mt-0.5">Set edit/delete restrictions for timeline entries.</p>
             </div>
           </div>
 
           {intLoading ? (
-            <div className="flex items-center gap-2 text-[12px] text-[#55556a]">
+            <div className="flex items-center gap-2 text-[12px] text-content-muted">
               <Loader2 size={14} className="animate-spin" /> Loading…
             </div>
           ) : (
-            <div className="flex flex-col gap-3 p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+            <div className="flex flex-col gap-3 p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
               <div className="flex justify-between items-center">
-                <span className="text-[12px] font-bold text-[#fafafa]">Edit &amp; Delete Window</span>
-                <span className="text-[11px] font-mono text-[#8b5cf6] font-semibold">
+                <span className="text-[12px] font-bold text-content-primary">Edit &amp; Delete Window</span>
+                <span className="text-xs font-mono text-accent-text font-semibold">
                   {editWindowHours >= 720 ? "30 days" : editWindowHours >= 168 ? "7 days" : `${editWindowHours}h`}
                 </span>
               </div>
@@ -1010,29 +1050,29 @@ export default function SettingsPage() {
                 ] as const).map(preset => (
                   <button key={preset.value} type="button"
                     onClick={() => setEditWindowHours(preset.value)}
-                    className={`flex-1 min-w-[56px] h-[30px] text-[11px] font-semibold rounded-lg border transition-all ${
+                    className={`flex-1 min-w-[56px] h-[30px] text-xs font-semibold rounded-lg border transition-all ${
                       editWindowHours === preset.value
-                        ? "border-[#8b5cf6] bg-[#8b5cf6]/15 text-[#c4b5fd]"
-                        : "border-[#2a2a35] text-[#63637a] hover:border-[#8b5cf6]/40 hover:text-[#a1a1aa]"
+                        ? "border-accent bg-accent/20 text-accent-text"
+                        : "border-line text-content-muted hover:border-accent/40 hover:text-content-secondary"
                     }`}>
                     {preset.label}
                   </button>
                 ))}
               </div>
-              <span className="text-[9px] text-[#55556a]">Entries cannot be edited or deleted once this window expires. Default: 48h.</span>
+              <span className="text-xs text-content-muted">Entries cannot be edited or deleted once this window expires. Default: 48h.</span>
             </div>
           )}
 
           {historyError && (
-            <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 flex items-center gap-1.5">
+            <div className="text-xs text-status-error bg-status-error/10 border border-status-error/20 rounded-xl px-3 py-2 flex items-center gap-1.5">
               <AlertTriangle size={12} /> {historyError}
             </div>
           )}
 
-          <div className="flex items-center justify-end border-t border-[#1e1e24]/40 pt-4 gap-3">
-            {historySaveSuccess && <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1"><Check size={12} /> Saved</span>}
+          <div className="flex items-center justify-end border-t border-line-subtle/40 pt-4 gap-3">
+            {historySaveSuccess && <span className="text-xs text-status-success font-semibold flex items-center gap-1"><Check size={12} /> Saved</span>}
             <button onClick={handleSaveHistoryPrefs} disabled={historySaving || intLoading}
-              className="h-[36px] px-6 bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2">
+              className="h-[36px] px-6 bg-accent hover:bg-accent-hover text-content-inverse text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2">
               {historySaving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : "Save Preferences"}
             </button>
           </div>
@@ -1042,19 +1082,19 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* GitHub */}
-          <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-6 flex flex-col gap-5">
+          <div className="bg-surface-panel/40 border border-line-subtle rounded-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${githubConnected ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-[#2a2a35] bg-[#141418] text-[#63637a]"}`}>
+              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${githubConnected ? "border-status-success/30 bg-status-success/10 text-status-success" : "border-line bg-surface-raised text-content-muted"}`}>
                 <GithubIcon size={16} />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-[13px] font-bold text-white leading-tight">GitHub</h2>
-                <p className="text-[10px] text-[#63637a] mt-0.5">
+                <h2 className="text-[13px] font-bold text-content-primary leading-tight">GitHub</h2>
+                <p className="text-xs text-content-muted mt-0.5">
                   {intLoading ? "Loading…" : githubConnected ? `Synced ${formatSyncDate(githubLastSync)}` : "Not connected"}
                 </p>
               </div>
               {githubConnected && (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider shrink-0">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-status-success/10 text-status-success border border-status-success/20 uppercase tracking-wider shrink-0">
                   Connected
                 </span>
               )}
@@ -1063,24 +1103,24 @@ export default function SettingsPage() {
             {!githubConnected && !intLoading && (
               <form onSubmit={handleConnectGithub} className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-bold text-[#55556a] uppercase tracking-wider">Personal Access Token</label>
+                  <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Personal Access Token</label>
                   <a href="https://github.com/settings/tokens/new?scopes=repo,read:user" target="_blank" rel="noreferrer"
-                    className="text-[9px] text-[#8b5cf6] hover:text-[#c4b5fd] transition-colors">
+                    className="text-xs text-accent-text hover:text-accent-text transition-colors">
                     Generate token ↗
                   </a>
                 </div>
                 <div className="relative flex items-center">
                   <input type={showGithubToken ? "text" : "password"} required value={githubToken} onChange={e => setGithubToken(e.target.value)}
                     placeholder="ghp_..." className={`${inputCls} pr-10`} />
-                  <button type="button" onClick={() => setShowGithubToken(!showGithubToken)} className="absolute right-3 text-[#55556a] hover:text-[#fafafa]">
+                  <button type="button" onClick={() => setShowGithubToken(!showGithubToken)} className="absolute right-3 text-content-muted hover:text-content-primary">
                     {showGithubToken ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
-                <p className="text-[9px] text-[#55556a]">Requires <code className="text-[#8b5cf6]">repo</code> and <code className="text-[#8b5cf6]">read:user</code> scopes.</p>
-                {githubError && <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle size={11} />{githubError}</p>}
-                {githubSuccess && <p className="text-[10px] text-emerald-400 flex items-center gap-1"><Check size={11} />Connected!</p>}
+                <p className="text-xs text-content-muted">Requires <code className="text-accent-text">repo</code> and <code className="text-accent-text">read:user</code> scopes.</p>
+                {githubError && <p className="text-xs text-status-error flex items-center gap-1"><AlertTriangle size={11} />{githubError}</p>}
+                {githubSuccess && <p className="text-xs text-status-success flex items-center gap-1"><Check size={11} />Connected!</p>}
                 <button type="submit" disabled={githubSaving}
-                  className="h-[34px] bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] hover:text-white text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  className="h-[34px] bg-accent/10 border border-accent/40 hover:border-accent text-accent-text hover:text-content-primary text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
                   {githubSaving ? <><Loader2 size={13} className="animate-spin" />Connecting…</> : "Connect GitHub"}
                 </button>
               </form>
@@ -1088,38 +1128,38 @@ export default function SettingsPage() {
 
             {githubConnected && !intLoading && (
               <div className="flex flex-col gap-2">
-                {githubError && <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle size={11} />{githubError}</p>}
+                {githubError && <p className="text-xs text-status-error flex items-center gap-1"><AlertTriangle size={11} />{githubError}</p>}
                 <div className="flex items-center gap-2">
-                  <button onClick={loadIntegrations} className="flex-1 h-[34px] text-[11px] font-semibold rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/40 transition-all flex items-center justify-center gap-1.5">
+                  <button onClick={loadIntegrations} className="flex-1 h-[34px] text-xs font-semibold rounded-xl border border-line text-content-secondary hover:text-content-primary hover:border-accent/40 transition-all flex items-center justify-center gap-1.5">
                     <RefreshCw size={12} />Re-sync status
                   </button>
                   <button onClick={handleDisconnectGithub} disabled={githubSaving}
-                    className="flex-1 h-[34px] text-[11px] font-semibold rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="flex-1 h-[34px] text-xs font-semibold rounded-xl border border-status-error/30 bg-status-error/10 text-status-error hover:bg-status-error/20 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {githubSaving ? <Loader2 size={12} className="animate-spin" /> : null}
                     Disconnect
                   </button>
                 </div>
                 {!showReplaceGithub ? (
                   <button type="button" onClick={() => setShowReplaceGithub(true)}
-                    className="text-[10px] text-[#55556a] hover:text-[#8b5cf6] transition-colors text-left">
+                    className="text-xs text-content-muted hover:text-accent-text transition-colors text-left">
                     Replace token →
                   </button>
                 ) : (
-                  <form onSubmit={async e => { await handleConnectGithub(e); setShowReplaceGithub(false); }} className="flex flex-col gap-2 pt-1 border-t border-[#1e1e24]/40 mt-1">
+                  <form onSubmit={async e => { await handleConnectGithub(e); setShowReplaceGithub(false); }} className="flex flex-col gap-2 pt-1 border-t border-line-subtle/40 mt-1">
                     <div className="relative flex items-center">
                       <input type={showGithubToken ? "text" : "password"} required value={githubToken} onChange={e => setGithubToken(e.target.value)}
                         placeholder="New token (replaces existing)" className={`${inputCls} pr-10`} />
-                      <button type="button" onClick={() => setShowGithubToken(!showGithubToken)} className="absolute right-3 text-[#55556a] hover:text-[#fafafa]">
+                      <button type="button" onClick={() => setShowGithubToken(!showGithubToken)} className="absolute right-3 text-content-muted hover:text-content-primary">
                         {showGithubToken ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                     <div className="flex gap-2">
                       <button type="submit" disabled={githubSaving}
-                        className="flex-1 h-[30px] bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1">
+                        className="flex-1 h-[30px] bg-accent/10 border border-accent/40 hover:border-accent text-accent-text text-xs font-semibold rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1">
                         {githubSaving ? <Loader2 size={12} className="animate-spin" /> : "Save new token"}
                       </button>
                       <button type="button" onClick={() => { setShowReplaceGithub(false); setGithubToken(""); }}
-                        className="h-[30px] px-3 border border-[#2a2a35] text-[#55556a] hover:text-[#a1a1aa] text-[11px] rounded-lg transition-all">
+                        className="h-[30px] px-3 border border-line text-content-muted hover:text-content-secondary text-xs rounded-lg transition-all">
                         Cancel
                       </button>
                     </div>
@@ -1130,19 +1170,19 @@ export default function SettingsPage() {
           </div>
 
           {/* Azure DevOps */}
-          <div className="bg-[#0c0c0f]/40 border border-[#1e1e24] rounded-2xl p-6 flex flex-col gap-5">
+          <div className="bg-surface-panel/40 border border-line-subtle rounded-2xl p-6 flex flex-col gap-5">
             <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${azureConnected ? "border-blue-500/30 bg-blue-500/10 text-blue-400" : "border-[#2a2a35] bg-[#141418] text-[#63637a]"}`}>
+              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${azureConnected ? "border-status-info/30 bg-status-info/10 text-status-info" : "border-line bg-surface-raised text-content-muted"}`}>
                 <AzureIcon size={16} />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-[13px] font-bold text-white leading-tight">Azure DevOps</h2>
-                <p className="text-[10px] text-[#63637a] mt-0.5">
+                <h2 className="text-[13px] font-bold text-content-primary leading-tight">Azure DevOps</h2>
+                <p className="text-xs text-content-muted mt-0.5">
                   {intLoading ? "Loading…" : azureConnected ? `${azureOrg} · ${formatSyncDate(azureLastSync)}` : "Not connected"}
                 </p>
               </div>
               {azureConnected && (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wider shrink-0">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-status-info/10 text-status-info border border-status-info/20 uppercase tracking-wider shrink-0">
                   Connected
                 </span>
               )}
@@ -1150,28 +1190,28 @@ export default function SettingsPage() {
 
             {!azureConnected && !intLoading && (
               <form onSubmit={handleConnectAzure} className="flex flex-col gap-2">
-                <label className="text-[9px] font-bold text-[#55556a] uppercase tracking-wider">Organization</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Organization</label>
                 <input type="text" required value={azureOrgInput} onChange={e => setAzureOrgInput(e.target.value)}
                   placeholder="my-org (from dev.azure.com/my-org)" className={inputCls} />
                 <div className="flex items-center justify-between mt-1">
-                  <label className="text-[9px] font-bold text-[#55556a] uppercase tracking-wider">Personal Access Token</label>
+                  <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Personal Access Token</label>
                   <a href="https://dev.azure.com/_usersSettings/tokens" target="_blank" rel="noreferrer"
-                    className="text-[9px] text-[#8b5cf6] hover:text-[#c4b5fd] transition-colors">
+                    className="text-xs text-accent-text hover:text-accent-text transition-colors">
                     Generate token ↗
                   </a>
                 </div>
                 <div className="relative flex items-center">
                   <input type={showAzureToken ? "text" : "password"} required value={azureToken} onChange={e => setAzureToken(e.target.value)}
                     placeholder="Azure PAT…" className={`${inputCls} pr-10`} />
-                  <button type="button" onClick={() => setShowAzureToken(!showAzureToken)} className="absolute right-3 text-[#55556a] hover:text-[#fafafa]">
+                  <button type="button" onClick={() => setShowAzureToken(!showAzureToken)} className="absolute right-3 text-content-muted hover:text-content-primary">
                     {showAzureToken ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
-                <p className="text-[9px] text-[#55556a]">Requires <code className="text-[#8b5cf6]">Code (Read)</code> and <code className="text-[#8b5cf6]">Work Items (Read)</code> scopes.</p>
-                {azureError && <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle size={11} />{azureError}</p>}
-                {azureSuccess && <p className="text-[10px] text-emerald-400 flex items-center gap-1"><Check size={11} />Connected!</p>}
+                <p className="text-xs text-content-muted">Requires <code className="text-accent-text">Code (Read)</code> and <code className="text-accent-text">Work Items (Read)</code> scopes.</p>
+                {azureError && <p className="text-xs text-status-error flex items-center gap-1"><AlertTriangle size={11} />{azureError}</p>}
+                {azureSuccess && <p className="text-xs text-status-success flex items-center gap-1"><Check size={11} />Connected!</p>}
                 <button type="submit" disabled={azureSaving}
-                  className="h-[34px] bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] hover:text-white text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  className="h-[34px] bg-accent/10 border border-accent/40 hover:border-accent text-accent-text hover:text-content-primary text-[12px] font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
                   {azureSaving ? <><Loader2 size={13} className="animate-spin" />Connecting…</> : "Connect Azure DevOps"}
                 </button>
               </form>
@@ -1179,40 +1219,40 @@ export default function SettingsPage() {
 
             {azureConnected && !intLoading && (
               <div className="flex flex-col gap-2">
-                {azureError && <p className="text-[10px] text-red-400 flex items-center gap-1"><AlertTriangle size={11} />{azureError}</p>}
+                {azureError && <p className="text-xs text-status-error flex items-center gap-1"><AlertTriangle size={11} />{azureError}</p>}
                 <div className="flex items-center gap-2">
-                  <button onClick={loadIntegrations} className="flex-1 h-[34px] text-[11px] font-semibold rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/40 transition-all flex items-center justify-center gap-1.5">
+                  <button onClick={loadIntegrations} className="flex-1 h-[34px] text-xs font-semibold rounded-xl border border-line text-content-secondary hover:text-content-primary hover:border-accent/40 transition-all flex items-center justify-center gap-1.5">
                     <RefreshCw size={12} />Re-sync status
                   </button>
                   <button onClick={handleDisconnectAzure} disabled={azureSaving}
-                    className="flex-1 h-[34px] text-[11px] font-semibold rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="flex-1 h-[34px] text-xs font-semibold rounded-xl border border-status-error/30 bg-status-error/10 text-status-error hover:bg-status-error/20 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {azureSaving ? <Loader2 size={12} className="animate-spin" /> : null}
                     Disconnect
                   </button>
                 </div>
                 {!showReplaceAzure ? (
                   <button type="button" onClick={() => setShowReplaceAzure(true)}
-                    className="text-[10px] text-[#55556a] hover:text-[#8b5cf6] transition-colors text-left">
+                    className="text-xs text-content-muted hover:text-accent-text transition-colors text-left">
                     Replace token →
                   </button>
                 ) : (
-                  <form onSubmit={async e => { await handleConnectAzure(e); setShowReplaceAzure(false); }} className="flex flex-col gap-2 pt-1 border-t border-[#1e1e24]/40 mt-1">
+                  <form onSubmit={async e => { await handleConnectAzure(e); setShowReplaceAzure(false); }} className="flex flex-col gap-2 pt-1 border-t border-line-subtle/40 mt-1">
                     <input type="text" required value={azureOrgInput} onChange={e => setAzureOrgInput(e.target.value)}
                       placeholder={`Organization (current: ${azureOrg})`} className={inputCls} />
                     <div className="relative flex items-center">
                       <input type={showAzureToken ? "text" : "password"} required value={azureToken} onChange={e => setAzureToken(e.target.value)}
                         placeholder="New PAT (replaces existing)" className={`${inputCls} pr-10`} />
-                      <button type="button" onClick={() => setShowAzureToken(!showAzureToken)} className="absolute right-3 text-[#55556a] hover:text-[#fafafa]">
+                      <button type="button" onClick={() => setShowAzureToken(!showAzureToken)} className="absolute right-3 text-content-muted hover:text-content-primary">
                         {showAzureToken ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                     <div className="flex gap-2">
                       <button type="submit" disabled={azureSaving}
-                        className="flex-1 h-[30px] bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] text-[11px] font-semibold rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1">
+                        className="flex-1 h-[30px] bg-accent/10 border border-accent/40 hover:border-accent text-accent-text text-xs font-semibold rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1">
                         {azureSaving ? <Loader2 size={12} className="animate-spin" /> : "Save new token"}
                       </button>
                       <button type="button" onClick={() => { setShowReplaceAzure(false); setAzureToken(""); setAzureOrgInput(azureOrg); }}
-                        className="h-[30px] px-3 border border-[#2a2a35] text-[#55556a] hover:text-[#a1a1aa] text-[11px] rounded-lg transition-all">
+                        className="h-[30px] px-3 border border-line text-content-muted hover:text-content-secondary text-xs rounded-lg transition-all">
                         Cancel
                       </button>
                     </div>
@@ -1226,16 +1266,16 @@ export default function SettingsPage() {
         {/* ── 6. WEBHOOK / CUSTOM API INTEGRATIONS ── */}
         <div className={`${cardCls} mb-8`}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl border border-blue-500/25 bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl border border-status-info/25 bg-status-info/10 text-status-info flex items-center justify-center shrink-0">
               <Webhook size={16} />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-[14px] font-bold text-white leading-tight">Custom API Integrations</h2>
-              <p className="text-[11px] text-[#63637a] mt-0.5">Hook generic JSON APIs (Linear, Trello, Jira) to publish updates into the timeline.</p>
+              <h2 className="text-[14px] font-bold text-content-primary leading-tight">Custom API Integrations</h2>
+              <p className="text-xs text-content-muted mt-0.5">Hook generic JSON APIs (Linear, Trello, Jira) to publish updates into the timeline.</p>
             </div>
             {webhooks.length > 0 && (
               <button onClick={handleSyncCustom} disabled={webhookSyncing}
-                className="h-[32px] px-3.5 text-[11px] font-semibold border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/40 rounded-xl transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50">
+                className="h-[32px] px-3.5 text-xs font-semibold border border-line text-content-secondary hover:text-content-primary hover:border-accent/40 rounded-xl transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50">
                 {webhookSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                 Sync all
               </button>
@@ -1243,10 +1283,10 @@ export default function SettingsPage() {
           </div>
 
           {webhookMsg && (
-            <div className={`text-[11px] flex items-center gap-1.5 px-3 py-2 rounded-xl border ${
+            <div className={`text-xs flex items-center gap-1.5 px-3 py-2 rounded-xl border ${
               webhookMsg.type === "ok"
-                ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                : "text-red-400 bg-red-500/10 border-red-500/20"
+                ? "text-status-success bg-status-success/10 border-status-success/20"
+                : "text-status-error bg-status-error/10 border-status-error/20"
             }`}>
               {webhookMsg.type === "ok" ? <Check size={12} /> : <AlertTriangle size={12} />}
               {webhookMsg.text}
@@ -1258,22 +1298,22 @@ export default function SettingsPage() {
             <input type="text" required value={newWebhookName} onChange={e => setNewWebhookName(e.target.value)} placeholder="Service name (e.g. Jira Board)" className={inputCls} />
             <input type="url" required value={newWebhookUrl} onChange={e => setNewWebhookUrl(e.target.value)} placeholder="https://api.example.com/data" className={inputCls} />
             <button type="submit" disabled={webhookSaving}
-              className="h-[38px] bg-[#120e20] border border-[#8b5cf6]/40 hover:border-[#8b5cf6] text-[#8b5cf6] hover:text-white text-[12px] font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50">
+              className="h-[38px] bg-accent/10 border border-accent/40 hover:border-accent text-accent-text hover:text-content-primary text-[12px] font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 active:scale-[0.98] disabled:opacity-50">
               <Plus size={14} /><span>Register</span>
             </button>
           </form>
 
           {webhooks.length > 0 && (
-            <div className="flex flex-col gap-2.5 border-t border-[#1e1e24]/40 pt-4">
-              <span className="text-[10px] font-bold text-[#55556a] uppercase tracking-wider">Registered Integrations</span>
+            <div className="flex flex-col gap-2.5 border-t border-line-subtle/40 pt-4">
+              <span className="text-xs font-bold text-content-muted uppercase tracking-wider">Registered Integrations</span>
               <div className="flex flex-col gap-2">
                 {webhooks.map(item => (
-                  <div key={item.id} className="flex items-center justify-between p-3.5 rounded-xl border border-[#1e1e24] bg-[#0c0c0f]/20">
+                  <div key={item.id} className="flex items-center justify-between p-3.5 rounded-xl border border-line-subtle bg-surface-panel/20">
                     <div className="min-w-0 pr-4">
-                      <span className="text-[12px] font-bold text-[#fafafa]">{item.name}</span>
-                      <p className="text-[10px] font-mono text-[#55556a] truncate mt-0.5">{item.url}</p>
+                      <span className="text-[12px] font-bold text-content-primary">{item.name}</span>
+                      <p className="text-xs font-mono text-content-muted truncate mt-0.5">{item.url}</p>
                     </div>
-                    <button onClick={() => handleDeleteWebhook(item.id)} className="p-1.5 text-[#55556a] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0">
+                    <button onClick={() => handleDeleteWebhook(item.id)} className="p-1.5 text-content-muted hover:text-status-error hover:bg-status-error/10 rounded-lg transition-colors shrink-0">
                       <Trash2 size={13} />
                     </button>
                   </div>

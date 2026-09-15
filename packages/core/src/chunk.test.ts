@@ -42,6 +42,17 @@ describe("splitMarkdownChunks", () => {
     expect(chunks.join("\n\n")).toContain("const b = 2;");
   });
 
+  it.each(["mermaid", "Mermaid"])("preserves oversized %s diagrams as atomic blocks", (language) => {
+    const source = "flowchart LR\n" + Array.from({ length: 180 }, (_, i) => `  n${i}[Step ${i}] --> n${i + 1}`).join("\n");
+    const diagram = `\`\`\`${language}\n${source}\n\`\`\``;
+    const text = `## Diagram\n\n${diagram}\n\nSome explanation.\n\n\`\`\`mermaid\nsequenceDiagram\n  Alice->>Bob: Hello\n\`\`\``;
+    for (const breakOnHeadings of [false, true]) {
+      const chunks = splitMarkdownChunks(text, 2000, { breakOnHeadings });
+      expect(chunks).toContain(diagram);
+      expect(chunks.join("\n\n")).toBe(text);
+    }
+  });
+
   it("packs paragraphs on \\n\\n boundaries and never splits words in packed prose", () => {
     const paras = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} ${"word ".repeat(40)}`.trim());
     const chunks = splitMarkdownChunks(paras.join("\n\n"), 1200);

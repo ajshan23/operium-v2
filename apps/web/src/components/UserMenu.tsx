@@ -46,8 +46,8 @@ export function UserMenu({ compact = false }: Props) {
     >
       {avatar
         ? <img src={avatar} alt={name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-        : <div className="w-full h-full bg-gradient-to-br from-[#7c3aed] to-[#6366f1] flex items-center justify-center">
-            <User size={compact ? 16 : 14} className="text-white" />
+        : <div className="w-full h-full bg-accent flex items-center justify-center">
+            <User size={compact ? 16 : 14} className="text-content-inverse" />
           </div>
       }
     </div>
@@ -87,7 +87,7 @@ export function UserMenu({ compact = false }: Props) {
               : "right-0 mt-2 w-[200px]"
           }`}
           style={{
-            background: "var(--s1)",
+            background: "var(--surface-panel)",
             border: "1px solid var(--border-default)",
             boxShadow: "0 8px 30px rgba(0,0,0,0.25)",
             animation: "fadeUp 0.15s cubic-bezier(0.16,1,0.3,1) forwards",

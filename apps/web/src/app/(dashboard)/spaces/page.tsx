@@ -4,25 +4,26 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Folder, User, Users, Plus, Search, FileText, Trash2, Edit2,
   Eye, X, BookOpen, Clock, Tag, Check, Star, Loader2, AlertTriangle,
-  Share2, Copy, Globe, Palette, Maximize2, Minimize2,
+  Share2, Copy, Globe, Palette, Maximize2,
 } from "lucide-react";
 import TipTapEditor from "./TipTapEditor";
 import MarkdownViewer from "@/components/MarkdownViewer";
 import CanvasEditor, { EMPTY_CANVAS_CONTENT } from "@/components/CanvasEditor";
+import CanvasFullscreenOverlay from "@/components/CanvasFullscreenOverlay";
 import { spacesApi, notesApi } from "@/api/notes.api";
 import type { Space, Note } from "@/api/notes.api";
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 
 const SPACE_ICONS = [
-  { id: "folder",   Icon: Folder, color: "text-amber-500" },
-  { id: "personal", Icon: User,   color: "text-[#8b5cf6]" },
-  { id: "team",     Icon: Users,  color: "text-[#3b82f6]" },
+  { id: "folder",   Icon: Folder, color: "text-status-warning" },
+  { id: "personal", Icon: User,   color: "text-accent-text" },
+  { id: "team",     Icon: Users,  color: "text-status-info" },
 ] as const;
 
 function SpaceIcon({ icon, size = 15 }: { icon?: string; size?: number }) {
   const found = SPACE_ICONS.find(i => i.id === icon);
-  const { Icon, color } = found ?? { Icon: Folder, color: "text-amber-500" };
+  const { Icon, color } = found ?? { Icon: Folder, color: "text-status-warning" };
   return <Icon size={size} className={color} />;
 }
 
@@ -73,6 +74,7 @@ export default function SpacesPage() {
   // ── Note content (local draft while editing) ──
   const [draftContent, setDraftContent] = useState("");
   const [draftTitle,   setDraftTitle]   = useState("");
+  const [draftNoteId,  setDraftNoteId]  = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -127,6 +129,7 @@ export default function SpacesPage() {
   useEffect(() => {
     const note = notes.find(n => n._id === activeNoteId);
     if (!note) return;
+    setDraftNoteId(note._id);
     setDraftTitle(note.title ?? "");
 
     if (note.content !== undefined) {
@@ -216,6 +219,7 @@ export default function SpacesPage() {
 
   // Canvas notes: content is the serialized Excalidraw scene, no title detection
   const handleCanvasChange = (json: string) => {
+    setDraftNoteId(activeNoteId);
     setDraftContent(json);
     scheduleAutoSave(draftTitle, json, activeNoteId);
   };
@@ -378,28 +382,46 @@ export default function SpacesPage() {
   // ────────────────────────────────────────────────────────────────────────────
   // Render
 
+  const canvasEditor = activeNote?.type === "canvas"
+    ? activeNote.content !== undefined
+      ? (
+          <CanvasEditor
+            key={`${activeNote._id}:${isCanvasFullscreen ? "fullscreen" : "embedded"}`}
+            value={draftNoteId === activeNote._id ? draftContent : activeNote.content}
+            onChange={handleCanvasChange}
+            fullBleed
+            fitToContent={isCanvasFullscreen}
+          />
+        )
+      : (
+          <div className="w-full h-full flex items-center justify-center text-content-muted">
+            <Loader2 size={18} className="animate-spin" />
+          </div>
+        )
+    : null;
+
   return (
     <div className="flex h-full w-full overflow-hidden relative">
 
       {/* ── COLUMN 1: SPACES SIDEBAR ── */}
-      <div className="w-[260px] border-r border-[#1a1a22] bg-[#070709] flex flex-col shrink-0 overflow-y-auto select-none">
-        <div className="p-4 border-b border-[#1a1a22]">
+      <div className="w-[260px] border-r border-line-subtle bg-surface-page flex flex-col shrink-0 overflow-y-auto select-none">
+        <div className="p-4 border-b border-line-subtle">
           <button onClick={() => setShowNewSpaceModal(true)}
-            className="w-full h-[40px] px-4 rounded-xl border border-[#2a2a35] hover:border-[#8b5cf6]/50 bg-[#120e20]/20 hover:bg-[#120e20]/40 text-[13px] font-semibold text-[#fafafa] flex items-center justify-between transition-all duration-300 group">
+            className="w-full h-[40px] px-4 rounded-xl border border-line hover:border-accent/50 bg-accent/10 hover:bg-accent/10 text-[13px] font-semibold text-content-primary flex items-center justify-between transition-all duration-300 group">
             <span>New Space</span>
-            <Plus size={16} className="text-[#8b5cf6] group-hover:rotate-90 transition-transform duration-300" />
+            <Plus size={16} className="text-accent-text group-hover:rotate-90 transition-transform duration-300" />
           </button>
         </div>
 
         <div className="p-4 flex flex-col gap-1.5 flex-1">
-          <span className="text-[10px] font-bold text-[#63637a] tracking-wider uppercase px-2 mb-2 block">Spaces</span>
+          <span className="text-xs font-bold text-content-muted tracking-wider uppercase px-2 mb-2 block">Spaces</span>
 
           {spacesLoading ? (
-            <div className="flex items-center gap-2 text-[11px] text-[#55556a] px-2 py-3">
+            <div className="flex items-center gap-2 text-xs text-content-muted px-2 py-3">
               <Loader2 size={13} className="animate-spin" /> Loading…
             </div>
           ) : spaces.length === 0 ? (
-            <div className="text-[11px] text-[#55556a] px-2 py-4 text-center">
+            <div className="text-xs text-content-muted px-2 py-4 text-center">
               <Folder size={20} className="mx-auto mb-2 stroke-1" />
               <p>No spaces yet. Create one above.</p>
             </div>
@@ -411,21 +433,21 @@ export default function SpacesPage() {
                   onClick={() => { setActiveSpaceId(space._id); setSearchQuery(""); }}
                   className={`w-full h-[44px] px-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all group ${
                     isActive
-                      ? "bg-[#120e20]/60 border-[#8b5cf6]/45 text-[#fafafa] shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
-                      : "border-transparent hover:border-[#1e1e24] hover:bg-[#141418]/40 text-[#63637a] hover:text-[#fafafa]"
+                      ? "bg-accent/10 border-accent/50 text-content-primary shadow-[0_2px_12px_rgba(139,92,246,0.12)]"
+                      : "border-transparent hover:border-line-subtle hover:bg-surface-raised/40 text-content-muted hover:text-content-primary"
                   }`}>
                   <div className="flex items-center gap-2.5 min-w-0">
                     <SpaceIcon icon={space.icon} />
                     <div className="flex flex-col items-start min-w-0">
                       <span className="text-[13px] font-semibold truncate leading-none">{space.name}</span>
                       {space.description && (
-                        <span className="text-[9px] text-[#55556a] truncate mt-0.5 max-w-[150px]">{space.description}</span>
+                        <span className="text-xs text-content-muted truncate mt-0.5 max-w-[150px]">{space.description}</span>
                       )}
                     </div>
                   </div>
                   {spaces.length > 1 && (
                     <button onClick={(e) => handleDeleteSpace(space._id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 hover:bg-red-500/10 rounded transition-all shrink-0">
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-status-error hover:bg-status-error/10 rounded transition-all shrink-0">
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -437,28 +459,28 @@ export default function SpacesPage() {
       </div>
 
       {/* ── COLUMN 2: NOTES LIST ── */}
-      <div className="w-[300px] border-r border-[#1a1a22] bg-[#050505] flex flex-col shrink-0 overflow-hidden select-none">
-        <div className="p-4 border-b border-[#1a1a22] flex items-center justify-between shrink-0">
+      <div className="w-[300px] border-r border-line-subtle bg-surface-page flex flex-col shrink-0 overflow-hidden select-none">
+        <div className="p-4 border-b border-line-subtle flex items-center justify-between shrink-0">
           <div className="min-w-0 pr-2">
-            <h3 className="text-[14px] font-extrabold text-[#fafafa] truncate">{activeSpace?.name ?? "Notes"}</h3>
-            <span className="text-[10px] text-[#63637a]">{notes.length} note{notes.length !== 1 ? "s" : ""}</span>
+            <h3 className="text-[14px] font-extrabold text-content-primary truncate">{activeSpace?.name ?? "Notes"}</h3>
+            <span className="text-xs text-content-muted">{notes.length} note{notes.length !== 1 ? "s" : ""}</span>
           </div>
           <div className="relative shrink-0">
             <button onClick={() => setNewNoteMenuOpen(o => !o)} disabled={!activeSpaceId}
-              className="w-8 h-8 rounded-xl bg-[#120e20]/60 border border-[#8b5cf6]/40 hover:border-[#8b5cf6]/80 flex items-center justify-center text-[#8b5cf6] hover:text-white transition-all shadow-sm disabled:opacity-40">
+              className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/40 hover:border-accent/80 flex items-center justify-center text-accent-text hover:text-content-primary transition-all shadow-sm disabled:opacity-40">
               <Plus size={15} className={`transition-transform duration-200 ${newNoteMenuOpen ? "rotate-45" : ""}`} />
             </button>
             {newNoteMenuOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setNewNoteMenuOpen(false)} />
-                <div className="absolute right-0 top-9 w-[160px] bg-[#0c0c0f] border border-[#2a2a35] rounded-xl p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.6)] z-40">
+                <div className="absolute right-0 top-9 w-[160px] bg-surface-panel border border-line rounded-xl p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.6)] z-40">
                   <button onClick={() => handleCreateNote("text")}
-                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-[#a1a1aa] hover:text-[#fafafa] hover:bg-white/5 transition-colors">
-                    <FileText size={13} className="text-[#8b5cf6]" /> Text note
+                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-content-secondary hover:text-content-primary hover:bg-surface-raised transition-colors">
+                    <FileText size={13} className="text-accent-text" /> Text note
                   </button>
                   <button onClick={() => handleCreateNote("canvas")}
-                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-[#a1a1aa] hover:text-[#fafafa] hover:bg-white/5 transition-colors">
-                    <Palette size={13} className="text-[#3b82f6]" /> Canvas
+                    className="w-full px-2.5 py-2 rounded-lg flex items-center gap-2 text-[12px] font-semibold text-content-secondary hover:text-content-primary hover:bg-surface-raised transition-colors">
+                    <Palette size={13} className="text-status-info" /> Canvas
                   </button>
                 </div>
               </>
@@ -466,24 +488,24 @@ export default function SpacesPage() {
           </div>
         </div>
 
-        <div className="p-3 border-b border-[#1a1a22]/50 shrink-0">
+        <div className="p-3 border-b border-line-subtle/50 shrink-0">
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#55556a] group-focus-within:text-[#8b5cf6] transition-colors" size={13} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted group-focus-within:text-accent-text transition-colors" size={13} />
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search notes…"
-              className="w-full h-[32px] bg-[#0c0c0f]/80 border border-[#1e1e24] focus:border-[#8b5cf6]/40 rounded-lg pl-8 pr-3 text-[12px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none transition-all" />
+              className="w-full h-[32px] bg-surface-panel/80 border border-line-subtle focus:border-accent/40 rounded-lg pl-8 pr-3 text-[12px] text-content-primary placeholder:text-content-muted focus:outline-none transition-all" />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
           {notesLoading ? (
-            <div className="flex items-center justify-center gap-2 text-[11px] text-[#55556a] py-10">
+            <div className="flex items-center justify-center gap-2 text-xs text-content-muted py-10">
               <Loader2 size={13} className="animate-spin" /> Loading notes…
             </div>
           ) : filteredNotes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-[#55556a] text-center px-4">
+            <div className="flex flex-col items-center justify-center py-16 text-content-muted text-center px-4">
               <BookOpen size={24} className="stroke-1 mb-2" />
-              <p className="text-[11px]">{searchQuery ? "No matches." : "No notes in this space yet."}</p>
+              <p className="text-xs">{searchQuery ? "No matches." : "No notes in this space yet."}</p>
             </div>
           ) : (
             filteredNotes.map(note => {
@@ -492,34 +514,34 @@ export default function SpacesPage() {
                 <div key={note._id} onClick={() => setActiveNoteId(note._id)}
                   className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col gap-1.5 relative group ${
                     isActive
-                      ? "bg-[#120e20]/40 border-[#8b5cf6]/40 shadow-[0_2px_12px_rgba(139,92,246,0.06)]"
-                      : "bg-[#0c0c0f]/40 border-[#1e1e24] hover:border-[#2a2a35] hover:bg-[#0c0c0f]/75"
+                      ? "bg-accent/10 border-accent/40 shadow-[0_2px_12px_rgba(139,92,246,0.06)]"
+                      : "bg-surface-panel/40 border-line-subtle hover:border-line hover:bg-surface-panel/75"
                   }`}>
                   <div className="flex items-start justify-between gap-2">
-                    <span className="text-[13px] font-bold text-[#fafafa] line-clamp-1 truncate flex items-center gap-1.5">
-                      {note.type === "canvas" && <Palette size={11} className="text-[#3b82f6] shrink-0" />}
+                    <span className="text-[13px] font-bold text-content-primary line-clamp-1 truncate flex items-center gap-1.5">
+                      {note.type === "canvas" && <Palette size={11} className="text-status-info shrink-0" />}
                       {note.title || "Untitled"}
                     </span>
                     <div className="flex items-center gap-1 shrink-0 -mt-0.5 opacity-0 group-hover:opacity-100 transition-all">
-                      {note.isShared && <Globe size={10} className="text-[#22c55e]" />}
-                      {note.isStarred && <Star size={10} className="text-amber-400 fill-amber-400" />}
+                      {note.isShared && <Globe size={10} className="text-status-success" />}
+                      {note.isStarred && <Star size={10} className="text-status-warning fill-amber-400" />}
                       <button onClick={(e) => handleDeleteNote(note._id, e)}
-                        className="p-1 text-[#55556a] hover:text-red-400 hover:bg-red-500/10 rounded transition-all">
+                        className="p-1 text-content-muted hover:text-status-error hover:bg-status-error/10 rounded transition-all">
                         <Trash2 size={11} />
                       </button>
                     </div>
                   </div>
-                  <p className="text-[11px] text-[#63637a] line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-content-muted line-clamp-2 leading-relaxed">
                     {note.type === "canvas"
                       ? "Canvas drawing"
                       : note.preview?.replace(/^#\s*/gm, "").trim() || "Empty note"}
                   </p>
-                  <div className="flex items-center justify-between text-[9px] text-[#55556a] mt-0.5 font-mono">
+                  <div className="flex items-center justify-between text-xs text-content-muted mt-0.5 font-mono">
                     <span className="flex items-center gap-1">
                       <Clock size={9} />{new Date(note.updatedAt).toLocaleDateString()}
                     </span>
                     {note.tags?.[0] && (
-                      <span className="px-1.5 py-0.5 rounded bg-[#1e1e24] text-[#a855f7] border border-[#2a2a35]/40">{note.tags[0]}</span>
+                      <span className="px-1.5 py-0.5 rounded bg-surface-hover text-accent-text border border-line/40">{note.tags[0]}</span>
                     )}
                   </div>
                 </div>
@@ -530,33 +552,33 @@ export default function SpacesPage() {
       </div>
 
       {/* ── COLUMN 3: NOTE EDITOR / PREVIEW ── */}
-      <div className="flex-1 bg-[#050505] flex flex-col overflow-hidden relative">
+      <div className="flex-1 bg-surface-page flex flex-col overflow-hidden relative">
         <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(139,92,246,0.02),transparent_60%)] rounded-full pointer-events-none blur-3xl" />
 
         {activeNote ? (
           <>
             {/* Toolbar */}
-            <div className="h-[52px] border-b border-[#1a1a22] px-6 flex items-center justify-between bg-[#050505] shrink-0 z-20 relative">
+            <div className="h-[52px] border-b border-line-subtle px-6 flex items-center justify-between bg-surface-page shrink-0 z-20 relative">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-[#55556a] uppercase">Active:</span>
-                <span className="text-[11px] font-mono text-[#8b5cf6] truncate max-w-[200px]">{activeNote.title || "Untitled"}</span>
-                {saving && <Loader2 size={11} className="animate-spin text-[#55556a] ml-1" />}
+                <span className="text-xs font-mono text-content-muted uppercase">Active:</span>
+                <span className="text-xs font-mono text-accent-text truncate max-w-[200px]">{activeNote.title || "Untitled"}</span>
+                {saving && <Loader2 size={11} className="animate-spin text-content-muted ml-1" />}
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={handleToggleStar}
-                  className={`h-[28px] px-2.5 rounded-lg text-[11px] border flex items-center gap-1.5 transition-all ${
+                  className={`h-[28px] px-2.5 rounded-lg text-xs border flex items-center gap-1.5 transition-all ${
                     activeNote.isStarred
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
-                      : "border-transparent text-[#63637a] hover:text-amber-400 hover:border-amber-500/30"
+                      ? "border-status-warning/40 bg-status-warning/10 text-status-warning"
+                      : "border-transparent text-content-muted hover:text-status-warning hover:border-status-warning/30"
                   }`}>
                   <Star size={11} className={activeNote.isStarred ? "fill-amber-400" : ""} />
                 </button>
                 <button onClick={() => setShareOpen(o => !o)}
                   title={activeNote.isShared ? "Shared — manage link" : "Share this note"}
-                  className={`h-[28px] px-2.5 rounded-lg text-[11px] border flex items-center gap-1.5 transition-all ${
+                  className={`h-[28px] px-2.5 rounded-lg text-xs border flex items-center gap-1.5 transition-all ${
                     activeNote.isShared
-                      ? "border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e]"
-                      : "border-transparent text-[#63637a] hover:text-[#8b5cf6] hover:border-[#8b5cf6]/30"
+                      ? "border-status-success/40 bg-status-success/10 text-status-success"
+                      : "border-transparent text-content-muted hover:text-accent-text hover:border-accent/30"
                   }`}>
                   <Share2 size={11} />
                   {activeNote.isShared && <span className="font-semibold">Shared</span>}
@@ -564,14 +586,14 @@ export default function SpacesPage() {
                 {activeNote.type !== "canvas" && (
                   <>
                     <button onClick={() => setIsEditMode(true)}
-                      className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
-                        isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
+                      className={`h-[28px] px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        isEditMode ? "bg-accent/10 border border-accent/40 text-accent-text" : "border border-transparent text-content-muted hover:text-content-primary"
                       }`}>
                       <Edit2 size={11} /><span>Edit</span>
                     </button>
                     <button onClick={() => setIsEditMode(false)}
-                      className={`h-[28px] px-3.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
-                        !isEditMode ? "bg-[#1d1630] border border-[#8b5cf6]/40 text-[#8b5cf6]" : "border border-transparent text-[#63637a] hover:text-[#fafafa]"
+                      className={`h-[28px] px-3.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        !isEditMode ? "bg-accent/10 border border-accent/40 text-accent-text" : "border border-transparent text-content-muted hover:text-content-primary"
                       }`}>
                       <Eye size={11} /><span>Preview</span>
                     </button>
@@ -581,49 +603,49 @@ export default function SpacesPage() {
 
               {/* Share panel */}
               {shareOpen && (
-                <div className="absolute right-6 top-[50px] w-[340px] bg-[#0c0c0f] border border-[#2a2a35] rounded-2xl p-4 shadow-[0_16px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(139,92,246,0.08)] z-30">
+                <div className="absolute right-6 top-[50px] w-[340px] bg-surface-panel border border-line rounded-2xl p-4 shadow-[0_16px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(139,92,246,0.08)] z-30">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <Globe size={13} className={activeNote.isShared ? "text-[#22c55e]" : "text-[#63637a]"} />
-                      <span className="text-[12px] font-bold text-[#fafafa]">Share note</span>
+                      <Globe size={13} className={activeNote.isShared ? "text-status-success" : "text-content-muted"} />
+                      <span className="text-[12px] font-bold text-content-primary">Share note</span>
                     </div>
                     <button onClick={() => setShareOpen(false)}
-                      className="w-6 h-6 rounded-md flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] transition-colors">
+                      className="w-6 h-6 rounded-md flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover transition-colors">
                       <X size={12} />
                     </button>
                   </div>
 
                   {activeNote.isShared && activeNote.shareId ? (
                     <>
-                      <p className="text-[11px] text-[#63637a] mb-2.5">
+                      <p className="text-xs text-content-muted mb-2.5">
                         Anyone with this link can view a read-only copy of this note.
                       </p>
                       <div className="flex items-center gap-2 mb-3">
                         <input readOnly value={shareUrl} onFocus={e => e.currentTarget.select()}
-                          className="flex-1 h-[32px] bg-[#141418] border border-[#1e1e24] rounded-lg px-2.5 text-[11px] text-[#a1a1aa] font-mono focus:outline-none focus:border-[#8b5cf6]/40 min-w-0" />
+                          className="flex-1 h-[32px] bg-surface-raised border border-line-subtle rounded-lg px-2.5 text-xs text-content-secondary font-mono focus:outline-none focus:border-accent/40 min-w-0" />
                         <button onClick={() => copyShareLink(shareUrl)}
-                          className={`h-[32px] px-3 rounded-lg text-[11px] font-semibold border flex items-center gap-1.5 transition-all shrink-0 ${
+                          className={`h-[32px] px-3 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all shrink-0 ${
                             linkCopied
-                              ? "border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e]"
-                              : "border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] hover:border-[#8b5cf6]/40"
+                              ? "border-status-success/40 bg-status-success/10 text-status-success"
+                              : "border-line text-content-secondary hover:text-content-primary hover:border-accent/40"
                           }`}>
                           {linkCopied ? <Check size={11} /> : <Copy size={11} />}
                           {linkCopied ? "Copied" : "Copy"}
                         </button>
                       </div>
                       <button onClick={() => handleSetSharing(false)} disabled={shareBusy}
-                        className="w-full h-[32px] rounded-lg border border-red-500/25 text-red-400 hover:bg-red-500/10 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50">
+                        className="w-full h-[32px] rounded-lg border border-status-error/25 text-status-error hover:bg-status-error/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all disabled:opacity-50">
                         {shareBusy ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
                         Stop sharing
                       </button>
                     </>
                   ) : (
                     <>
-                      <p className="text-[11px] text-[#63637a] mb-3">
+                      <p className="text-xs text-content-muted mb-3">
                         Create a public read-only link for this note. The link is copied to your clipboard automatically.
                       </p>
                       <button onClick={() => handleSetSharing(true)} disabled={shareBusy}
-                        className="w-full h-[34px] rounded-lg bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
+                        className="w-full h-[34px] rounded-lg bg-accent hover:bg-accent-hover text-content-inverse text-[12px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
                         {shareBusy ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
                         Create share link
                       </button>
@@ -642,63 +664,59 @@ export default function SpacesPage() {
 
               {/* Tags */}
               <div className={activeNote.type === "canvas"
-                ? "h-[46px] px-4 border-b border-[#1a1a22] bg-[#070709] flex items-center gap-2 shrink-0 overflow-x-auto"
+                ? "h-[46px] px-4 border-b border-line-subtle bg-surface-page flex items-center gap-2 shrink-0 overflow-x-auto"
                 : "flex flex-wrap items-center gap-2 mb-4 shrink-0"
               }>
                 {activeNote.type === "canvas" && (
                   <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
                     placeholder="Canvas Title"
-                    className="w-[40%] min-w-[180px] max-w-[460px] bg-transparent text-[14px] font-bold text-[#fafafa] placeholder:text-[#333342] focus:outline-none border-r border-[#1a1a22] pr-4 mr-2 shrink-0" />
+                    className="w-[40%] min-w-[180px] max-w-[460px] bg-transparent text-[14px] font-bold text-content-primary placeholder:text-content-muted focus:outline-none border-r border-line-subtle pr-4 mr-2 shrink-0" />
                 )}
-                <Tag size={12} className="text-[#55556a]" />
+                <Tag size={12} className="text-content-muted" />
                 {activeNote.tags?.map(tag => (
-                  <span key={tag} className="h-5 px-2 rounded bg-[#120e20]/60 border border-[#8b5cf6]/25 text-[#a855f7] text-[10px] font-medium flex items-center gap-1">
+                  <span key={tag} className="h-5 px-2 rounded bg-accent/10 border border-accent/25 text-accent-text text-xs font-medium flex items-center gap-1">
                     {tag}
-                    <button onClick={() => handleRemoveTag(tag)} className="hover:text-red-400 transition-colors ml-0.5 font-bold">×</button>
+                    <button onClick={() => handleRemoveTag(tag)} className="hover:text-status-error transition-colors ml-0.5 font-bold">×</button>
                   </span>
                 ))}
                 <form onSubmit={handleAddTag} className="inline-flex">
                   <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)}
                     placeholder="+ tag"
-                    className="h-5 px-2 bg-[#0c0c0f] border border-[#1e1e24] focus:border-[#8b5cf6]/35 rounded text-[10px] text-[#fafafa] focus:outline-none w-[60px] focus:w-[90px] transition-all" />
+                    className="h-5 px-2 bg-surface-panel border border-line-subtle focus:border-accent/40 rounded text-xs text-content-primary focus:outline-none w-[60px] focus:w-[90px] transition-all" />
                 </form>
                 {activeNote.type === "canvas" && (
                   <button type="button" onClick={() => setIsCanvasFullscreen(true)}
                     title="Open canvas fullscreen"
                     aria-label="Open canvas fullscreen"
-                    className="sticky right-0 ml-auto h-7 px-2.5 rounded-lg border border-[#2a2a35] bg-[#0c0c0f] text-[#a1a1aa] hover:text-white hover:border-[#8b5cf6]/50 flex items-center gap-1.5 text-[10px] font-semibold shrink-0 transition-colors shadow-[-10px_0_16px_#070709]">
+                    className="sticky right-0 ml-auto h-7 px-2.5 rounded-lg border border-line bg-surface-panel text-content-secondary hover:text-content-primary hover:border-accent/50 flex items-center gap-1.5 text-xs font-semibold shrink-0 transition-colors shadow-[-10px_0_16px_var(--surface-page)]">
                     <Maximize2 size={12} /> Fullscreen
                   </button>
                 )}
               </div>
 
               {activeNote.type === "canvas" ? (
-                <div className={isCanvasFullscreen
-                  ? "fixed inset-0 z-[100] bg-[#0c0c0f]"
-                  : "flex-1 min-h-0"
-                }>
+                <>
+                  <div className={isCanvasFullscreen
+                    ? "hidden"
+                    : "flex-1 min-h-0"
+                  }>
+                    {canvasEditor}
+                  </div>
                   {isCanvasFullscreen && (
-                    <button type="button" onClick={() => setIsCanvasFullscreen(false)}
-                      title="Exit fullscreen (Esc)"
-                      aria-label="Exit canvas fullscreen"
-                      className="absolute top-4 right-4 z-[110] h-9 px-3 rounded-xl border border-[#3a3a46] bg-[#16161c]/95 text-[#fafafa] hover:bg-[#24242c] hover:border-[#8b5cf6]/60 flex items-center gap-2 text-[11px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] transition-colors">
-                      <Minimize2 size={14} /> Exit fullscreen
-                    </button>
+                    <CanvasFullscreenOverlay
+                      title={activeNote.title || "Untitled Canvas"}
+                      saving={saving}
+                      onExit={() => setIsCanvasFullscreen(false)}
+                    >
+                      {canvasEditor}
+                    </CanvasFullscreenOverlay>
                   )}
-                  {activeNote.content !== undefined ? (
-                    // key: remount per note — Excalidraw reads initialData once
-                    <CanvasEditor key={activeNote._id} value={activeNote.content} onChange={handleCanvasChange} fullBleed />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#55556a]">
-                      <Loader2 size={18} className="animate-spin" />
-                    </div>
-                  )}
-                </div>
+                </>
               ) : isEditMode ? (
                 <div className="flex-1 flex flex-col gap-4">
                   <input type="text" value={draftTitle} onChange={e => handleTitleChange(e.target.value)}
                     placeholder="Note Title"
-                    className="w-full bg-transparent text-[22px] font-extrabold text-[#fafafa] placeholder:text-[#333342] focus:outline-none border-b border-transparent focus:border-[#1a1a22] pb-2 transition-colors" />
+                    className="w-full bg-transparent text-[22px] font-extrabold text-content-primary placeholder:text-content-muted focus:outline-none border-b border-transparent focus:border-line-subtle pb-2 transition-colors" />
                   <div className="flex-1 min-h-0 flex flex-col">
                     <TipTapEditor value={draftContent} onChange={handleContentChange} placeholder="Write your note here…" />
                   </div>
@@ -707,16 +725,16 @@ export default function SpacesPage() {
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                   {draftContent.trim()
                     ? <MarkdownViewer content={draftContent} />
-                    : <p className="text-[#55556a] italic text-[13px]">No content yet.</p>}
+                    : <p className="text-content-muted italic text-[13px]">No content yet.</p>}
                 </div>
               )}
             </div>
           </>
         ) : (
-          <div className="flex-grow flex flex-col items-center justify-center text-[#55556a] z-10 relative">
+          <div className="flex-grow flex flex-col items-center justify-center text-content-muted z-10 relative">
             <FileText size={48} className="stroke-1 mb-4" />
-            <h4 className="text-[14px] font-semibold text-[#fafafa] mb-1">No Note Selected</h4>
-            <p className="text-[12px] text-[#63637a]">
+            <h4 className="text-[14px] font-semibold text-content-primary mb-1">No Note Selected</h4>
+            <p className="text-[12px] text-content-muted">
               {activeSpaceId ? "Create a note or pick one from the list." : "Select a space first."}
             </p>
           </div>
@@ -725,51 +743,51 @@ export default function SpacesPage() {
 
       {/* ── Error toast ── */}
       {error && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/30 text-red-400 text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-status-error/10 border border-status-error/30 text-status-error text-[12px] px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg">
           <AlertTriangle size={13} />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 hover:text-red-300"><X size={13} /></button>
+          <button onClick={() => setError(null)} className="ml-2 hover:text-status-error"><X size={13} /></button>
         </div>
       )}
 
       {/* ── MODAL: DELETE CONFIRMATION ── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-[#000000]/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0c0c0f] border border-[#2a2a35] w-full max-w-[420px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_24px_rgba(239,68,68,0.08)] relative overflow-hidden">
+        <div className="fixed inset-0 bg-overlay/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-panel border border-line w-full max-w-[420px] rounded-2xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_24px_rgba(239,68,68,0.08)] relative overflow-hidden">
             <div className="absolute top-[-30%] left-[15%] w-[260px] h-[260px] bg-[radial-gradient(circle,rgba(239,68,68,0.07),transparent_70%)] rounded-full pointer-events-none blur-2xl" />
 
             <div className="flex items-center gap-3 mb-4 relative z-10">
-              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                <Trash2 size={18} className="text-red-400" />
+              <div className="w-10 h-10 rounded-xl bg-status-error/10 border border-status-error/20 flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-status-error" />
               </div>
               <div>
-                <h3 className="text-[16px] font-bold text-[#fafafa]">
+                <h3 className="text-[16px] font-bold text-content-primary">
                   Delete {deleteConfirm.type === "space" ? "Space" : "Note"}
                 </h3>
-                <p className="text-[11px] text-[#63637a]">This action cannot be undone</p>
+                <p className="text-xs text-content-muted">This action cannot be undone</p>
               </div>
             </div>
 
-            <div className="bg-[#141418] border border-[#1e1e24] rounded-xl p-4 mb-4 relative z-10">
-              <p className="text-[13px] text-[#a1a1aa] leading-relaxed">
+            <div className="bg-surface-raised border border-line-subtle rounded-xl p-4 mb-4 relative z-10">
+              <p className="text-[13px] text-content-secondary leading-relaxed">
                 {deleteConfirm.type === "note" ? (
-                  <>Are you sure you want to delete <span className="font-semibold text-[#fafafa]">&ldquo;{deleteConfirm.name}&rdquo;</span>?</>
+                  <>Are you sure you want to delete <span className="font-semibold text-content-primary">&ldquo;{deleteConfirm.name}&rdquo;</span>?</>
                 ) : (
-                  <>Are you sure you want to delete the space <span className="font-semibold text-[#fafafa]">&ldquo;{deleteConfirm.name}&rdquo;</span>?</>
+                  <>Are you sure you want to delete the space <span className="font-semibold text-content-primary">&ldquo;{deleteConfirm.name}&rdquo;</span>?</>
                 )}
               </p>
 
               {deleteConfirm.type === "space" && deleteConfirm.noteCount !== undefined && deleteConfirm.noteCount > 0 && (
-                <div className="mt-3 pt-3 border-t border-[#1e1e24]">
-                  <p className="text-[12px] font-semibold text-amber-400 flex items-center gap-1.5 mb-2">
+                <div className="mt-3 pt-3 border-t border-line-subtle">
+                  <p className="text-[12px] font-semibold text-status-warning flex items-center gap-1.5 mb-2">
                     <AlertTriangle size={12} />
                     This will also delete {deleteConfirm.noteCount} note{deleteConfirm.noteCount !== 1 ? "s" : ""} inside
                   </p>
                   {deleteConfirm.noteNames && deleteConfirm.noteNames.length > 0 && (
                     <ul className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
                       {deleteConfirm.noteNames.map((name, i) => (
-                        <li key={i} className="text-[11px] text-[#63637a] flex items-center gap-1.5">
-                          <FileText size={9} className="shrink-0 text-[#55556a]" />
+                        <li key={i} className="text-xs text-content-muted flex items-center gap-1.5">
+                          <FileText size={9} className="shrink-0 text-content-muted" />
                           <span className="truncate">{name}</span>
                         </li>
                       ))}
@@ -783,13 +801,13 @@ export default function SpacesPage() {
               <button
                 onClick={() => setDeleteConfirm(null)}
                 disabled={deleting}
-                className="flex-1 h-[40px] rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] text-[13px] font-semibold transition-all disabled:opacity-50">
+                className="flex-1 h-[40px] rounded-xl border border-line text-content-secondary hover:text-content-primary text-[13px] font-semibold transition-all disabled:opacity-50">
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={deleting}
-                className="flex-1 h-[40px] rounded-xl bg-red-600 hover:bg-red-500 text-white text-[13px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
+                className="flex-1 h-[40px] rounded-xl bg-red-600 hover:bg-red-700 text-content-inverse text-[13px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
                 {deleting ? <><Loader2 size={14} className="animate-spin" />Deleting…</> : "Delete"}
               </button>
             </div>
@@ -799,42 +817,42 @@ export default function SpacesPage() {
 
       {/* ── MODAL: CREATE SPACE ── */}
       {showNewSpaceModal && (
-        <div className="fixed inset-0 bg-[#000000]/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0c0c0f] border border-[#2a2a35] w-full max-w-[440px] rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_24px_rgba(139,92,246,0.1)] relative">
+        <div className="fixed inset-0 bg-overlay/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-surface-panel border border-line w-full max-w-[440px] rounded-3xl p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_24px_rgba(139,92,246,0.1)] relative">
             <div className="absolute top-[-40%] left-[20%] w-[300px] h-[300px] bg-[radial-gradient(circle,rgba(139,92,246,0.12),transparent_70%)] rounded-full pointer-events-none blur-2xl" />
 
             <div className="flex items-center justify-between mb-5 relative z-10">
-              <h3 className="text-[18px] font-bold text-[#fafafa]">Create New Space</h3>
+              <h3 className="text-[18px] font-bold text-content-primary">Create New Space</h3>
               <button onClick={() => setShowNewSpaceModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#141418] transition-colors">
+                className="w-8 h-8 rounded-full flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-raised transition-colors">
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleCreateSpace} className="flex flex-col gap-4 relative z-10">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#63637a] uppercase tracking-wider">Space Name</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Space Name</label>
                 <input type="text" required value={newSpaceName} onChange={e => setNewSpaceName(e.target.value)}
                   placeholder="e.g. Personal notes, Research, ADRs"
-                  className="w-full h-[40px] bg-[#141418] border border-[#2a2a35] focus:border-[#8b5cf6]/50 rounded-xl px-3.5 text-[13px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none transition-all" />
+                  className="w-full h-[40px] bg-surface-raised border border-line focus:border-accent/50 rounded-xl px-3.5 text-[13px] text-content-primary placeholder:text-content-muted focus:outline-none transition-all" />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#63637a] uppercase tracking-wider">Description</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Description</label>
                 <input type="text" value={newSpaceDesc} onChange={e => setNewSpaceDesc(e.target.value)}
                   placeholder="What this space is for…"
-                  className="w-full h-[40px] bg-[#141418] border border-[#2a2a35] focus:border-[#8b5cf6]/50 rounded-xl px-3.5 text-[13px] text-[#fafafa] placeholder:text-[#55556a] focus:outline-none transition-all" />
+                  className="w-full h-[40px] bg-surface-raised border border-line focus:border-accent/50 rounded-xl px-3.5 text-[13px] text-content-primary placeholder:text-content-muted focus:outline-none transition-all" />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-[#63637a] uppercase tracking-wider">Icon</label>
+                <label className="text-xs font-bold text-content-muted uppercase tracking-wider">Icon</label>
                 <div className="grid grid-cols-3 gap-2">
                   {SPACE_ICONS.map(({ id, Icon, color }) => (
                     <button key={id} type="button" onClick={() => setNewSpaceIcon(id)}
                       className={`h-[36px] rounded-xl text-[12px] font-semibold border flex items-center justify-center gap-1.5 transition-all capitalize ${
                         newSpaceIcon === id
-                          ? "bg-[#120e20]/65 border-[#8b5cf6] text-[#fafafa] shadow-[0_2px_8px_rgba(139,92,246,0.2)]"
-                          : "bg-[#141418] border-[#2a2a35] text-[#63637a] hover:text-[#fafafa]"
+                          ? "bg-accent/10 border-accent text-content-primary shadow-[0_2px_8px_rgba(139,92,246,0.2)]"
+                          : "bg-surface-raised border-line text-content-muted hover:text-content-primary"
                       }`}>
                       <Icon size={12} className={newSpaceIcon === id ? color : ""} />
                       <span>{id}</span>
@@ -843,13 +861,13 @@ export default function SpacesPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 mt-2 border-t border-[#1e1e24]/40 pt-4">
+              <div className="flex items-center gap-3 mt-2 border-t border-line-subtle/40 pt-4">
                 <button type="button" onClick={() => setShowNewSpaceModal(false)}
-                  className="flex-1 h-[40px] rounded-xl border border-[#2a2a35] text-[#a1a1aa] hover:text-[#fafafa] text-[13px] font-semibold transition-all">
+                  className="flex-1 h-[40px] rounded-xl border border-line text-content-secondary hover:text-content-primary text-[13px] font-semibold transition-all">
                   Cancel
                 </button>
                 <button type="submit" disabled={spaceCreating}
-                  className="flex-1 h-[40px] rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white text-[13px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
+                  className="flex-1 h-[40px] rounded-xl bg-accent hover:bg-accent-hover text-content-inverse text-[13px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60">
                   {spaceCreating ? <><Loader2 size={14} className="animate-spin" />Creating…</> : "Create Space"}
                 </button>
               </div>

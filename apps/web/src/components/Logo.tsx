@@ -63,14 +63,14 @@ export function Logo({
       <Logo concept={concept} variant="mark" size={size} />
       <div className="flex flex-col justify-center">
         <span
-          className="font-extrabold tracking-wider text-white leading-none"
+          className="font-extrabold tracking-wider text-content-inverse leading-none"
           style={{ fontSize: size * 0.42 }}
         >
           OPERIUM
         </span>
         {showTagline && (
           <span
-            className="font-semibold tracking-widest text-purple-300 opacity-90 leading-tight mt-0.5"
+            className="font-semibold tracking-widest text-accent-text opacity-90 leading-tight mt-0.5"
             style={{ fontSize: size * 0.16 }}
           >
             PERSISTENT AI MEMORY

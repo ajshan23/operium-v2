@@ -89,8 +89,8 @@ export interface ChunkOptions {
  * Split Markdown into chunks of roughly `maxLen` characters without ever
  * breaking inside a code fence or mid-word. Paragraphs are greedily packed
  * (unless `breakOnHeadings` forces a break at each heading); oversized fences
- * are re-fenced per piece with their language tag preserved, so every emitted
- * chunk is independently valid Markdown.
+ * are re-fenced per piece with their language tag preserved. Mermaid fences
+ * are an exception: a diagram must remain whole, even above the target size.
  */
 export function splitMarkdownChunks(text: string, maxLen = 1200, opts: ChunkOptions = {}): string[] {
   const t = text.trim();
@@ -108,7 +108,8 @@ export function splitMarkdownChunks(text: string, maxLen = 1200, opts: ChunkOpti
     // stays attached to its own content in a single chunk.
     if (opts.breakOnHeadings && !block.fence && HEADING_RE.test(block.text)) flush();
 
-    const parts = block.text.length > maxLen
+    const atomicDiagram = block.fence && block.lang.toLowerCase() === "mermaid";
+    const parts = block.text.length > maxLen && !atomicDiagram
       ? (block.fence ? splitFence(block, maxLen) : splitProse(block.text, maxLen))
       : [block.text];
 

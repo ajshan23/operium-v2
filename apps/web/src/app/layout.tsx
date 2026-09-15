@@ -10,13 +10,13 @@ export const metadata: Metadata = {
 };
 
 // Runs before React hydrates to prevent flash of wrong theme
-const themeScript = `(function(){try{var t=localStorage.getItem('operium-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
+const themeScript = `(function(){var p='system';try{var s=localStorage.getItem('operium-theme');if(s==='light'||s==='dark'||s==='system')p=s;}catch(e){}var r=p==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p;document.documentElement.setAttribute('data-theme-preference',p);document.documentElement.setAttribute('data-theme',r);})();`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" data-theme-preference="system" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

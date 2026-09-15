@@ -45,8 +45,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!ready) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center" style={{ background: "var(--s0)" }}>
-        <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
+      <div className="flex h-screen w-screen items-center justify-center" style={{ background: "var(--surface-page)" }}>
+        <Loader2 size={24} className="text-accent-text animate-spin" />
       </div>
     );
   }
@@ -63,13 +63,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   return (
-    <div className="flex h-screen w-screen font-sans overflow-hidden" style={{ background: "var(--s0)", color: "var(--text-primary)" }}>
+    <div className="flex h-screen w-screen font-sans overflow-hidden" style={{ background: "var(--surface-page)", color: "var(--text-primary)" }}>
 
       {/* ── SIDEBAR ── */}
       <aside
         className="w-[80px] flex flex-col items-center py-6 justify-between z-30 relative shrink-0"
         style={{
-          background: "var(--s0)",
+          background: "var(--surface-page)",
           borderRight: "1px solid var(--border-subtle)",
           transition: "background 300ms ease, border-color 300ms ease",
         }}
@@ -80,13 +80,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Logo */}
         <Link href="/" className="relative group cursor-pointer">
-          <div className="absolute inset-0 bg-[#8b5cf6] rounded-xl blur-md opacity-35 group-hover:opacity-60 transition-opacity duration-500" />
+          <div className="absolute inset-0 bg-accent rounded-xl blur-md opacity-35 group-hover:opacity-60 transition-opacity duration-500" />
           <img
             src="/image.png"
             alt="Operium"
             width={46}
             height={46}
-            className="rounded-xl relative z-10 shadow-[0_4px_20px_rgba(139,92,246,0.45)] border border-white/15 transition-transform duration-300 group-hover:scale-105"
+            className="rounded-xl relative z-10 shadow-[0_4px_20px_rgba(139,92,246,0.45)] border border-line transition-transform duration-300 group-hover:scale-105"
           />
         </Link>
 
@@ -125,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* ── MAIN CANVAS ── */}
-      <main className="flex-1 flex flex-col relative overflow-hidden" style={{ background: "var(--s0)" }}>
+      <main className="flex-1 flex flex-col relative overflow-hidden" style={{ background: "var(--surface-page)" }}>
         {children}
       </main>
     </div>

@@ -212,7 +212,7 @@ export default function SignupPage() {
               {step === "register" ? "Create your account" : "Check your email"}
             </h1>
             {step === "otp" && (
-              <p className="text-gray-400 text-sm mb-6">
+              <p className="text-content-muted text-sm mb-6">
                 We sent a 6-digit verification code to <strong>{email}</strong>
               </p>
             )}

@@ -47,6 +47,36 @@ pnpm dev                # run web + api
 
 `pnpm typecheck` and `pnpm test` must be green before committing.
 
+## Mermaid diagrams in notes
+
+Use **Insert diagram** in a normal note, or include a Mermaid fenced block:
+
+````markdown
+## Request flow
+
+Text and diagrams can live in the same note.
+
+```mermaid
+flowchart LR
+  Client --> API --> Database
+```
+````
+
+Each diagram has **Chart / Code**, zoom, fit-to-view, and fullscreen controls.
+Shared notes render the same diagrams with read-only source. Markdown remains
+the saved format; no new note type or migration is required.
+
+The existing MCP tools `create_note`, `append_note`, `update_note`, and `get_note`
+support these fences. Reads return source, not images; updates replace the full
+body, so retain surrounding text. Large Mermaid fences stay intact in storage.
+Previews are limited to 50,000 characters and 500 edges; invalid or oversized
+source stays saved and editable. Diagram callbacks and navigation are disabled.
+
+For the PM2 deployment, install dependencies and rebuild the web app, then
+restart both `operium-web` and `operium-api` to load the updated renderer and
+MCP chunking logic. Existing diagrams previously split across fences are not
+automatically repaired; re-save their complete source.
+
 ## Deploy (recommended)
 
 | Layer | Service |

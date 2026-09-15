@@ -60,7 +60,7 @@ function normalizeColor(color?: string): string | null {
 
 function typeColor(type: string, meta: BoardsMeta | null): string {
   const fromMeta = normalizeColor(meta?.types.find(t => t.name === type)?.color);
-  return fromMeta ?? TYPE_FALLBACK_COLORS[type] ?? "#63637a";
+  return fromMeta ?? TYPE_FALLBACK_COLORS[type] ?? "var(--text-muted)";
 }
 
 function categoryColor(category: string): string {
@@ -106,7 +106,7 @@ function MemberAvatar({ member, size = 16 }: { member: BoardMember | null; size?
   if (!member) {
     return (
       <span
-        className="rounded-full bg-[#1a1a22] text-[#63637a] flex items-center justify-center shrink-0"
+        className="rounded-full bg-surface-hover text-content-muted flex items-center justify-center shrink-0"
         style={{ width: size, height: size }}
       >
         <User size={size * 0.6} />
@@ -125,7 +125,7 @@ function MemberAvatar({ member, size = 16 }: { member: BoardMember | null; size?
   }
   return (
     <span
-      className="rounded-full bg-[#8b5cf6]/20 text-[#8b5cf6] font-semibold flex items-center justify-center uppercase shrink-0"
+      className="rounded-full bg-accent/20 text-accent-text font-semibold flex items-center justify-center uppercase shrink-0"
       style={{ width: size, height: size, fontSize: Math.max(7, size * 0.45) }}
     >
       {member.displayName.charAt(0)}
@@ -181,7 +181,7 @@ function Menu({
       </button>
       {open && (
         <div
-          className={`absolute z-40 mt-1 ${align === "right" ? "right-0" : "left-0"} ${menuWidth} max-h-64 overflow-y-auto rounded-xl border border-[#1a1a22] bg-[#0d0b16] shadow-2xl py-1`}
+          className={`absolute z-40 mt-1 ${align === "right" ? "right-0" : "left-0"} ${menuWidth} max-h-64 overflow-y-auto rounded-xl border border-line-subtle bg-surface-raised shadow-2xl py-1`}
         >
           {children(close)}
         </div>
@@ -204,7 +204,7 @@ function MenuItem({
       type="button"
       onClick={onClick}
       className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
-        active ? "text-[#8b5cf6] bg-[#8b5cf6]/10" : "text-[#a1a1b5] hover:text-[#fafafa] hover:bg-[#1a1a22]"
+        active ? "text-accent-text bg-accent/10" : "text-content-secondary hover:text-content-primary hover:bg-surface-hover"
       }`}
     >
       {children}
@@ -249,7 +249,7 @@ function WorkItemRow({
   return (
     <>
       <div
-        className="group flex items-center gap-2 py-1.5 pr-3 rounded-lg border border-transparent hover:border-[#1a1a22] hover:bg-[#111115] transition-colors"
+        className="group flex items-center gap-2 py-1.5 pr-3 rounded-lg border border-transparent hover:border-line-subtle hover:bg-surface-raised transition-colors"
         style={{ paddingLeft: 8 + depth * 22 }}
       >
         {/* Expand / collapse */}
@@ -257,7 +257,7 @@ function WorkItemRow({
           <button
             type="button"
             onClick={() => onToggle(node.id, !isExpanded)}
-            className="w-5 h-5 rounded flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] transition-colors shrink-0"
+            className="w-5 h-5 rounded flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover transition-colors shrink-0"
             title={isExpanded ? "Collapse" : "Expand"}
           >
             {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -268,7 +268,7 @@ function WorkItemRow({
 
         {/* Type badge */}
         <span
-          className="inline-flex items-center gap-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md border shrink-0"
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-1.5 py-0.5 rounded-md border shrink-0"
           style={{ color: tColor, borderColor: `${tColor}35`, background: `${tColor}12` }}
           title={node.type}
         >
@@ -281,7 +281,7 @@ function WorkItemRow({
           href={node.url}
           target="_blank"
           rel="noreferrer"
-          className="text-[11px] font-mono text-[#63637a] hover:text-[#8b5cf6] transition-colors shrink-0 inline-flex items-center gap-0.5"
+          className="text-xs font-mono text-content-muted hover:text-accent-text transition-colors shrink-0 inline-flex items-center gap-0.5"
           title="Open in Azure DevOps"
         >
           #{node.id}
@@ -291,7 +291,7 @@ function WorkItemRow({
         {/* Title */}
         <span
           className={`flex-1 min-w-0 truncate text-sm ${
-            node.stateCategory === "Completed" ? "text-[#63637a] line-through" : "text-[#fafafa]"
+            node.stateCategory === "Completed" ? "text-content-muted line-through" : "text-content-primary"
           }`}
           title={node.title}
         >
@@ -303,18 +303,18 @@ function WorkItemRow({
           buttonTitle={`State: ${node.state}`}
           align="right"
           menuWidth="w-48"
-          buttonClassName="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#1a1a22] bg-[#111115] hover:border-[#2a2a35] transition-colors max-w-36"
+          buttonClassName="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-line-subtle bg-surface-raised hover:border-line transition-colors max-w-36"
           button={
             <>
               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: stateColor }} />
               <span className="truncate" style={{ color: stateColor }}>{node.state}</span>
-              <ChevronDown size={10} className="text-[#63637a] shrink-0" />
+              <ChevronDown size={10} className="text-content-muted shrink-0" />
             </>
           }
         >
           {close =>
             states.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-[#63637a]">No states available</p>
+              <p className="px-3 py-2 text-xs text-content-muted">No states available</p>
             ) : (
               states.map(s => (
                 <MenuItem
@@ -336,12 +336,12 @@ function WorkItemRow({
             buttonTitle={`Sprint: ${node.iterationPath || "none"}`}
             align="right"
             menuWidth="w-56"
-            buttonClassName="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg border border-[#1a1a22] bg-[#111115] text-[#a1a1b5] hover:border-[#2a2a35] transition-colors max-w-36"
+            buttonClassName="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg border border-line-subtle bg-surface-raised text-content-secondary hover:border-line transition-colors max-w-36"
             button={
               <>
-                <Calendar size={10} className="text-[#63637a] shrink-0" />
+                <Calendar size={10} className="text-content-muted shrink-0" />
                 <span className="truncate">{sprintLabel}</span>
-                <ChevronDown size={10} className="text-[#63637a] shrink-0" />
+                <ChevronDown size={10} className="text-content-muted shrink-0" />
               </>
             }
           >
@@ -354,7 +354,7 @@ function WorkItemRow({
                 >
                   <span className="truncate flex-1">{it.name}</span>
                   {it.timeFrame === "current" && (
-                    <span className="text-[9px] text-[#22c55e] bg-[#22c55e]/10 px-1.5 py-0.5 rounded shrink-0">current</span>
+                    <span className="text-xs text-status-success bg-status-success/10 px-1.5 py-0.5 rounded shrink-0">current</span>
                   )}
                 </MenuItem>
               ))
@@ -367,7 +367,7 @@ function WorkItemRow({
           buttonTitle={node.assignee ? `Assigned to ${node.assignee.displayName}` : "Unassigned"}
           align="right"
           menuWidth="w-60"
-          buttonClassName="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[#1a1a22] bg-[#111115] hover:border-[#2a2a35] transition-colors"
+          buttonClassName="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-line-subtle bg-surface-raised hover:border-line transition-colors"
           button={<MemberAvatar member={node.assignee ?? null} size={18} />}
         >
           {close => (
@@ -483,10 +483,10 @@ function NewItemForm({
   };
 
   const selectClass =
-    "bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none cursor-pointer";
+    "bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1 border border-line-subtle outline-none cursor-pointer";
 
   return (
-    <div className="rounded-xl border border-[#8b5cf6]/30 bg-[#0d0b16] p-4 space-y-3 mb-3">
+    <div className="rounded-xl border border-accent/30 bg-surface-raised p-4 space-y-3 mb-3">
       <div className="flex items-center gap-3">
         <select
           value={type}
@@ -505,7 +505,7 @@ function NewItemForm({
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") onCancel(); }}
           disabled={busy}
-          className="flex-1 bg-transparent text-[#fafafa] text-sm placeholder-[#3a3a4a] outline-none border-b border-[#1a1a22] pb-1 focus:border-[#8b5cf6]/50 transition-colors"
+          className="flex-1 bg-transparent text-content-primary text-sm placeholder:text-content-muted border-b border-line-subtle pb-1 focus:border-accent transition-colors"
         />
       </div>
 
@@ -515,13 +515,13 @@ function NewItemForm({
         onChange={e => setDescription(e.target.value)}
         rows={2}
         disabled={busy}
-        className="w-full bg-transparent text-[#fafafa]/70 text-xs placeholder-[#3a3a4a] outline-none resize-none border-b border-[#1a1a22] pb-2 focus:border-[#8b5cf6]/30 transition-colors"
+        className="w-full bg-transparent text-content-secondary text-xs placeholder:text-content-muted resize-none border-b border-line-subtle pb-2 focus:border-accent transition-colors"
       />
 
       <div className="flex items-center gap-3 flex-wrap">
         {iterations.length > 0 && (
           <div className="flex items-center gap-2">
-            <Calendar size={12} className="text-[#63637a]" />
+            <Calendar size={12} className="text-content-muted" />
             <select
               value={iterationPath}
               onChange={e => setIterationPath(e.target.value)}
@@ -539,7 +539,7 @@ function NewItemForm({
         )}
 
         <div className="flex items-center gap-2">
-          <User size={12} className="text-[#63637a]" />
+          <User size={12} className="text-content-muted" />
           <select
             value={assignee}
             onChange={e => setAssignee(e.target.value)}
@@ -555,15 +555,15 @@ function NewItemForm({
 
         {/* Parent picker */}
         <div ref={parentRef} className="relative flex items-center gap-2">
-          <ListTree size={12} className="text-[#63637a]" />
+          <ListTree size={12} className="text-content-muted" />
           {parent ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-[#a1a1b5] bg-[#111115] border border-[#1a1a22] rounded-lg px-2 py-1 max-w-56">
-              <span className="text-[#63637a] font-mono text-[10px] shrink-0">#{parent.id}</span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-content-secondary bg-surface-raised border border-line-subtle rounded-lg px-2 py-1 max-w-56">
+              <span className="text-content-muted font-mono text-xs shrink-0">#{parent.id}</span>
               <span className="truncate">{parent.title}</span>
               <button
                 type="button"
                 onClick={() => setParent(null)}
-                className="text-[#63637a] hover:text-[#fafafa] transition-colors shrink-0"
+                className="text-content-muted hover:text-content-primary transition-colors shrink-0"
                 title="Remove parent"
               >
                 <X size={11} />
@@ -571,21 +571,21 @@ function NewItemForm({
             </span>
           ) : (
             <div className="relative">
-              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#3a3a4a]" />
+              <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-content-muted" />
               <input
                 placeholder="Parent (optional)…"
                 value={parentQuery}
                 onChange={e => { setParentQuery(e.target.value); setParentOpen(true); }}
                 onFocus={() => setParentOpen(true)}
                 disabled={busy}
-                className="bg-[#111115] text-[#fafafa] text-xs rounded-lg pl-7 pr-2 py-1 border border-[#1a1a22] outline-none w-48 placeholder-[#3a3a4a] focus:border-[#8b5cf6]/40 transition-colors"
+                className="bg-surface-raised text-content-primary text-xs rounded-lg pl-7 pr-2 py-1 border border-line-control w-48 placeholder:text-content-muted focus:border-accent transition-colors"
               />
             </div>
           )}
           {parentOpen && !parent && (
-            <div className="absolute z-40 top-full left-5 mt-1 w-72 max-h-56 overflow-y-auto rounded-xl border border-[#1a1a22] bg-[#0d0b16] shadow-2xl py-1">
+            <div className="absolute z-40 top-full left-5 mt-1 w-72 max-h-56 overflow-y-auto rounded-xl border border-line-subtle bg-surface-raised shadow-2xl py-1">
               {parentMatches.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-[#63637a]">No matching items</p>
+                <p className="px-3 py-2 text-xs text-content-muted">No matching items</p>
               ) : (
                 parentMatches.map(i => (
                   <MenuItem
@@ -593,7 +593,7 @@ function NewItemForm({
                     onClick={() => { setParent(i); setParentOpen(false); setParentQuery(""); }}
                   >
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: typeColor(i.type, meta) }} />
-                    <span className="text-[#63637a] font-mono text-[10px] shrink-0">#{i.id}</span>
+                    <span className="text-content-muted font-mono text-xs shrink-0">#{i.id}</span>
                     <span className="truncate">{i.title}</span>
                   </MenuItem>
                 ))
@@ -608,7 +608,7 @@ function NewItemForm({
           type="button"
           onClick={save}
           disabled={!title.trim() || !type || busy}
-          className="px-4 py-1.5 rounded-lg bg-[#8b5cf6] text-white text-xs font-medium hover:bg-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
+          className="px-4 py-1.5 rounded-lg bg-accent text-content-inverse text-xs font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
         >
           {busy && <Loader2 size={11} className="animate-spin" />}
           Create Item
@@ -617,7 +617,7 @@ function NewItemForm({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="px-4 py-1.5 rounded-lg bg-[#1a1a22] text-[#63637a] text-xs hover:bg-[#222228] transition-colors"
+          className="px-4 py-1.5 rounded-lg bg-surface-hover text-content-muted text-xs hover:bg-surface-hover transition-colors"
         >
           Cancel
         </button>
@@ -904,7 +904,7 @@ export default function AzureBoardsTab() {
   if (phase === "init") {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
+        <Loader2 size={24} className="text-accent-text animate-spin" />
       </div>
     );
   }
@@ -913,14 +913,14 @@ export default function AzureBoardsTab() {
     return (
       <div className="flex-1 flex items-center justify-center px-8">
         <div className="text-center py-16">
-          <CloudOff size={32} className="mx-auto text-[#2a2a35] mb-3" />
-          <p className="text-[#fafafa] text-sm font-medium">Azure DevOps is not connected</p>
-          <p className="text-[#63637a] text-sm mt-1">
+          <CloudOff size={32} className="mx-auto text-content-muted mb-3" />
+          <p className="text-content-primary text-sm font-medium">Azure DevOps is not connected</p>
+          <p className="text-content-muted text-sm mt-1">
             Add your organization and personal access token to browse boards here.
           </p>
           <Link
             href="/settings"
-            className="mt-4 inline-flex items-center gap-1.5 text-[#8b5cf6] text-sm hover:underline"
+            className="mt-4 inline-flex items-center gap-1.5 text-accent-text text-sm hover:underline"
           >
             <Settings size={13} />
             Connect Azure DevOps in Settings
@@ -934,13 +934,13 @@ export default function AzureBoardsTab() {
     return (
       <div className="flex-1 flex items-center justify-center px-8">
         <div className="text-center py-16">
-          <AlertTriangle size={32} className="mx-auto text-[#ef4444]/60 mb-3" />
-          <p className="text-[#fafafa] text-sm font-medium">Couldn&apos;t reach Azure Boards</p>
-          <p className="text-[#63637a] text-sm mt-1 max-w-sm mx-auto">{phaseError}</p>
+          <AlertTriangle size={32} className="mx-auto text-status-error/60 mb-3" />
+          <p className="text-content-primary text-sm font-medium">Couldn&apos;t reach Azure Boards</p>
+          <p className="text-content-muted text-sm mt-1 max-w-sm mx-auto">{phaseError}</p>
           <button
             type="button"
             onClick={() => setBootKey(k => k + 1)}
-            className="mt-4 px-4 py-1.5 rounded-lg bg-[#8b5cf6] text-white text-xs font-medium hover:bg-[#7c3aed] transition-colors"
+            className="mt-4 px-4 py-1.5 rounded-lg bg-accent text-content-inverse text-xs font-medium hover:bg-accent-hover transition-colors"
           >
             Retry
           </button>
@@ -950,17 +950,17 @@ export default function AzureBoardsTab() {
   }
 
   const selectClass =
-    "bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1.5 border border-[#1a1a22] outline-none cursor-pointer max-w-44 focus:border-[#8b5cf6]/40 transition-colors";
+    "bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1.5 border border-line-subtle outline-none cursor-pointer max-w-44 focus:border-accent/40 transition-colors";
   const chipBase = "px-3 py-1.5 rounded-lg text-xs font-medium transition-all border";
-  const chipOn = "bg-[#8b5cf6]/20 text-[#8b5cf6] border-[#8b5cf6]/30";
-  const chipOff = "text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] border-transparent";
+  const chipOn = "bg-accent/20 text-accent-text border-accent/30";
+  const chipOff = "text-content-muted hover:text-content-primary hover:bg-surface-hover border-transparent";
 
   const contextLoading = teams === null || meta === null || iterations === null || !sprint;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="px-8 py-3 border-b border-[#1a1a22] flex items-center gap-2 flex-wrap shrink-0">
+      <div className="px-8 py-3 border-b border-line-subtle flex items-center gap-2 flex-wrap shrink-0">
         <select
           value={project}
           onChange={e => setProject(e.target.value)}
@@ -1043,7 +1043,7 @@ export default function AzureBoardsTab() {
           type="button"
           onClick={refresh}
           disabled={itemsLoading}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] transition-colors disabled:opacity-50"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover transition-colors disabled:opacity-50"
           title="Refresh"
         >
           <RefreshCw size={13} className={itemsLoading ? "animate-spin" : ""} />
@@ -1053,7 +1053,7 @@ export default function AzureBoardsTab() {
           type="button"
           onClick={() => setShowNew(true)}
           disabled={!meta || !project}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8b5cf6] hover:bg-[#7c3aed] text-white text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-content-inverse text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={13} />
           New Item
@@ -1064,25 +1064,25 @@ export default function AzureBoardsTab() {
       <div className="flex-1 overflow-y-auto px-8 py-4">
         {projects.length === 0 ? (
           <div className="text-center py-16">
-            <ListTree size={32} className="mx-auto text-[#2a2a35] mb-3" />
-            <p className="text-[#3a3a4a] text-sm">No projects found in this organization.</p>
+            <ListTree size={32} className="mx-auto text-content-muted mb-3" />
+            <p className="text-content-muted text-sm">No projects found in this organization.</p>
           </div>
         ) : itemsError ? (
           <div className="text-center py-16">
-            <AlertTriangle size={32} className="mx-auto text-[#ef4444]/60 mb-3" />
-            <p className="text-[#fafafa] text-sm font-medium">Couldn&apos;t load work items</p>
-            <p className="text-[#63637a] text-sm mt-1 max-w-sm mx-auto">{itemsError}</p>
+            <AlertTriangle size={32} className="mx-auto text-status-error/60 mb-3" />
+            <p className="text-content-primary text-sm font-medium">Couldn&apos;t load work items</p>
+            <p className="text-content-muted text-sm mt-1 max-w-sm mx-auto">{itemsError}</p>
             <button
               type="button"
               onClick={retryAfterError}
-              className="mt-4 px-4 py-1.5 rounded-lg bg-[#8b5cf6] text-white text-xs font-medium hover:bg-[#7c3aed] transition-colors"
+              className="mt-4 px-4 py-1.5 rounded-lg bg-accent text-content-inverse text-xs font-medium hover:bg-accent-hover transition-colors"
             >
               Retry
             </button>
           </div>
         ) : contextLoading || (itemsLoading && items.length === 0) ? (
           <div className="flex items-center justify-center h-40">
-            <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
+            <Loader2 size={24} className="text-accent-text animate-spin" />
           </div>
         ) : (
           <>
@@ -1100,19 +1100,19 @@ export default function AzureBoardsTab() {
 
             {items.length === 0 && !showNew ? (
               <div className="text-center py-16">
-                <ListTree size={32} className="mx-auto text-[#2a2a35] mb-3" />
-                <p className="text-[#3a3a4a] text-sm">No work items match the current filters.</p>
+                <ListTree size={32} className="mx-auto text-content-muted mb-3" />
+                <p className="text-content-muted text-sm">No work items match the current filters.</p>
                 <button
                   type="button"
                   onClick={() => setShowNew(true)}
-                  className="mt-4 text-[#8b5cf6] text-sm hover:underline"
+                  className="mt-4 text-accent-text text-sm hover:underline"
                 >
                   + Add a work item
                 </button>
               </div>
             ) : (
               <>
-                <p className="text-[11px] text-[#63637a] mb-2 px-1">
+                <p className="text-xs text-content-muted mb-2 px-1">
                   {count} work item{count === 1 ? "" : "s"}
                   {iterations && iterations.length === 0 ? " · backlog (no sprints configured)" : ""}
                 </p>
@@ -1140,10 +1140,10 @@ export default function AzureBoardsTab() {
       {toast && (
         <div className="pointer-events-none fixed bottom-6 right-6 z-50">
           <div
-            className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs shadow-2xl bg-[#0d0b16] ${
+            className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs shadow-2xl bg-surface-raised ${
               toast.kind === "error"
-                ? "border-red-500/30 text-red-400"
-                : "border-[#8b5cf6]/30 text-[#8b5cf6]"
+                ? "border-status-error/30 text-status-error"
+                : "border-accent/30 text-accent-text"
             }`}
           >
             {toast.kind === "error" ? <AlertTriangle size={13} /> : <RefreshCw size={13} />}
@@ -1151,7 +1151,7 @@ export default function AzureBoardsTab() {
             <button
               type="button"
               onClick={() => setToast(null)}
-              className="ml-1 text-[#63637a] hover:text-[#fafafa] transition-colors"
+              className="ml-1 text-content-muted hover:text-content-primary transition-colors"
             >
               <X size={12} />
             </button>

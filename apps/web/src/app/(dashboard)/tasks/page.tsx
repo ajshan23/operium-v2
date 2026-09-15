@@ -15,17 +15,17 @@ type Status = Task["status"];
 type Priority = Task["priority"];
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-  todo:        { label: "To Do",       color: "#63637a", bg: "bg-[#1a1a22]", icon: <Circle size={14} /> },
-  in_progress: { label: "In Progress", color: "#8b5cf6", bg: "bg-[#1a1228]", icon: <Clock size={14} /> },
-  done:        { label: "Done",        color: "#22c55e", bg: "bg-[#0a1f0e]", icon: <CheckSquare size={14} /> },
-  cancelled:   { label: "Cancelled",   color: "#ef4444", bg: "bg-[#1f0a0a]", icon: <X size={14} /> },
+  todo:        { label: "To Do",       color: "var(--text-muted)", bg: "bg-surface-hover", icon: <Circle size={14} /> },
+  in_progress: { label: "In Progress", color: "var(--accent-text)", bg: "bg-accent/10", icon: <Clock size={14} /> },
+  done:        { label: "Done",        color: "var(--success)", bg: "bg-status-success/10", icon: <CheckSquare size={14} /> },
+  cancelled:   { label: "Cancelled",   color: "var(--error)", bg: "bg-status-error/10", icon: <X size={14} /> },
 };
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string }> = {
-  low:    { label: "Low",    color: "#63637a" },
-  medium: { label: "Medium", color: "#f59e0b" },
-  high:   { label: "High",   color: "#f97316" },
-  urgent: { label: "Urgent", color: "#ef4444" },
+  low:    { label: "Low",    color: "var(--text-muted)" },
+  medium: { label: "Medium", color: "var(--warning)" },
+  high:   { label: "High",   color: "var(--warning)" },
+  urgent: { label: "Urgent", color: "var(--error)" },
 };
 
 function TaskCard({ task, onUpdate, onDelete }: {
@@ -62,7 +62,7 @@ function TaskCard({ task, onUpdate, onDelete }: {
   return (
     <div
       className={`group relative rounded-xl border transition-all duration-200 ${status.bg} ${
-        task.status === "in_progress" ? "border-[#8b5cf6]/30" : "border-[#1a1a22]"
+        task.status === "in_progress" ? "border-accent/30" : "border-line-subtle"
       }`}
       style={{
         boxShadow: task.status === "in_progress" ? "0 0 0 1px rgba(139,92,246,0.15), 0 4px 20px rgba(139,92,246,0.05)" : undefined,
@@ -89,11 +89,11 @@ function TaskCard({ task, onUpdate, onDelete }: {
                 onChange={e => setEditTitle(e.target.value)}
                 onBlur={handleEditSave}
                 onKeyDown={e => { if (e.key === "Enter") handleEditSave(); if (e.key === "Escape") setEditing(false); }}
-                className="w-full bg-transparent text-[#fafafa] text-sm font-medium outline-none border-b border-[#8b5cf6] pb-0.5"
+                className="w-full bg-transparent text-content-primary text-sm font-medium outline-none border-b border-accent pb-0.5"
               />
             ) : (
               <p
-                className={`text-sm font-medium leading-snug cursor-pointer ${task.status === "done" ? "line-through text-[#63637a]" : "text-[#fafafa]"}`}
+                className={`text-sm font-medium leading-snug cursor-pointer ${task.status === "done" ? "line-through text-content-muted" : "text-content-primary"}`}
                 onDoubleClick={() => setEditing(true)}
               >
                 {task.title}
@@ -101,13 +101,13 @@ function TaskCard({ task, onUpdate, onDelete }: {
             )}
 
             {task.description && (
-              <p className="mt-1 text-xs text-[#63637a] leading-relaxed line-clamp-2">{task.description}</p>
+              <p className="mt-1 text-xs text-content-muted leading-relaxed line-clamp-2">{task.description}</p>
             )}
 
             <div className="mt-2 flex items-center gap-2 flex-wrap">
               {/* Priority badge */}
               <span
-                className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border"
+                className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-md border"
                 style={{ color: priority.color, borderColor: `${priority.color}30`, background: `${priority.color}10` }}
               >
                 <Flag size={9} />
@@ -117,8 +117,8 @@ function TaskCard({ task, onUpdate, onDelete }: {
               {/* Due date */}
               {dueDate && (
                 <span
-                  className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md ${
-                    isOverdue ? "text-[#ef4444] bg-[#1f0a0a]" : "text-[#63637a] bg-[#111115]"
+                  className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md ${
+                    isOverdue ? "text-status-error bg-status-error/10" : "text-content-muted bg-surface-raised"
                   }`}
                 >
                   <Calendar size={9} />
@@ -130,13 +130,13 @@ function TaskCard({ task, onUpdate, onDelete }: {
               {/* Assignee */}
               {assignee && assigneeName && (
                 <span
-                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border border-[#1a1a22] bg-[#111115] text-[#a1a1b5]"
+                  className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border border-line-subtle bg-surface-raised text-content-secondary"
                   title={`Assigned to ${assigneeName}`}
                 >
                   {assignee.avatar ? (
                     <img src={assignee.avatar} alt="" className="w-3 h-3 rounded-full object-cover" />
                   ) : (
-                    <span className="w-3 h-3 rounded-full bg-[#8b5cf6]/20 text-[#8b5cf6] text-[7px] font-semibold flex items-center justify-center uppercase">
+                    <span className="w-3 h-3 rounded-full bg-accent/20 text-accent-text text-[7px] font-semibold flex items-center justify-center uppercase">
                       {assigneeName.charAt(0)}
                     </span>
                   )}
@@ -146,7 +146,7 @@ function TaskCard({ task, onUpdate, onDelete }: {
 
               {/* Tags */}
               {task.tags?.slice(0, 2).map(t => (
-                <span key={t} className="text-[10px] text-[#8b5cf6] bg-[#8b5cf6]/10 px-1.5 py-0.5 rounded-md">
+                <span key={t} className="text-xs text-accent-text bg-accent/10 px-1.5 py-0.5 rounded-md">
                   #{t}
                 </span>
               ))}
@@ -157,13 +157,13 @@ function TaskCard({ task, onUpdate, onDelete }: {
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button
               onClick={() => setEditing(true)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] transition-colors"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-content-muted hover:text-content-primary hover:bg-surface-hover transition-colors"
             >
               <Edit2 size={13} />
             </button>
             <button
               onClick={() => onDelete(task._id)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#63637a] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-content-muted hover:text-status-error hover:bg-status-error/10 transition-colors"
             >
               <Trash2 size={13} />
             </button>
@@ -200,29 +200,29 @@ function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
   };
 
   return (
-    <div className="rounded-xl border border-[#8b5cf6]/30 bg-[#0d0b16] p-4 space-y-3">
+    <div className="rounded-xl border border-accent/30 bg-surface-raised p-4 space-y-3">
       <input
         autoFocus
         placeholder="Task title…"
         value={title}
         onChange={e => setTitle(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") onCancel(); }}
-        className="w-full bg-transparent text-[#fafafa] text-sm placeholder-[#3a3a4a] outline-none border-b border-[#1a1a22] pb-2 focus:border-[#8b5cf6]/50 transition-colors"
+        className="w-full bg-transparent text-content-primary text-sm placeholder:text-content-muted border-b border-line-subtle pb-2 focus:border-accent transition-colors"
       />
       <textarea
         placeholder="Description (optional)…"
         value={desc}
         onChange={e => setDesc(e.target.value)}
         rows={2}
-        className="w-full bg-transparent text-[#fafafa]/70 text-xs placeholder-[#3a3a4a] outline-none resize-none border-b border-[#1a1a22] pb-2 focus:border-[#8b5cf6]/30 transition-colors"
+        className="w-full bg-transparent text-content-secondary text-xs placeholder:text-content-muted resize-none border-b border-line-subtle pb-2 focus:border-accent transition-colors"
       />
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <Flag size={12} className="text-[#63637a]" />
+          <Flag size={12} className="text-content-muted" />
           <select
             value={priority}
             onChange={e => setPriority(e.target.value as Priority)}
-            className="bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none cursor-pointer"
+            className="bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1 border border-line-subtle outline-none cursor-pointer"
           >
             {(Object.keys(PRIORITY_CONFIG) as Priority[]).map(p => (
               <option key={p} value={p}>{PRIORITY_CONFIG[p].label}</option>
@@ -230,11 +230,11 @@ function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <User size={12} className="text-[#63637a]" />
+          <User size={12} className="text-content-muted" />
           <select
             value={assignee}
             onChange={e => setAssignee(e.target.value)}
-            className="bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none cursor-pointer max-w-40"
+            className="bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1 border border-line-subtle outline-none cursor-pointer max-w-40"
           >
             <option value="">Unassigned</option>
             {members.map(m => (
@@ -245,21 +245,21 @@ function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <Calendar size={12} className="text-[#63637a]" />
+          <Calendar size={12} className="text-content-muted" />
           <input
             type="date"
             value={dueDate}
             onChange={e => setDueDate(e.target.value)}
-            className="bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none cursor-pointer"
+            className="bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1 border border-line-subtle outline-none cursor-pointer"
           />
         </div>
         <div className="flex items-center gap-2">
-          <Tag size={12} className="text-[#63637a]" />
+          <Tag size={12} className="text-content-muted" />
           <input
             placeholder="tags, comma separated"
             value={tags}
             onChange={e => setTags(e.target.value)}
-            className="bg-[#111115] text-[#fafafa] text-xs rounded-lg px-2 py-1 border border-[#1a1a22] outline-none w-44"
+            className="bg-surface-raised text-content-primary text-xs rounded-lg px-2 py-1 border border-line-subtle outline-none w-44"
           />
         </div>
       </div>
@@ -267,13 +267,13 @@ function NewTaskForm({ members, currentUserId, onSave, onCancel }: {
         <button
           onClick={save}
           disabled={!title.trim()}
-          className="px-4 py-1.5 rounded-lg bg-[#8b5cf6] text-white text-xs font-medium hover:bg-[#7c3aed] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 rounded-lg bg-accent text-content-inverse text-xs font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Add Task
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-1.5 rounded-lg bg-[#1a1a22] text-[#63637a] text-xs hover:bg-[#222228] transition-colors"
+          className="px-4 py-1.5 rounded-lg bg-surface-hover text-content-muted text-xs hover:bg-surface-hover transition-colors"
         >
           Cancel
         </button>
@@ -390,25 +390,25 @@ export default function TasksPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="border-b border-[#1a1a22] px-8 py-5 flex items-center justify-between shrink-0">
+      <div className="border-b border-line-subtle px-8 py-5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-5">
           <div>
-            <h1 className="text-lg font-semibold text-[#fafafa]">Tasks</h1>
-            <p className="text-xs text-[#63637a] mt-0.5">
+            <h1 className="text-lg font-semibold text-content-primary">Tasks</h1>
+            <p className="text-xs text-content-muted mt-0.5">
               {tab === "local" ? `${total} tasks · ${progress}% complete` : "Azure DevOps work items"}
             </p>
           </div>
 
           {/* Tab switcher */}
-          <div className="flex gap-1 rounded-xl border border-[#1a1a22] bg-[#111115] p-1">
+          <div className="flex gap-1 rounded-xl border border-line-subtle bg-surface-raised p-1">
             {([["local", "My Tasks"], ["boards", "Azure Boards"]] as const).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => switchTab(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   tab === key
-                    ? "bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/30"
-                    : "text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] border border-transparent"
+                    ? "bg-accent/20 text-accent-text border border-accent/30"
+                    : "text-content-muted hover:text-content-primary hover:bg-surface-hover border border-transparent"
                 }`}
               >
                 {label}
@@ -420,15 +420,15 @@ export default function TasksPage() {
         {/* Progress bar (local tasks only) */}
         {tab === "local" && (
           <div className="flex items-center gap-4">
-            <div className="w-32 h-1.5 rounded-full bg-[#1a1a22] overflow-hidden">
+            <div className="w-32 h-1.5 rounded-full bg-surface-hover overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#22c55e] transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-accent to-status-success transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>
             <button
               onClick={() => setShowNew(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8b5cf6] hover:bg-[#7c3aed] text-white text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-content-inverse text-sm font-medium transition-colors"
             >
               <Plus size={15} />
               New Task
@@ -442,7 +442,7 @@ export default function TasksPage() {
       ) : (
       <>
       {/* Filters */}
-      <div className="px-8 py-3 border-b border-[#1a1a22] flex gap-2 shrink-0">
+      <div className="px-8 py-3 border-b border-line-subtle flex gap-2 shrink-0">
         {(["all", "todo", "in_progress", "done", "cancelled"] as const).map(s => {
           const cfg = s === "all" ? null : STATUS_CONFIG[s];
           const count = s === "all" ? total : (stats[s] ?? 0);
@@ -452,13 +452,13 @@ export default function TasksPage() {
               onClick={() => setFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                 filter === s
-                  ? "bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/30"
-                  : "text-[#63637a] hover:text-[#fafafa] hover:bg-[#1a1a22] border border-transparent"
+                  ? "bg-accent/20 text-accent-text border border-accent/30"
+                  : "text-content-muted hover:text-content-primary hover:bg-surface-hover border border-transparent"
               }`}
             >
               {cfg ? <span style={{ color: cfg.color }}>{cfg.icon}</span> : null}
               {s === "all" ? "All" : STATUS_CONFIG[s as Status].label}
-              <span className={`ml-0.5 ${filter === s ? "text-[#8b5cf6]" : "text-[#3a3a4a]"}`}>
+              <span className={`ml-0.5 ${filter === s ? "text-accent-text" : "text-content-muted"}`}>
                 {count}
               </span>
             </button>
@@ -470,13 +470,13 @@ export default function TasksPage() {
       <div className="flex-1 overflow-y-auto px-8 py-6">
         {loading ? (
           <div className="flex items-center justify-center h-40">
-            <Loader2 size={24} className="text-[#8b5cf6] animate-spin" />
+            <Loader2 size={24} className="text-accent-text animate-spin" />
           </div>
         ) : noOrg ? (
           <div className="text-center py-16">
-            <Building2 size={32} className="mx-auto text-[#2a2a35] mb-3" />
-            <p className="text-[#fafafa] text-sm font-medium">You&apos;re not in an organization yet</p>
-            <p className="text-[#63637a] text-sm mt-1">
+            <Building2 size={32} className="mx-auto text-content-muted mb-3" />
+            <p className="text-content-primary text-sm font-medium">You&apos;re not in an organization yet</p>
+            <p className="text-content-muted text-sm mt-1">
               Create or join an organization to start managing team tasks.
             </p>
           </div>
@@ -493,14 +493,14 @@ export default function TasksPage() {
 
             {filtered.length === 0 && !showNew && (
               <div className="text-center py-16">
-                <CheckSquare size={32} className="mx-auto text-[#2a2a35] mb-3" />
-                <p className="text-[#3a3a4a] text-sm">
+                <CheckSquare size={32} className="mx-auto text-content-muted mb-3" />
+                <p className="text-content-muted text-sm">
                   {filter === "all" ? "No tasks yet. Create your first task!" : `No ${STATUS_CONFIG[filter as Status]?.label ?? ""} tasks.`}
                 </p>
                 {filter === "all" && (
                   <button
                     onClick={() => setShowNew(true)}
-                    className="mt-4 text-[#8b5cf6] text-sm hover:underline"
+                    className="mt-4 text-accent-text text-sm hover:underline"
                   >
                     + Add a task
                   </button>
@@ -522,20 +522,20 @@ export default function TasksPage() {
 
       {/* Delete confirmation modal */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#0d0b16] rounded-2xl border border-[#1a1a22] p-6 w-80 shadow-2xl">
-            <h3 className="text-[#fafafa] font-semibold mb-2">Delete Task</h3>
-            <p className="text-[#63637a] text-sm mb-6">This task will be permanently deleted.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/70 backdrop-blur-sm">
+          <div className="bg-surface-raised rounded-2xl border border-line-subtle p-6 w-80 shadow-2xl">
+            <h3 className="text-content-primary font-semibold mb-2">Delete Task</h3>
+            <p className="text-content-muted text-sm mb-6">This task will be permanently deleted.</p>
             <div className="flex gap-3">
               <button
                 onClick={() => handleDelete(deleteId)}
-                className="flex-1 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-400 text-sm font-medium hover:bg-red-500/25 transition-colors"
+                className="flex-1 py-2 rounded-xl bg-status-error/20 border border-status-error/25 text-status-error text-sm font-medium hover:bg-status-error/25 transition-colors"
               >
                 Delete
               </button>
               <button
                 onClick={() => setDeleteId(null)}
-                className="flex-1 py-2 rounded-xl bg-[#1a1a22] text-[#63637a] text-sm hover:bg-[#222228] transition-colors"
+                className="flex-1 py-2 rounded-xl bg-surface-hover text-content-muted text-sm hover:bg-surface-hover transition-colors"
               >
                 Cancel
               </button>

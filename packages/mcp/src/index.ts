@@ -1787,7 +1787,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "get_note",
-    "Get the full content of a note.",
+    "Get the full Markdown content of a note, including editable Mermaid diagram source (not rendered images).",
     {
       noteId: z.string().min(1),
     },
@@ -1822,7 +1822,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "create_note",
-    "Create a new note (rendered as rich Markdown in the web app). spaceId is optional — omit it to auto-create or reuse a 'Notes' space.",
+    "Create a new note (rendered as rich Markdown in the web app). Use fenced code blocks tagged mermaid for diagrams alongside prose; no separate note type is needed. spaceId is optional — omit it to auto-create or reuse a 'Notes' space.",
     {
       title:   z.string().max(200).default(""),
       content: z.string().default("").describe(
@@ -2898,7 +2898,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "append_note",
-    "Append a Markdown section to an existing note — the right tool for running logs and decision journals. Own notes only.",
+    "Append a Markdown section to an existing note — the right tool for running logs and decision journals. Diagrams use complete fenced code blocks tagged mermaid. Own notes only.",
     {
       noteId:  z.string().min(1),
       content: z.string().min(1).describe("Markdown to append — start with a ## heading so the note stays skimmable; fence any code with a language tag"),
@@ -2925,7 +2925,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
   tool(
     "update_note",
-    "Replace a note's title, content, or tags. Content is Markdown and fully replaces the existing body — use append_note to add instead. Own notes only.",
+    "Replace a note's title, content, or tags. Content is Markdown and fully replaces the existing body — use append_note to add instead. To edit Mermaid diagrams, read get_note, edit the mermaid fenced source, and retain the rest of the body. Own notes only.",
     {
       noteId:  z.string().min(1),
       title:   z.string().max(200).optional(),

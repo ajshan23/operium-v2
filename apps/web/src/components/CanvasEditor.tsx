@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { useTheme } from "@/components/ThemeProvider";
 
 import "@excalidraw/excalidraw/index.css";
 
@@ -12,7 +14,7 @@ const Excalidraw = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="w-full h-full flex items-center justify-center text-[#55556a]">
+      <div className="w-full h-full flex items-center justify-center text-content-muted">
         <Loader2 size={20} className="animate-spin" />
       </div>
     ),
@@ -27,11 +29,13 @@ export const EMPTY_CANVAS_CONTENT = JSON.stringify({
 interface CanvasEditorProps {
   /** Canvas scene as JSON: { elements, appState: { viewBackgroundColor } } */
   value: string;
-  /** Debounced; receives the serialized scene. Omit for read-only display. */
+  /** Receives serialized scene edits. The parent owns persistence debouncing. */
   onChange?: (json: string) => void;
   readOnly?: boolean;
   /** Fill the parent pane without the card border or rounded corners. */
   fullBleed?: boolean;
+  /** Recenter and fit the scene after mounting into a resized viewport. */
+  fitToContent?: boolean;
 }
 
 function parseScene(raw: string) {
@@ -55,40 +59,82 @@ function sceneSignature(elements: readonly any[], bg: string) {
     .join("|") + "~" + bg;
 }
 
-export default function CanvasEditor({ value, onChange, readOnly = false, fullBleed = false }: CanvasEditorProps) {
+export default function CanvasEditor({
+  value,
+  onChange,
+  readOnly = false,
+  fullBleed = false,
+  fitToContent = false,
+}: CanvasEditorProps) {
+  const { resolvedTheme } = useTheme();
   // Excalidraw manages the scene after mount; initialData is read once per
   // mount — parents must remount (key={noteId}) to switch canvases.
   const [initialData] = useState(() => parseScene(value));
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const fitFrameRef = useRef<number | null>(null);
   const lastSignatureRef = useRef(
     sceneSignature(initialData.elements, initialData.appState.viewBackgroundColor)
   );
 
+  const fitScene = useCallback((api: ExcalidrawImperativeAPI) => {
+    if (!fitToContent) return;
+    if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
+
+    // Excalidraw measures its parent asynchronously. Waiting for two paint
+    // frames ensures a newly portalled fullscreen container has final bounds.
+    fitFrameRef.current = requestAnimationFrame(() => {
+      fitFrameRef.current = requestAnimationFrame(() => {
+        api.refresh();
+        const elements = api.getSceneElements();
+        if (elements.length > 0) {
+          api.scrollToContent(elements, {
+            fitToViewport: true,
+            viewportZoomFactor: 0.86,
+            animate: false,
+          });
+        }
+        fitFrameRef.current = null;
+      });
+    });
+  }, [fitToContent]);
+
+  useEffect(() => {
+    const api = excalidrawApiRef.current;
+    if (api) fitScene(api);
+
+    return () => {
+      if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
+    };
+  }, [fitScene]);
+
   const handleChange = (elements: readonly any[], appState: any) => {
     if (!onChange || readOnly) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const bg = appState.viewBackgroundColor ?? "#f5faff";
-      // onChange also fires for selection/zoom — only emit real scene changes
-      const signature = sceneSignature(elements, bg);
-      if (signature === lastSignatureRef.current) return;
-      lastSignatureRef.current = signature;
-      onChange(JSON.stringify({
-        elements: elements.filter(el => !el.isDeleted),
-        appState: { viewBackgroundColor: bg },
-      }));
-    }, 800);
+    const bg = appState.viewBackgroundColor ?? "#f5faff";
+    // onChange also fires for selection/zoom — only emit real scene changes.
+    // Keep the parent draft current immediately so remounting into fullscreen
+    // never falls back to the last persisted version.
+    const signature = sceneSignature(elements, bg);
+    if (signature === lastSignatureRef.current) return;
+    lastSignatureRef.current = signature;
+    onChange(JSON.stringify({
+      elements: elements.filter(el => !el.isDeleted),
+      appState: { viewBackgroundColor: bg },
+    }));
   };
 
   return (
-    <div className={`w-full h-full overflow-hidden bg-[#0c0c0f] ${
-      fullBleed ? "" : "rounded-2xl border border-[#1e1e24]"
+    <div className={`w-full h-full overflow-hidden bg-surface-panel ${
+      fullBleed ? "" : "rounded-2xl border border-line-subtle"
     }`}>
       <Excalidraw
         initialData={initialData}
+        excalidrawAPI={api => {
+          excalidrawApiRef.current = api;
+          fitScene(api);
+        }}
         onChange={handleChange}
-        theme="dark"
+        theme={resolvedTheme}
         viewModeEnabled={readOnly}
         zenModeEnabled={readOnly}
         UIOptions={{ tools: { image: false } }}
