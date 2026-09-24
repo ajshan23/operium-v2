@@ -32,6 +32,11 @@ export interface CreateTaskData {
   assigneeId?: string;
 }
 
+export type UpdateTaskData = Omit<Partial<CreateTaskData>, "dueDate" | "assigneeId"> & {
+  dueDate?: string | null;
+  assigneeId?: string | null;
+};
+
 export const tasksApi = {
   list: (status?: string) =>
     apiClient(`/api/tasks${status ? `?status=${status}` : ""}`, { method: "GET" }),
@@ -42,7 +47,7 @@ export const tasksApi = {
   create: (data: CreateTaskData) =>
     apiClient("/api/tasks", { data }),
 
-  update: (id: string, data: Partial<CreateTaskData & { dueDate: string | null }>) =>
+  update: (id: string, data: UpdateTaskData) =>
     apiClient(`/api/tasks/${id}`, { method: "PUT", data }),
 
   delete: (id: string) =>

@@ -1,4 +1,5 @@
 export { sanitize } from "./sanitize";
+export { personalTaskScope, personalTaskOwner } from "./taskScope";
 export {
   MAX_CANVAS_ELEMENTS,
   MAX_CANVAS_SCENE_BYTES,

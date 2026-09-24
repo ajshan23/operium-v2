@@ -47,6 +47,25 @@ pnpm dev                # run web + api
 
 `pnpm typecheck` and `pnpm test` must be green before committing.
 
+## My Tasks
+
+My Tasks is the default tab on the Tasks page. The Kanban board uses dnd kit:
+drag a card's handle between To Do, In Progress, Done, and Cancelled, or use
+the card's status selector. Keyboard dragging uses Space, Left/Right, and
+Space to drop (Escape cancels). Cards are sorted by priority, not manual order.
+Visible Edit/Delete actions support full task editing and confirmed deletion.
+
+Tasks are personal: users see tasks assigned to them and their own unassigned
+tasks, not tasks assigned to someone else. The same authorization applies to
+REST lists, counts, updates/deletes and MCP task reads/updates. The MCP
+`list_tasks` compatibility option `mine: false` no longer exposes team tasks.
+Organization membership is still required when an organization is selected;
+users without an organization can manage their personal tasks. Azure Boards
+is a separate integration and its permissions are unchanged.
+
+Deploy the rebuilt web app and updated API/MCP together. No database migration
+is required; existing unassigned tasks remain available to their creator.
+
 ## Mermaid diagrams in notes
 
 Use **Insert diagram** in a normal note, or include a Mermaid fenced block:

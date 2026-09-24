@@ -3,6 +3,7 @@ import { requireAuth } from "../middlewares/auth.middleware.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Task, CoworkSession, Note, WorkHistory, User, McpUsageLog } from "@operium/db";
 import { MCP_TOOL_COUNT } from "@operium/mcp";
+import { personalTaskOwner } from "@operium/core";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -20,8 +21,8 @@ router.get("/stats", async (req: any, res: any) => {
       user,
       mcpCallsThisWeek,
     ] = await Promise.all([
-      // "My tasks" for the personal dashboard: created by me or assigned to me
-      Task.find({ $or: [{ userId }, { assigneeId: userId }] }).select("status").lean(),
+      // Counts are personal too; delegated tasks belong to their assignee.
+      Task.find(personalTaskOwner(userId)).select("status").lean(),
       CoworkSession.countDocuments({ userId }),
       Note.countDocuments({ userId }),
       WorkHistory.find({ userId })

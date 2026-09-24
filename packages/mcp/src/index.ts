@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { McpToolName } from "@operium/shared";
 import {
   compositeScore, splitMarkdownChunks, markdownQualityNudge, snippet, parseQueryHints, sanitize,
+  personalTaskScope,
   resolveCoworkShared, type RepoSharePref,
   normalizeRepoKey, normalizeRepoRefs, type RepoRef, type NormalizedRepoRef,
   normalizeErrorText, errorSignature,
@@ -607,7 +608,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           createdAt: { $gte: since },
           ...(repoNames.length ? { $or: [{ "metadata.repo": { $in: repoNames } }, { "metadata.repoName": { $in: repoNames } }, { "metadata.repo": { $exists: false } }] } : {}),
         }).sort({ createdAt: -1 }).limit(repoNames.length ? 40 : 15).lean(),
-        Task.find({ userId: uid, status: { $in: ["todo", "in_progress"] } }).sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
+        Task.find({ ...personalTaskScope(uid, ctx.orgId), status: { $in: ["todo", "in_progress"] } }).sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
         repoKeys.length
           ? CoworkSession.find({ $or: [{ userId: uid }, sharedScope], "repos.repoKey": { $in: repoKeys } } as any)
               .sort({ createdAt: -1 }).limit(8).lean()
@@ -2506,7 +2507,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
           .sort({ createdAt: -1 }).limit(30).lean(),
         CoworkSession.find({ userId: uid, updatedAt: { $gte: since } })
           .sort({ updatedAt: -1 }).limit(10).lean(),
-        Task.find({ $or: [{ userId: uid }, { assigneeId: uid }], status: { $in: ["todo", "in_progress"] } })
+        Task.find({ ...personalTaskScope(uid, ctx.orgId), status: { $in: ["todo", "in_progress"] } })
           .sort({ priority: -1, createdAt: -1 }).limit(10).lean(),
       ]);
 
@@ -2795,7 +2796,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         CoworkSession.countDocuments({ $or: [{ userId: uid }, sharedScope] }),
         ContextRule.countDocuments({ userId: uid, isActive: true }),
         Note.countDocuments({ userId: uid }),
-        Task.countDocuments({ $or: [{ userId: uid }, { assigneeId: uid }], status: { $in: ["todo", "in_progress"] } }),
+        Task.countDocuments({ ...personalTaskScope(uid, ctx.orgId), status: { $in: ["todo", "in_progress"] } }),
       ]);
 
       let orgLine = "No organization — shared memory is limited to your own items.";
@@ -3087,21 +3088,16 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   // ─────────────────────────────────────────────────────────────────────────────
   tool(
     "list_tasks",
-    "List tasks on the team board (org-wide, same view as the web app). Filter by status or just your own.",
+    "List only your own tasks: tasks assigned to you, plus your own unassigned tasks. Other organization members' tasks are never included. Filter by status.",
     {
       status: z.enum(["todo","in_progress","done","cancelled"]).optional(),
-      mine:   z.boolean().default(false).describe("Only tasks created by or assigned to you"),
+      mine:   z.boolean().default(true).describe("Compatibility option; results are always restricted to your own tasks, even when false"),
       limit:  z.number().int().min(1).max(50).default(20),
     },
-    async ({ status, mine, limit }) => {
+    async ({ status, limit }) => {
       const { Task } = await db();
       const uid = ctx.userId;
-      const base: any = ctx.orgId
-        ? { $or: [{ orgId: ctx.orgId }, { orgId: { $exists: false }, userId: uid }] }
-        : { $or: [{ userId: uid }, { assigneeId: uid }] };
-      const filter: any = mine
-        ? { $and: [base, { $or: [{ userId: uid }, { assigneeId: uid }] }] }
-        : base;
+      const filter: any = personalTaskScope(uid, ctx.orgId);
       if (status) filter.status = status;
 
       const tasks = await Task.find(filter)
@@ -3120,7 +3116,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
 
   tool(
     "create_task",
-    "Create a task on the team board — e.g. follow-up work discovered during a session. Assign to a teammate by email, or leave it assigned to yourself.",
+    "Create a task — e.g. follow-up work discovered during a session. Assign to a teammate by email, or leave it assigned to yourself. Assigned tasks appear only on the assignee's My Tasks board.",
     {
       title:         z.string().min(1).max(300),
       description:   z.string().default("").describe("Optional detail in Markdown — context, acceptance criteria, links"),
@@ -3157,17 +3153,17 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         tags,
       });
 
-      return { content: [{ type: "text" as const, text: `✅ Task created and assigned to ${assigneeLabel}: "${title}" (${priority})\nID: ${task._id}\n\nIt is now visible on the team's task board.` }] };
+      return { content: [{ type: "text" as const, text: `✅ Task created and assigned to ${assigneeLabel}: "${title}" (${priority})\nID: ${task._id}\n\nIt is now visible on the assignee's My Tasks board.` }] };
     },
   );
 
   tool(
     "update_task",
-    "Update a task on the team board — move it to done when the user confirms the work is complete, reassign it, or edit fields.",
+    "Update one of your own tasks — move it to done when the user confirms the work is complete, reassign it, or edit fields. Tasks owned by other users cannot be modified.",
     {
       taskId:        z.string().min(1),
       status:        z.enum(["todo","in_progress","done","cancelled"]).optional(),
-      title:         z.string().max(300).optional(),
+      title:         z.string().trim().min(1).max(300).optional(),
       priority:      z.enum(["low","medium","high","urgent"]).optional(),
       dueDate:       z.string().optional().describe("ISO date; empty string clears it"),
       assigneeEmail: z.string().optional().describe("Reassign to this org member's email"),
@@ -3204,11 +3200,8 @@ export function buildMcpServer(ctx: McpContext): McpServer {
         return { content: [{ type: "text" as const, text: "Nothing to update — pass at least one field." }] };
       }
 
-      const scope: any = ctx.orgId
-        ? { $or: [{ orgId: ctx.orgId }, { orgId: { $exists: false }, userId: uid }] }
-        : { $or: [{ userId: uid }, { assigneeId: uid }] };
-      const task = await Task.findOneAndUpdate({ _id: taskId, ...scope }, upd, { new: true }).lean();
-      if (!task) return { content: [{ type: "text" as const, text: `Task not found (or not in your org): ${taskId}` }] };
+      const task = await Task.findOneAndUpdate({ _id: taskId, ...personalTaskScope(uid, ctx.orgId) }, upd, { new: true, runValidators: true }).lean();
+      if (!task) return { content: [{ type: "text" as const, text: `Task not found (or not yours): ${taskId}` }] };
 
       return { content: [{ type: "text" as const, text: `✅ Task updated: "${task.title}" → [${task.status}] (${task.priority})` }] };
     },
